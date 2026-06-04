@@ -1,0 +1,17 @@
+.gradle/
+.idea/
+*.iml
+build/
+captures/
+local.properties
+
+# Android
+*.apk
+*.ap_
+*.aab
+*.dex
+
+# JVM
+*.class
+hs_err_pid*
+

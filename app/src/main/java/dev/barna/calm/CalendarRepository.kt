@@ -1,6 +1,7 @@
 package dev.barna.calm
 
 import android.Manifest
+import android.app.Activity
 import android.content.ContentUris
 import android.content.pm.PackageManager
 import android.provider.CalendarContract
@@ -8,7 +9,7 @@ import android.text.format.DateFormat
 import java.util.Calendar
 import java.util.Date
 
-class CalendarRepository(private val activity: MainActivity) {
+class CalendarRepository(private val activity: Activity) {
     fun hasCalendarPermission(): Boolean {
         return activity.checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
     }

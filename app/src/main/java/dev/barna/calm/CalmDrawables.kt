@@ -56,15 +56,15 @@ class CalmDrawables(private val context: Context) {
             ),
         ).apply {
             cornerRadius = radius.toFloat()
-            setStroke(context.dp(1), Color.argb(if (tintCards) 72 else 66, 255, 246, 226))
+            setStroke(context.dp(1), Color.argb(if (tintCards) 48 else 42, 255, 246, 226))
         }
         val frost = GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.argb(58, 255, 252, 240), Color.argb(18, 255, 252, 240), Color.argb(6, 255, 252, 240)),
+            intArrayOf(Color.argb(34, 255, 252, 240), Color.argb(10, 255, 252, 240), Color.argb(4, 255, 252, 240)),
         ).apply { cornerRadius = radius.toFloat() }
         val gloss = GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.argb(44, 255, 249, 235), Color.argb(10, 255, 249, 235), Color.TRANSPARENT),
+            intArrayOf(Color.argb(24, 255, 249, 235), Color.argb(6, 255, 249, 235), Color.TRANSPARENT),
         ).apply { cornerRadius = radius.toFloat() }
 
         if (!tintCards || hueColor == 0) {
@@ -77,9 +77,9 @@ class CalmDrawables(private val context: Context) {
         val hue = GradientDrawable(
             GradientDrawable.Orientation.TL_BR,
             intArrayOf(
-                Color.argb(84, Color.red(hueColor), Color.green(hueColor), Color.blue(hueColor)),
-                Color.argb(20, Color.red(hueColor), Color.green(hueColor), Color.blue(hueColor)),
-                Color.argb(58, Color.red(hueColor), Color.green(hueColor), Color.blue(hueColor)),
+                Color.argb(72, Color.red(hueColor), Color.green(hueColor), Color.blue(hueColor)),
+                Color.argb(16, Color.red(hueColor), Color.green(hueColor), Color.blue(hueColor)),
+                Color.argb(48, Color.red(hueColor), Color.green(hueColor), Color.blue(hueColor)),
             ),
         ).apply { cornerRadius = radius.toFloat() }
 
@@ -88,6 +88,62 @@ class CalmDrawables(private val context: Context) {
             setLayerInset(3, context.dp(1), context.dp(1), context.dp(1), 0)
         }
     }
+
+    fun notificationCardWithImage(radius: Int, image: Bitmap, hueColor: Int, tintCards: Boolean): Drawable {
+        val imageDrawable = RoundedBitmapDrawable(image, radius.toFloat()).apply {
+            alpha = 112
+        }
+        val shade = GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            intArrayOf(
+                Color.argb(210, 12, 11, 16),
+                Color.argb(168, 5, 5, 9),
+                Color.argb(224, 3, 3, 7),
+            ),
+        ).apply {
+            cornerRadius = radius.toFloat()
+            setStroke(context.dp(1), Color.argb(if (tintCards) 54 else 44, 255, 246, 226))
+        }
+        val hue = GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            intArrayOf(
+                Color.argb(if (tintCards) 74 else 28, Color.red(hueColor), Color.green(hueColor), Color.blue(hueColor)),
+                Color.TRANSPARENT,
+                Color.argb(if (tintCards) 56 else 22, Color.red(hueColor), Color.green(hueColor), Color.blue(hueColor)),
+            ),
+        ).apply { cornerRadius = radius.toFloat() }
+        val frost = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(Color.argb(28, 255, 252, 240), Color.argb(8, 255, 252, 240), Color.argb(4, 255, 252, 240)),
+        ).apply { cornerRadius = radius.toFloat() }
+        val gloss = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(Color.argb(28, 255, 249, 235), Color.argb(6, 255, 249, 235), Color.TRANSPARENT),
+        ).apply { cornerRadius = radius.toFloat() }
+
+        return LayerDrawable(arrayOf(imageDrawable, shade, hue, frost, gloss)).apply {
+            setLayerInset(3, context.dp(1), context.dp(1), context.dp(1), 0)
+            setLayerInset(4, context.dp(1), context.dp(1), context.dp(1), 0)
+        }
+    }
+
+    fun cardWithSideImage(
+        radius: Int,
+        hueColor: Int,
+        tintCards: Boolean,
+        image: Bitmap?,
+        imageAlpha: Int = 64,
+        imageBlur: Int = 0,
+    ): Drawable {
+        val base = notificationCard(radius, hueColor, tintCards)
+        return if (image == null) {
+            base
+        } else {
+            AppIconCardDrawable(base, image, radius.toFloat(), imageAlpha, imageBlur)
+        }
+    }
+
+    fun appCard(radius: Int, hueColor: Int, icon: Bitmap?): Drawable = cardWithSideImage(radius, hueColor, true, icon)
 
     fun glassWithHue(color: Int, radius: Int, hueColor: Int): Drawable {
         val hue = GradientDrawable(

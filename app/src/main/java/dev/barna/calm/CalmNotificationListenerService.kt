@@ -3,20 +3,37 @@ package dev.barna.calm
 import android.app.Notification
 import android.app.PendingIntent
 import android.graphics.Bitmap
+import android.os.Bundle
+import android.os.UserManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import java.util.concurrent.CopyOnWriteArraySet
 
 class CalmNotificationListenerService : NotificationListenerService() {
+    private val artworkExtractor by lazy { NotificationArtworkExtractor(this) }
+
     data class CalmNotification(
         val key: String,
+        val cancelKey: String = key,
         val packageName: String,
+        val userSerial: Long = AppIdentity.LEGACY_USER_SERIAL,
         val title: String,
         val text: String,
         val subText: String,
+        val conversationTitle: String,
         val postTime: Long,
         val contentIntent: PendingIntent?,
         val backgroundImage: Bitmap?,
+        val actions: List<NotificationAction>,
+    ) {
+        val sourceKey: String
+            get() = AppIdentity.notificationKey(packageName, userSerial)
+    }
+
+    private data class ExtractedMessage(
+        val sender: String,
+        val text: String,
+        val timestamp: Long,
     )
 
     override fun onListenerConnected() {
@@ -48,7 +65,7 @@ class CalmNotificationListenerService : NotificationListenerService() {
     private fun refreshSnapshot() {
         val next = ArrayList<CalmNotification>()
         activeNotifications?.forEach { status ->
-            toCalmNotification(status)?.let(next::add)
+            next.addAll(toCalmNotifications(status))
         }
         synchronized(lock) {
             currentNotifications = next
@@ -56,36 +73,99 @@ class CalmNotificationListenerService : NotificationListenerService() {
         notifyListeners()
     }
 
-    private fun toCalmNotification(status: StatusBarNotification?): CalmNotification? {
-        val notification = status?.notification ?: return null
+    private fun toCalmNotifications(status: StatusBarNotification?): List<CalmNotification> {
+        val notification = status?.notification ?: return emptyList()
         val title = notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         var text = notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
         val subText = notification.extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString().orEmpty()
+        val conversationTitle = notification.extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString().orEmpty()
+        val userSerial = profileSerial(status)
+        val backgroundImage = notificationBackground(notification)
+        val actions = notificationActions(notification)
+        val messages = messagingMessages(notification)
+        if (messages.size > 1) {
+            return messages.mapIndexed { index, message ->
+                CalmNotification(
+                    key = "${status.key}|message|$index|${message.timestamp}",
+                    cancelKey = status.key,
+                    packageName = status.packageName,
+                    userSerial = userSerial,
+                    title = message.sender.ifBlank { conversationTitle.ifBlank { title } },
+                    text = message.text,
+                    subText = subText,
+                    conversationTitle = conversationTitle.ifBlank { title },
+                    postTime = message.timestamp.takeIf { it > 0L } ?: status.postTime,
+                    contentIntent = notification.contentIntent,
+                    backgroundImage = backgroundImage,
+                    actions = actions,
+                )
+            }
+        }
         if (title.isEmpty() && text.isEmpty() && notification.tickerText != null) {
             text = notification.tickerText.toString()
         }
 
-        return CalmNotification(
-            status.key,
-            status.packageName,
-            title,
-            text,
-            subText,
-            status.postTime,
-            notification.contentIntent,
-            notificationBackground(notification),
+        return listOf(
+            CalmNotification(
+                key = status.key,
+                cancelKey = status.key,
+                packageName = status.packageName,
+                userSerial = userSerial,
+                title = title,
+                text = text,
+                subText = subText,
+                conversationTitle = conversationTitle,
+                postTime = status.postTime,
+                contentIntent = notification.contentIntent,
+                backgroundImage = backgroundImage,
+                actions = actions,
+            ),
         )
     }
 
+    private fun messagingMessages(notification: Notification): List<ExtractedMessage> {
+        val rawMessages = notification.extras.getParcelableArray(Notification.EXTRA_MESSAGES) ?: return emptyList()
+        return rawMessages
+            .filterIsInstance<Bundle>()
+            .mapNotNull { bundle ->
+                val text = bundle.getCharSequence("text")?.toString().orEmpty()
+                if (text.isBlank()) {
+                    null
+                } else {
+                    ExtractedMessage(
+                        sender = bundle.getCharSequence("sender")?.toString().orEmpty(),
+                        text = text,
+                        timestamp = bundle.getLong("time"),
+                    )
+                }
+            }
+    }
+
+    private fun profileSerial(status: StatusBarNotification): Long {
+        return runCatching {
+            getSystemService(UserManager::class.java).getSerialNumberForUser(status.user)
+        }.getOrDefault(AppIdentity.LEGACY_USER_SERIAL)
+    }
+
+    private fun notificationActions(notification: Notification): List<NotificationAction> {
+        return notification.actions
+            ?.mapNotNull { action ->
+                val label = action.title?.toString()?.trim().orEmpty()
+                if (label.isBlank()) {
+                    null
+                } else {
+                    NotificationAction(
+                        label,
+                        action.actionIntent,
+                        action.remoteInputs?.toList().orEmpty(),
+                    )
+                }
+            }
+            .orEmpty()
+    }
+
     private fun notificationBackground(notification: Notification): Bitmap? {
-        val picture = notification.extras.get(Notification.EXTRA_PICTURE)
-        if (picture is Bitmap) return picture
-
-        val largeIconExtra = notification.extras.get(Notification.EXTRA_LARGE_ICON)
-        if (largeIconExtra is Bitmap) return largeIconExtra
-
-        val drawable = notification.getLargeIcon()?.loadDrawable(this) ?: return null
-        return drawable.toBitmap()
+        return artworkExtractor.artwork(notification)
     }
 
     private fun notifyListeners() {
@@ -123,13 +203,23 @@ class CalmNotificationListenerService : NotificationListenerService() {
         }
 
         @JvmStatic
-        fun clearPackage(packageName: String) {
+        fun clearPackage(packageName: String, userSerial: Long = AppIdentity.LEGACY_USER_SERIAL) {
             val service = synchronized(lock) { currentService } ?: return
             service.activeNotifications?.forEach { status ->
-                if (status != null && packageName == status.packageName) {
+                if (status != null &&
+                    packageName == status.packageName &&
+                    (userSerial == AppIdentity.LEGACY_USER_SERIAL || service.profileSerial(status) == userSerial)
+                ) {
                     service.cancelNotification(status.key)
                 }
             }
+            service.refreshSnapshot()
+        }
+
+        @JvmStatic
+        fun dismissNotifications(keys: Collection<String>) {
+            val service = synchronized(lock) { currentService } ?: return
+            keys.distinct().forEach { key -> service.cancelNotification(key) }
             service.refreshSnapshot()
         }
     }

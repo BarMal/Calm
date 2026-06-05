@@ -14,6 +14,7 @@ class ChapterPageTest {
         assertEquals("I", page.marker)
         assertEquals("Overview", page.title)
         assertNull(page.chapter)
+        assertNull(page.appScope)
     }
 
     @Test
@@ -26,6 +27,18 @@ class ChapterPageTest {
         assertEquals("II", page.marker)
         assertEquals("Messages", page.title)
         assertSame(chapter, page.chapter)
+        assertNull(page.appScope)
+    }
+
+    @Test
+    fun splitAppPagesCarryTheirOwnScopes() {
+        val personal = ChapterPage.personalApps("personal-key", "I")
+        val work = ChapterPage.workApps("work-key", "II")
+
+        assertEquals("Personal apps", personal.title)
+        assertEquals(AppLibraryScope.PERSONAL, personal.appScope)
+        assertEquals("Work apps", work.title)
+        assertEquals(AppLibraryScope.WORK, work.appScope)
     }
 
     @Test
@@ -36,5 +49,6 @@ class ChapterPageTest {
         assertEquals("V", page.marker)
         assertEquals("Settings", page.title)
         assertNull(page.chapter)
+        assertNull(page.appScope)
     }
 }

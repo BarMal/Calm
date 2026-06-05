@@ -4,6 +4,10 @@ import android.graphics.Color
 
 object CalmTheme {
     const val OVERVIEW_KEY = "dev.barna.calm.OVERVIEW"
+    const val APP_LIBRARY_KEY = "dev.barna.calm.APPS"
+    const val PERSONAL_APP_LIBRARY_KEY = "dev.barna.calm.APPS.PERSONAL"
+    const val WORK_APP_LIBRARY_KEY = "dev.barna.calm.APPS.WORK"
+    const val PINNED_KEY = "dev.barna.calm.PINNED"
     const val SETTINGS_KEY = "dev.barna.calm.SETTINGS"
     const val REQUEST_CALENDAR = 1001
 

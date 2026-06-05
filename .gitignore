@@ -1,4 +1,5 @@
 .gradle/
+.kotlin/
 .idea/
 *.iml
 build/
@@ -14,4 +15,3 @@ local.properties
 # JVM
 *.class
 hs_err_pid*
-

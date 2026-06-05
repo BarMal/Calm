@@ -7,11 +7,11 @@ import android.graphics.Typeface
 import android.os.Build
 import android.os.Handler
 import android.text.TextUtils
-import android.view.Gravity
+import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
-import android.widget.GridLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -22,20 +22,30 @@ class FocusOverlayController(
     private val drawables: CalmDrawables,
     private val labelFactory: (String, Int, Int, Int) -> TextView,
     private val currentScreen: () -> View?,
+    private val focusBlurRadius: () -> Int,
 ) {
     private var focusedCardOverlay: FrameLayout? = null
+    private var focusedCardClone: TextView? = null
+    private var focusedMenu: LinearLayout? = null
+    private var focusedSourceCard: View? = null
+    private var focusedStartBounds: CardBounds? = null
     private val displacedFocusViews = ArrayList<FocusDisplacement>()
 
-    fun show(sourceCard: TextView, actions: List<ContextAction>) {
+    fun show(sourceCard: TextView, actions: List<ContextAction>, focusedText: String = sourceCard.text.toString()) {
         dismiss(false)
         val content = activity.findViewById<FrameLayout>(android.R.id.content) ?: return
+        val startBounds = sourceBoundsInContent(content, sourceCard)
+        val targetBounds = CardBounds(
+            left = ((content.width - sourceCard.width) / 2).coerceAtLeast(activity.dp(18)),
+            top = ((content.height - sourceCard.height) / 2).coerceAtLeast(activity.dp(24)),
+            width = sourceCard.width,
+            height = sourceCard.height,
+        )
+
+        focusedSourceCard = sourceCard
+        focusedStartBounds = startBounds
         animatePageElementsAway(sourceCard, true)
-        currentScreen()?.let { screen ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                screen.setRenderEffect(RenderEffect.createBlurEffect(activity.dp(7).toFloat(), activity.dp(7).toFloat(), Shader.TileMode.CLAMP))
-            }
-            screen.animate().alpha(0.72f).setDuration(180).start()
-        }
+        applyBackdropFocus()
 
         val overlay = FrameLayout(activity).apply {
             alpha = 0f
@@ -45,62 +55,112 @@ class FocusOverlayController(
         focusedCardOverlay = overlay
         content.addView(overlay, matchParentParams())
 
-        val focusColumn = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(activity.dp(18), 0, activity.dp(18), 0)
-            translationY = activity.dp(26).toFloat()
+        val focusedCard = cloneFocusedCard(sourceCard, focusedText).apply {
+            alpha = 0.98f
+            elevation = sourceCard.elevation + activity.dp(10)
+            translationZ = sourceCard.translationZ + activity.dp(16)
             setOnClickListener { }
         }
-        overlay.addView(
-            focusColumn,
-            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
-        )
+        focusedCardClone = focusedCard
+        overlay.addView(focusedCard, startBounds.layoutParams())
 
-        val focusedCard = labelFactory(sourceCard.text.toString(), 17, CalmTheme.INK, Typeface.NORMAL).apply {
-            setLineSpacing(activity.dp(3).toFloat(), 1.0f)
-            setPadding(activity.dp(20), activity.dp(18), activity.dp(20), activity.dp(18))
-            maxLines = 8
-            ellipsize = TextUtils.TruncateAt.END
-            val state = sourceCard.background?.constantState
-            background = state?.newDrawable()?.mutate() ?: drawables.glass(CalmTheme.GLASS, activity.dp(20))
-            elevation = activity.dp(10).toFloat()
+        val menu = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+            alpha = 0f
+            translationY = -activity.dp(18).toFloat()
+            setOnClickListener { }
         }
-        focusColumn.addView(focusedCard, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-
-        val menu = GridLayout(activity).apply {
-            columnCount = 2
-            useDefaultMargins = false
-        }
-        val menuParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = activity.dp(14)
-        }
-        focusColumn.addView(menu, menuParams)
+        focusedMenu = menu
+        overlay.addView(menu, menuLayoutParams(targetBounds))
         actions.forEach { menu.addView(contextActionButton(it)) }
 
         overlay.animate().alpha(1f).setDuration(170).start()
-        focusColumn.animate().translationY(0f).setDuration(220).start()
+        focusedCard.animate()
+            .x(targetBounds.left.toFloat())
+            .y(targetBounds.top.toFloat())
+            .setDuration(260)
+            .setInterpolator(DecelerateInterpolator())
+            .withEndAction { animateMenuIn(menu) }
+            .start()
     }
 
     fun dismiss(animate: Boolean) {
+        dismissWithAction(animate, removeFocusedCard = false, afterDismiss = null)
+    }
+
+    private fun dismissWithAction(
+        animate: Boolean,
+        removeFocusedCard: Boolean,
+        afterDismiss: Runnable?,
+    ) {
         val overlay = focusedCardOverlay
         if (overlay == null) {
-            resetBackdrop(animate)
+            resetBackdrop(animate, restoreSourceCard = true)
+            afterDismiss?.run()
             return
         }
+
+        val focusedCard = focusedCardClone
+        val menu = focusedMenu
+        val startBounds = focusedStartBounds
         focusedCardOverlay = null
+        focusedCardClone = null
+        focusedMenu = null
+        focusedStartBounds = null
+
         val cleanup = Runnable {
             (overlay.parent as? ViewGroup)?.removeView(overlay)
-            resetBackdrop(animate)
+            resetBackdrop(animate, restoreSourceCard = !removeFocusedCard)
+            focusedSourceCard = null
+            afterDismiss?.run()
         }
-        if (animate) {
-            overlay.animate().alpha(0f).setDuration(150).withEndAction(cleanup).start()
-        } else {
+
+        if (!animate) {
             cleanup.run()
+            return
+        }
+
+        animateMenuOut(menu)
+        overlay.animate().alpha(0f).setDuration(190).setStartDelay(90).start()
+        when {
+            focusedCard != null && startBounds != null && !removeFocusedCard -> {
+                focusedCard.animate()
+                    .x(startBounds.left.toFloat())
+                    .y(startBounds.top.toFloat())
+                    .setStartDelay(55)
+                    .setDuration(230)
+                    .setInterpolator(DecelerateInterpolator())
+                    .withEndAction(cleanup)
+                    .start()
+            }
+            focusedCard != null && removeFocusedCard -> {
+                focusedCard.animate()
+                    .alpha(0f)
+                    .translationY(focusedCard.translationY - activity.dp(42))
+                    .scaleX(0.96f)
+                    .scaleY(0.96f)
+                    .setStartDelay(55)
+                    .setDuration(210)
+                    .withEndAction(cleanup)
+                    .start()
+            }
+            else -> mainHandler.postDelayed(cleanup, 230)
         }
     }
 
-    private fun resetBackdrop(animate: Boolean) {
+    private fun applyBackdropFocus() {
+        currentScreen()?.let { screen ->
+            val blur = focusBlurRadius().coerceIn(0, 24).toFloat()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && blur > 0f) {
+                screen.setRenderEffect(RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.CLAMP))
+            }
+            screen.animate().alpha(0.72f).setDuration(180).start()
+        }
+    }
+
+    private fun resetBackdrop(animate: Boolean, restoreSourceCard: Boolean) {
         currentScreen()?.let { screen ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) screen.setRenderEffect(null)
             if (animate) {
@@ -109,12 +169,13 @@ class FocusOverlayController(
                 screen.alpha = 1f
             }
         }
-        animatePageElementsAway(null, false)
+        animatePageElementsAway(null, false, restoreSourceCard)
     }
 
-    private fun animatePageElementsAway(sourceCard: View?, away: Boolean) {
+    private fun animatePageElementsAway(sourceCard: View?, away: Boolean, restoreSourceCard: Boolean = true) {
         if (!away) {
             displacedFocusViews.forEach { displacement ->
+                if (!restoreSourceCard && displacement.view === focusedSourceCard) return@forEach
                 displacement.view.animate()
                     .translationY(displacement.translationY)
                     .alpha(displacement.alpha)
@@ -152,14 +213,14 @@ class FocusOverlayController(
         val stack = findCardStackContent(sourceCard)
         if (stack == null) {
             displacedFocusViews.add(FocusDisplacement(sourceCard))
-            sourceCard.animate().alpha(0f).setDuration(120).start()
+            sourceCard.alpha = 0f
             return
         }
         for (index in 0 until stack.childCount) {
             val card = stack.getChildAt(index)
             displacedFocusViews.add(FocusDisplacement(card))
             if (card === sourceCard) {
-                card.animate().alpha(0f).setDuration(120).start()
+                card.alpha = 0f
                 continue
             }
             val cardLocation = IntArray(2)
@@ -172,6 +233,62 @@ class FocusOverlayController(
                 .setDuration(190)
                 .start()
         }
+    }
+
+    private fun cloneFocusedCard(sourceCard: TextView, focusedText: String): TextView {
+        return TextView(activity).apply {
+            text = focusedText
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, sourceCard.textSize)
+            setTextColor(sourceCard.currentTextColor)
+            typeface = sourceCard.typeface
+            gravity = sourceCard.gravity
+            includeFontPadding = sourceCard.includeFontPadding
+            setLineSpacing(sourceCard.lineSpacingExtra, sourceCard.lineSpacingMultiplier)
+            setPadding(sourceCard.paddingLeft, sourceCard.paddingTop, sourceCard.paddingRight, sourceCard.paddingBottom)
+            maxLines = sourceCard.maxLines
+            ellipsize = sourceCard.ellipsize ?: TextUtils.TruncateAt.END
+            background = sourceCard.background?.constantState?.newDrawable()?.mutate()
+                ?: drawables.glass(CalmTheme.GLASS, activity.dp(20))
+            compoundDrawablePadding = sourceCard.compoundDrawablePadding
+            val relativeDrawables = sourceCard.compoundDrawablesRelative
+            setCompoundDrawablesRelativeWithIntrinsicBounds(
+                relativeDrawables[0],
+                relativeDrawables[1],
+                relativeDrawables[2],
+                relativeDrawables[3],
+            )
+        }
+    }
+
+    private fun animateMenuIn(menu: LinearLayout) {
+        menu.alpha = 1f
+        menu.animate().translationY(0f).setDuration(170).start()
+        for (index in 0 until menu.childCount) {
+            val child = menu.getChildAt(index)
+            child.alpha = 0f
+            child.translationY = -activity.dp(16).toFloat()
+            child.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setStartDelay(index * 36L)
+                .setDuration(180)
+                .start()
+        }
+    }
+
+    private fun animateMenuOut(menu: LinearLayout?) {
+        if (menu == null) return
+        for (index in menu.childCount - 1 downTo 0) {
+            val child = menu.getChildAt(index)
+            val order = menu.childCount - 1 - index
+            child.animate()
+                .alpha(0f)
+                .translationY(-activity.dp(14).toFloat())
+                .setStartDelay(order * 26L)
+                .setDuration(130)
+                .start()
+        }
+        menu.animate().alpha(0f).translationY(-activity.dp(18).toFloat()).setDuration(160).start()
     }
 
     private fun findPageContainer(source: View): LinearLayout? {
@@ -205,21 +322,55 @@ class FocusOverlayController(
 
     private fun contextActionButton(action: ContextAction): TextView {
         return labelFactory(action.label, 14, CalmTheme.INK, Typeface.BOLD).apply {
-            gravity = Gravity.CENTER
+            gravity = android.view.Gravity.CENTER
             setSingleLine(true)
             ellipsize = TextUtils.TruncateAt.END
             setPadding(activity.dp(10), activity.dp(12), activity.dp(10), activity.dp(12))
             background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(999))
             setOnClickListener {
-                dismiss(true)
-                mainHandler.postDelayed(action.action, 170)
+                dismissWithAction(
+                    animate = true,
+                    removeFocusedCard = action.closeBehavior == ContextActionCloseBehavior.REMOVE_CARD,
+                    afterDismiss = action.action,
+                )
             }
-            layoutParams = GridLayout.LayoutParams().apply {
-                width = 0
-                height = ViewGroup.LayoutParams.WRAP_CONTENT
-                columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
-                setMargins(activity.dp(4), activity.dp(4), activity.dp(4), activity.dp(4))
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, activity.dp(4), 0, activity.dp(4))
             }
         }
     }
+
+    private fun sourceBoundsInContent(content: View, sourceCard: View): CardBounds {
+        val contentLocation = IntArray(2)
+        val sourceLocation = IntArray(2)
+        content.getLocationOnScreen(contentLocation)
+        sourceCard.getLocationOnScreen(sourceLocation)
+        return CardBounds(
+            left = sourceLocation[0] - contentLocation[0],
+            top = sourceLocation[1] - contentLocation[1],
+            width = sourceCard.width,
+            height = sourceCard.height,
+        )
+    }
+
+    private fun menuLayoutParams(targetBounds: CardBounds): FrameLayout.LayoutParams {
+        return FrameLayout.LayoutParams(targetBounds.width, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            leftMargin = targetBounds.left
+            topMargin = targetBounds.top + targetBounds.height + activity.dp(14)
+        }
+    }
+
+    private fun CardBounds.layoutParams(): FrameLayout.LayoutParams {
+        return FrameLayout.LayoutParams(width, height).apply {
+            leftMargin = left
+            topMargin = top
+        }
+    }
+
+    private data class CardBounds(
+        val left: Int,
+        val top: Int,
+        val width: Int,
+        val height: Int,
+    )
 }

@@ -12,10 +12,13 @@ class CardStackController(
     private val mainHandler: Handler,
     private val haptics: (android.view.View) -> Unit,
 ) {
-    fun cardStack(cards: List<TextView>, cardHeight: Int, cardStep: Int): ScrollView {
+    fun cardStack(cards: List<TextView>, cardHeight: Int, cardStep: Int, tuning: CardStackTuning): ScrollView {
         val scroller = ScrollView(activity).apply {
-            isFillViewport = false
+            tag = CalmAnimationTags.CARD_STACK
+            isFillViewport = true
             overScrollMode = android.view.View.OVER_SCROLL_NEVER
+            isVerticalScrollBarEnabled = false
+            isClickable = true
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
             clipToPadding = false
             clipChildren = false
@@ -25,37 +28,66 @@ class CardStackController(
             clipToPadding = false
             clipChildren = false
         }
-        val stackTopPadding = activity.dp(6)
+        val tunedStep = tunedCardStep(cardStep, tuning)
+        val minimumTopPadding = activity.dp(6)
         val minimumBottomPadding = activity.dp(32)
-        stack.setPadding(0, stackTopPadding, 0, minimumBottomPadding)
+        stack.setPadding(0, minimumTopPadding, 0, minimumBottomPadding)
         scroller.addView(stack, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
-        val stackOverlap = cardHeight - cardStep
+        val stackOverlap = cardHeight - tunedStep
         cards.forEachIndexed { index, card ->
+            card.tag = CalmAnimationTags.CARD
             val params = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, cardHeight)
             params.topMargin = if (index == 0) 0 else -stackOverlap
             stack.addView(card, params)
         }
 
         val lastHapticIndex = intArrayOf(-1)
-        val magneticSnap = Runnable { magnetize(scroller, cards, cardStep) }
+        val magneticSnap = Runnable { magnetize(scroller, cards, tunedStep) }
         scroller.setOnScrollChangeListener { _, _, _, _, _ ->
-            style(scroller, cards, cardStep, true, lastHapticIndex)
+            style(scroller, cards, tunedStep, tuning, true, lastHapticIndex)
             mainHandler.removeCallbacks(magneticSnap)
             mainHandler.postDelayed(magneticSnap, 90)
         }
         scroller.post {
-            val trailingPadding = maxOf(minimumBottomPadding, scroller.height - cardHeight + activity.dp(36))
+            val viewportLocation = IntArray(2)
+            scroller.getLocationOnScreen(viewportLocation)
+            val targetTopOnScreen = (activity.window.decorView.height - cardHeight) / 2
+            val stackTopPadding = CardStackLayout.activeTopPadding(
+                viewportHeight = scroller.height,
+                cardHeight = cardHeight,
+                minimumTopPadding = minimumTopPadding,
+                viewportTopOnScreen = viewportLocation[1],
+                targetTopOnScreen = targetTopOnScreen,
+            )
+            val trailingPadding = CardStackLayout.trailingPadding(
+                viewportHeight = scroller.height,
+                activeTopPadding = stackTopPadding,
+                cardHeight = cardHeight,
+                minimumBottomPadding = minimumBottomPadding,
+            )
             stack.setPadding(0, stackTopPadding, 0, trailingPadding)
-            style(scroller, cards, cardStep, false, lastHapticIndex)
+            stack.post {
+                val maxScroll = maxOf(0, (cards.lastOrNull()?.top ?: stackTopPadding) - stackTopPadding)
+                stack.minimumHeight = scroller.height + maxScroll
+                style(scroller, cards, tunedStep, tuning, false, lastHapticIndex)
+            }
         }
         return scroller
+    }
+
+    private fun tunedCardStep(baseStep: Int, tuning: CardStackTuning): Int {
+        val minStep = activity.dp(34)
+        val maxStep = activity.dp(88)
+        val fromBase = (baseStep * (0.72f + (tuning.verticalSpacing / 100f) * 0.72f)).toInt()
+        return fromBase.coerceIn(minStep, maxStep)
     }
 
     private fun style(
         scroller: ScrollView,
         cards: List<TextView>,
         cardStep: Int,
+        tuning: CardStackTuning,
         allowHaptic: Boolean,
         lastHapticIndex: IntArray,
     ) {
@@ -70,14 +102,17 @@ class CardStackController(
 
         cards.forEach { card ->
             val visualDepth = (card.top - threshold) / cardStep.toFloat()
-            val scale = scale(visualDepth)
+            val focusDistance = kotlin.math.abs(visualDepth)
+            val scale = scale(visualDepth, tuning)
             card.pivotY = 0f
-            card.translationZ = if (visualDepth < 0f) 0f else 100f - visualDepth
+            card.translationZ = 120f - focusDistance
+            card.translationX = horizontalOffset(visualDepth, tuning)
+            card.rotation = horizontalRotation(visualDepth, tuning)
             card.scaleX = scale
             card.scaleY = scale
-            card.alpha = alpha(visualDepth)
+            card.alpha = alpha(visualDepth, tuning)
             card.setTextColor(textColor(visualDepth))
-            card.isEnabled = visualDepth >= -0.05f && visualDepth <= 2.05f
+            card.isEnabled = visualDepth >= -0.05f && visualDepth <= tuning.visibleCards - 0.95f
         }
 
         if (lastHapticIndex[0] == -1) {
@@ -107,18 +142,44 @@ class CardStackController(
         scroller.smoothScrollTo(0, target)
     }
 
-    private fun scale(visualDepth: Float): Float {
-        if (visualDepth < 0f) return CalmColor.lerp(1.02f, 0.96f, CalmColor.clamp01(-visualDepth))
-        if (visualDepth <= 1f) return CalmColor.lerp(1.02f, 0.96f, visualDepth)
-        if (visualDepth <= 2f) return CalmColor.lerp(0.96f, 0.90f, visualDepth - 1f)
-        return 0.88f
+    private fun scale(visualDepth: Float, tuning: CardStackTuning): Float {
+        val curve = tuning.curveFactor
+        val topScale = 1.02f
+        val firstDepthScale = CalmColor.lerp(1.0f, 0.93f, curve)
+        val tailScale = CalmColor.lerp(0.97f, 0.84f, curve)
+        if (visualDepth < 0f) return CalmColor.lerp(topScale, tailScale, CalmColor.clamp01(-visualDepth / tuning.outgoingVisibleRange))
+        if (visualDepth <= 1f) return CalmColor.lerp(topScale, firstDepthScale, visualDepth)
+        val tailDepth = CalmColor.clamp01((visualDepth - 1f) / maxOf(1f, tuning.visibleCards - 1f))
+        return CalmColor.lerp(firstDepthScale, tailScale, tailDepth)
     }
 
-    private fun alpha(visualDepth: Float): Float {
-        if (visualDepth < 0f) return CalmColor.clamp01(1f + visualDepth)
-        if (visualDepth <= 2f) return CalmColor.lerp(1f, 0.56f, visualDepth / 2f)
-        if (visualDepth <= 2.35f) return CalmColor.lerp(0.56f, 0f, (visualDepth - 2f) / 0.35f)
+    private fun alpha(visualDepth: Float, tuning: CardStackTuning): Float {
+        if (visualDepth < 0f) {
+            return CalmColor.lerp(1f, 0f, CalmColor.clamp01(-visualDepth / tuning.outgoingVisibleRange))
+        }
+        val visibleTail = maxOf(1f, tuning.visibleCards - 1f)
+        val dimAmount = CalmColor.lerp(0.72f, 0.44f, tuning.curveFactor)
+        if (visualDepth <= tuning.visibleCards - 1f) {
+            return CalmColor.lerp(1f, dimAmount, visualDepth / visibleTail)
+        }
+        if (visualDepth <= tuning.visibleCards - 0.65f) {
+            return CalmColor.lerp(dimAmount, 0f, (visualDepth - (tuning.visibleCards - 1f)) / 0.35f)
+        }
         return 0f
+    }
+
+    private fun horizontalOffset(visualDepth: Float, tuning: CardStackTuning): Float {
+        if (tuning.horizontalCurve == 0) return 0f
+        return activity.dp(132) * tuning.horizontalCurveFactor * tuning.horizontalPathProgress(visualDepth)
+    }
+
+    private fun horizontalRotation(visualDepth: Float, tuning: CardStackTuning): Float {
+        if (tuning.horizontalCurve == 0 || tuning.rotation == 0) return 0f
+        return 9f *
+            tuning.horizontalCurveFactor *
+            tuning.rotationFactor *
+            tuning.rotationProgress(visualDepth) *
+            tuning.rotationDirection(visualDepth)
     }
 
     private fun textColor(visualDepth: Float): Int {

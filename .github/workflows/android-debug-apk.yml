@@ -54,14 +54,12 @@ jobs:
           RELEASE_APK_PATH="$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)"
 
           cp "$RELEASE_APK_PATH" "dist/Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk"
-          cp "$RELEASE_APK_PATH" dist/Calm-alpha-latest.apk
           cp "$DEBUG_APK_PATH" "dist/Calm-alpha-debug-side-by-side-${VERSION_NAME}-${VERSION_CODE}.apk"
-          cp "$DEBUG_APK_PATH" dist/Calm-alpha-debug-side-by-side-latest.apk
 
           cp "dist/Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk" release-assets/
-          cp dist/Calm-alpha-latest.apk release-assets/
+          cp "$RELEASE_APK_PATH" release-assets/Calm-alpha-latest.apk
           cp "dist/Calm-alpha-debug-side-by-side-${VERSION_NAME}-${VERSION_CODE}.apk" release-assets/
-          cp dist/Calm-alpha-debug-side-by-side-latest.apk release-assets/
+          cp "$DEBUG_APK_PATH" release-assets/Calm-alpha-debug-side-by-side-latest.apk
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
@@ -85,6 +83,7 @@ jobs:
             echo "### Which APK should I install?"
             echo "- **Calm-alpha-latest.apk** updates the existing Calm install using package \`dev.barna.calm\`. Use this for normal alpha testing."
             echo "- **Calm-alpha-debug-side-by-side-latest.apk** installs separately using package \`dev.barna.calm.debug\`. Use this only when you intentionally want a second test copy."
+            echo "- The versioned and latest files for the same channel are aliases of the same package. Install one normal APK and, optionally, one debug side-by-side APK."
             echo
             echo "### Versioned APKs"
             echo "- Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk"

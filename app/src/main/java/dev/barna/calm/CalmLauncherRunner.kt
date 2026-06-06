@@ -60,6 +60,22 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         LauncherPageStateFactory(pinnedAppResolver = pinnedAppResolver),
     )
     private val appCardModelFactory = AppCardModelFactory(pinnedAppResolver = pinnedAppResolver)
+    private val contextActionFactory = LauncherContextActionFactory(
+        LauncherContextActionCallbacks(
+            openNotification = ::openNotification,
+            openPackage = ::openPackage,
+            dismissNotificationItem = ::dismissNotificationItem,
+            clearChapter = ::clearChapter,
+            performNotificationAction = ::performNotificationAction,
+            openCalendarEvent = ::openCalendarEvent,
+            requestCalendarAccess = { calendarRepository.requestCalendarAccess() },
+            openSettings = ::openSettingsActivity,
+            openAppEntry = ::openAppEntry,
+            pinApp = ::pinApp,
+            unpinApp = ::unpinApp,
+            openAppInfo = { app -> openAppInfo(app.packageName, app.userHandle, app.componentName) },
+        ),
+    )
     private val cardStackController = CardStackController(activity, mainHandler, ::performCardScrollHaptic)
     private val entryAnimator = LauncherEntryAnimator(activity)
     private val settingsPageFactory = SettingsPageFactory(
@@ -698,7 +714,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
             maxLines = 4
             setOnClickListener { openAppEntry(app) }
             setOnLongClickListener {
-                focusOverlay.show(this, appContextActions(model.app), model.app.label)
+                focusOverlay.show(this, contextActionFactory.appActions(model.app, model.isPinned), model.app.label)
                 true
             }
         }
@@ -1103,7 +1119,10 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         return stackCard("${if (today) "Today" else "Upcoming"}\n$title\n${calendarRepository.formatEventTime(event)}$location", if (today) CalmTheme.ACCENT else Color.rgb(122, 146, 178), true, cardSideIcon(R.drawable.ic_calendar_card)).apply {
             setOnClickListener { openCalendarEvent(event) }
             setOnLongClickListener {
-                focusOverlay.show(this, calendarContextActions(event))
+                focusOverlay.show(
+                    this,
+                    contextActionFactory.calendarActions(event, calendarRepository.hasCalendarPermission()),
+                )
                 true
             }
         }
@@ -1136,7 +1155,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
             }
             maxLines = 4
             setOnClickListener {
-                focusOverlay.show(this, notificationContextActions(item, chapter), item.fullText())
+                focusOverlay.show(this, contextActionFactory.notificationActions(item, chapter), item.fullText())
             }
             setOnLongClickListener {
                 showNotificationHideOptions(item, chapter)
@@ -1193,46 +1212,6 @@ class CalmLauncherRunner(private val activity: MainActivity) {
 
     private fun openSettingsActivity() {
         activity.startActivity(Intent(activity, CalmSettingsActivity::class.java))
-    }
-
-    private fun notificationContextActions(
-        item: NotificationCardItem,
-        chapter: AppChapter,
-    ): List<ContextAction> {
-        val actions = ArrayList<ContextAction>()
-        actions.addAll(listOf(
-            ContextAction("Open", Runnable { openNotification(item.primary) }),
-            ContextAction("Open app", Runnable { openPackage(chapter) }),
-            ContextAction("Dismiss", Runnable { dismissNotificationItem(item) }, ContextActionCloseBehavior.REMOVE_CARD),
-            ContextAction("Clear", Runnable { clearChapter(chapter) }, ContextActionCloseBehavior.REMOVE_CARD),
-        ))
-        item.allActions().forEach { action ->
-            actions.add(ContextAction(action.label, Runnable { performNotificationAction(action) }))
-        }
-        return actions
-    }
-
-    private fun calendarContextActions(event: CalendarEvent): List<ContextAction> {
-        return listOf(
-            ContextAction("Open calendar", Runnable { openCalendarEvent(event) }),
-            ContextAction(if (calendarRepository.hasCalendarPermission()) "Calendar access" else "Allow calendar", Runnable { calendarRepository.requestCalendarAccess() }),
-            ContextAction("Settings", Runnable { openSettingsActivity() }),
-        )
-    }
-
-    private fun appContextActions(app: AppEntry): List<ContextAction> {
-        val pinned = isPinned(app)
-        return listOf(
-            ContextAction("Open", Runnable { openAppEntry(app) }),
-            ContextAction(if (pinned) "Unpin" else "Pin", Runnable {
-                if (pinned) {
-                    unpinApp(app)
-                } else {
-                    pinApp(app)
-                }
-            }),
-            ContextAction("Info", Runnable { openAppInfo(app.packageName, app.userHandle, app.componentName) }),
-        )
     }
 
     private fun openAppEntry(app: AppEntry) {

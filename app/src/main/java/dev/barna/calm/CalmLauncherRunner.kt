@@ -60,6 +60,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         LauncherPageStateFactory(pinnedAppResolver = pinnedAppResolver),
     )
     private val appCardModelFactory = AppCardModelFactory(pinnedAppResolver = pinnedAppResolver)
+    private val appLibraryPageModelFactory = AppLibraryPageModelFactory()
     private val contextActionFactory = LauncherContextActionFactory(
         LauncherContextActionCallbacks(
             openNotification = ::openNotification,
@@ -406,22 +407,24 @@ class CalmLauncherRunner(private val activity: MainActivity) {
 
     private fun createAppLibraryPage(pageModel: ChapterPage, appEntries: List<AppEntry>): LinearLayout {
         val scope = pageModel.appScope ?: AppLibraryScope.ALL
-        val title = pageModel.title
+        val model = appLibraryPageModelFactory.create(pageModel, appEntries, appSearchQuery(scope))
         val page = createBarePagePanel(activity.dp(20))
         val header = LinearLayout(activity).apply {
             tag = CalmAnimationTags.CHROME
             orientation = LinearLayout.VERTICAL
             clipToPadding = false
             clipChildren = false
-            addView(label("CHAPTER / ${title.uppercase(Locale.getDefault())}", 12, CalmTheme.ACCENT, Typeface.BOLD).apply {
+            addView(label("CHAPTER / ${model.title.uppercase(Locale.getDefault())}", 12, CalmTheme.ACCENT, Typeface.BOLD).apply {
                 setPadding(0, 0, 0, activity.dp(18))
             })
-            addView(label(title, 30, CalmTheme.INK, Typeface.NORMAL).apply {
+            addView(label(model.title, 30, CalmTheme.INK, Typeface.NORMAL).apply {
                 setPadding(0, activity.dp(8), 0, 0)
             })
-            addView(label(appLibrarySubtitle(scope), 15, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
-                setPadding(0, activity.dp(6), 0, activity.dp(18))
-            })
+            model.subtitle?.let { subtitle ->
+                addView(label(subtitle, 15, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
+                    setPadding(0, activity.dp(6), 0, activity.dp(18))
+                })
+            }
         }
         page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
@@ -431,32 +434,25 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         }
         page.addView(stackHost, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        val searchControl = appSearchBox(page, header, stackHost, scope, appEntries)
+        val searchControl = appSearchBox(page, header, stackHost, pageModel, appEntries)
         page.addView(animatedChrome(searchControl.root), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = activity.dp(12)
         })
         val search = searchControl.search
         appSearchPages.add(AppSearchPageState(pageModel.key, page, header, search))
         installAppSearchKeyboardAnimator(page, header, search)
-        refreshAppStack(stackHost, appSearchQuery(scope), scope, appEntries)
+        refreshAppStack(stackHost, model)
         return page
-    }
-
-    private fun appLibrarySubtitle(scope: AppLibraryScope): String {
-        return when (scope) {
-            AppLibraryScope.ALL -> "Search, launch, and pin apps into the launcher spine."
-            AppLibraryScope.PERSONAL -> "Personal apps stay separate from work when profile splitting is enabled."
-            AppLibraryScope.WORK -> "Work-profile apps keep their own launch and notification identity."
-        }
     }
 
     private fun appSearchBox(
         page: LinearLayout,
         header: LinearLayout,
         stackHost: FrameLayout,
-        scope: AppLibraryScope,
+        pageModel: ChapterPage,
         appEntries: List<AppEntry>,
     ): AppSearchControl {
+        val scope = pageModel.appScope ?: AppLibraryScope.ALL
         val initialQuery = appSearchQuery(scope)
         val root = FrameLayout(activity).apply {
             background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(16))
@@ -499,7 +495,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
                     val query = s?.toString().orEmpty()
                     setAppSearchQuery(scope, query)
                     clearButton.visibility = if (query.isBlank()) View.GONE else View.VISIBLE
-                    refreshAppStack(stackHost, query, scope, appEntries)
+                    refreshAppStack(stackHost, appLibraryPageModelFactory.create(pageModel, appEntries, query))
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
             })
@@ -601,37 +597,13 @@ class CalmLauncherRunner(private val activity: MainActivity) {
 
     private fun refreshAppStack(
         stackHost: FrameLayout,
-        query: String,
-        scope: AppLibraryScope = AppLibraryScope.ALL,
-        appEntries: List<AppEntry>,
+        model: AppLibraryPageModel,
     ) {
-        val filtered = appEntries.filter { app ->
-            when (scope) {
-                AppLibraryScope.ALL -> true
-                AppLibraryScope.PERSONAL -> !app.isWorkProfile
-                AppLibraryScope.WORK -> app.isWorkProfile
-            }
-        }.filter { app ->
-            val normalizedQuery = query.trim()
-            normalizedQuery.isBlank() ||
-                app.label.contains(normalizedQuery, ignoreCase = true) ||
-                app.packageName.contains(normalizedQuery, ignoreCase = true) ||
-                app.profileLabel.contains(normalizedQuery, ignoreCase = true)
-        }
         stackHost.removeAllViews()
-        if (filtered.isEmpty()) {
-            stackHost.addView(appSearchEmptyStack(emptyAppsMessage(scope, query)), matchParentParams())
+        if (model.apps.isEmpty()) {
+            stackHost.addView(appSearchEmptyStack(model.emptyMessage), matchParentParams())
         } else {
-            stackHost.addView(appStack(filtered), matchParentParams())
-        }
-    }
-
-    private fun emptyAppsMessage(scope: AppLibraryScope, query: String): String {
-        if (query.isNotBlank()) return "No apps match that search."
-        return when (scope) {
-            AppLibraryScope.ALL -> "No apps are available."
-            AppLibraryScope.PERSONAL -> "No personal apps are available."
-            AppLibraryScope.WORK -> "No work apps are available."
+            stackHost.addView(appStack(model.apps), matchParentParams())
         }
     }
 

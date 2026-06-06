@@ -612,9 +612,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         } else {
             val stack = appStack(model.apps)
             stackHost.addView(stack, matchParentParams())
-            appQuickScrollController.attach(stackHost, stack, model) {
-                refreshAppStack(stackHost, model)
-            }
+            appQuickScrollController.attach(stackHost, stack, model, activePreferences.cardStackTuning)
         }
     }
 

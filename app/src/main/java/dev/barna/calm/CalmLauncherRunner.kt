@@ -57,6 +57,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     private val drawables = CalmDrawables(activity)
     private val cardSpec = CalmCardSpec()
     private val pinnedAppResolver = PinnedAppResolver()
+    private val resumeRefreshPolicy = ResumeRefreshPolicy()
     private val renderModelFactory = LauncherRenderModelFactory(
         LauncherPageStateFactory(pinnedAppResolver = pinnedAppResolver),
     )
@@ -148,10 +149,8 @@ class CalmLauncherRunner(private val activity: MainActivity) {
 
     fun onResume() {
         CalmNotificationListenerService.addListener(notificationRefresh)
-        if (currentScreen == null || currentUiState == null) {
+        if (resumeRefreshPolicy.shouldRefreshImmediately(currentScreen != null, currentUiState != null)) {
             render(buildUiState(), animate = true)
-        } else {
-            requestRender()
         }
     }
 

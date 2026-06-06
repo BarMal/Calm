@@ -80,6 +80,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         ),
     )
     private val cardStackController = CardStackController(activity, mainHandler, ::performCardScrollHaptic)
+    private val pageRemovalPlanner = ChapterPageRemovalPlanner()
     private val appQuickScrollController = AppQuickScrollController(
         activity,
         mainHandler,
@@ -1388,10 +1389,16 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     }
 
     private fun excludeNotificationSource(chapter: AppChapter) {
+        val nextPageKey = pageRemovalPlanner.selectPageAfterRemoval(currentUiState?.pages.orEmpty(), chapter.identityKey)
         settings.exclude(chapter)
-        selectedPackageName = CalmTheme.OVERVIEW_KEY
+        selectedPackageName = nextPageKey
         Toast.makeText(activity, "Excluded ${chapter.label}", Toast.LENGTH_SHORT).show()
-        render()
+        val pager = currentPager
+        if (pager == null) {
+            render()
+            return
+        }
+        entryAnimator.animateCurrentPageRemoval(pager) { render() }
     }
 
     private fun restoreNotificationSource(packageName: String) {

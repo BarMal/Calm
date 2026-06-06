@@ -34,6 +34,15 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
+      - name: Prepare CI signing key
+        run: base64 --decode app/ci-debug.keystore.base64 > app/ci-debug.keystore
+
+      - name: Compute APK version
+        run: |
+          set -euo pipefail
+          echo "VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=0.1.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+
       - name: Build debug and release APKs
         run: ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
 
@@ -43,16 +52,18 @@ jobs:
           mkdir -p dist
           DEBUG_APK_PATH="$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
           RELEASE_APK_PATH="$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)"
-          cp "$DEBUG_APK_PATH" dist/Calm-debug.apk
-          cp "$RELEASE_APK_PATH" dist/Calm-release-unsigned.apk
+          cp "$DEBUG_APK_PATH" "dist/Calm-debug-${VERSION_NAME}-${VERSION_CODE}.apk"
+          cp "$RELEASE_APK_PATH" "dist/Calm-release-${VERSION_NAME}-${VERSION_CODE}.apk"
+          cp "$DEBUG_APK_PATH" dist/Calm-debug-latest.apk
+          cp "$RELEASE_APK_PATH" dist/Calm-release-latest.apk
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Calm-apks
           path: |
-            dist/Calm-debug.apk
-            dist/Calm-release-unsigned.apk
+            dist/Calm-debug-*.apk
+            dist/Calm-release-*.apk
           if-no-files-found: error
 
       - name: Generate release notes
@@ -64,9 +75,11 @@ jobs:
             echo
             echo "Built from branch \`${GITHUB_REF_NAME}\`."
             echo
+            echo "Version: \`${VERSION_NAME}\` / code \`${VERSION_CODE}\`."
+            echo
             echo "### APKs"
-            echo "- Calm-debug.apk: debug build for direct testing"
-            echo "- Calm-release-unsigned.apk: unsigned release build artifact"
+            echo "- Calm-debug-latest.apk: side-by-side debug build using package \`dev.barna.calm.debug\`"
+            echo "- Calm-release-latest.apk: signed CI/test release build using package \`dev.barna.calm\`"
             echo
             echo "### Recent changes"
             git log -10 --pretty=format:'- %s (%h)'
@@ -86,13 +99,22 @@ jobs:
           git push -f origin apks-latest
 
           if gh release view apks-latest >/dev/null 2>&1; then
-            gh release upload apks-latest dist/Calm-debug.apk dist/Calm-release-unsigned.apk --clobber
+            gh release upload apks-latest \
+              dist/Calm-debug-*.apk \
+              dist/Calm-release-*.apk \
+              dist/Calm-debug-latest.apk \
+              dist/Calm-release-latest.apk \
+              --clobber
             gh release edit apks-latest \
               --title "Latest Calm APKs" \
               --notes-file dist/release-notes.md \
               --prerelease
           else
-            gh release create apks-latest dist/Calm-debug.apk dist/Calm-release-unsigned.apk \
+            gh release create apks-latest \
+              dist/Calm-debug-*.apk \
+              dist/Calm-release-*.apk \
+              dist/Calm-debug-latest.apk \
+              dist/Calm-release-latest.apk \
               --title "Latest Calm APKs" \
               --notes-file dist/release-notes.md \
               --prerelease \

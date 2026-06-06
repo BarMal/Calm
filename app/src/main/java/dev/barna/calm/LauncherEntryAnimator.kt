@@ -2,6 +2,7 @@ package dev.barna.calm
 
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.AccelerateInterpolator
 import android.view.animation.DecelerateInterpolator
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
@@ -16,6 +17,22 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
                 return
             }
         }
+    }
+
+    fun animateCurrentPageRemoval(pager: ViewPager2, afterRemoval: () -> Unit) {
+        val recycler = pager.getChildAt(0) as? RecyclerView
+        if (recycler == null) {
+            afterRemoval()
+            return
+        }
+        for (index in 0 until recycler.childCount) {
+            val child = recycler.getChildAt(index)
+            if (recycler.getChildAdapterPosition(child) == pager.currentItem) {
+                animatePageRemoval(child, afterRemoval)
+                return
+            }
+        }
+        afterRemoval()
     }
 
     private fun animatePageEntry(page: View) {
@@ -77,6 +94,22 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
             .setStartDelay(80L + (index * 46L))
             .setDuration(390L)
             .setInterpolator(DecelerateInterpolator())
+            .start()
+    }
+
+    private fun animatePageRemoval(page: View, afterRemoval: () -> Unit) {
+        val targetY = page.translationY
+        page.animate().cancel()
+        page.animate()
+            .alpha(0f)
+            .translationY(targetY - activity.dp(96))
+            .setDuration(180L)
+            .setInterpolator(AccelerateInterpolator())
+            .withEndAction {
+                page.alpha = 1f
+                page.translationY = targetY
+                afterRemoval()
+            }
             .start()
     }
 

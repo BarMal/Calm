@@ -86,11 +86,13 @@ jobs:
           DEBUG_APK_PATH="$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
 
           cp "$DEBUG_APK_PATH" "dist/Calm-alpha-debug-side-by-side-${VERSION_NAME}-${VERSION_CODE}.apk"
+          cp "$DEBUG_APK_PATH" "release-assets/Calm-alpha-debug-side-by-side-${VERSION_NAME}-${VERSION_CODE}.apk"
           cp "$DEBUG_APK_PATH" release-assets/Calm-alpha-debug-side-by-side-latest.apk
 
           if [[ "${HAS_RELEASE_SIGNING}" == "true" ]]; then
             RELEASE_APK_PATH="$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)"
             cp "$RELEASE_APK_PATH" "dist/Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk"
+            cp "$RELEASE_APK_PATH" "release-assets/Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk"
             cp "$RELEASE_APK_PATH" release-assets/Calm-alpha-latest.apk
           fi
 
@@ -152,7 +154,7 @@ jobs:
             echo "### Which APK should I install?"
             echo "- **Calm-alpha-latest.apk** updates the existing Calm install using package \`dev.barna.calm\`. Use this for normal alpha testing."
             echo "- **Calm-alpha-debug-side-by-side-latest.apk** installs separately using package \`dev.barna.calm.debug\`. Use this only when you intentionally want a second test copy."
-            echo "- Workflow artifacts keep versioned filenames; the latest release keeps stable aliases for easy reinstalling."
+            echo "- Versioned APK assets are also attached to this release so the current build is visible even when stable download aliases are cached by a browser or device."
             echo
             echo "### Recent changes"
             git log -10 --pretty=format:'- %s (%h)'
@@ -186,8 +188,11 @@ jobs:
           fi
 
           gh release view apks-latest --json assets --jq '.assets[].name' | while read -r asset; do
-            case "$asset" in
-              Calm-alpha-latest.apk|Calm-alpha-debug-side-by-side-latest.apk) ;;
-              *) gh release delete-asset apks-latest "$asset" --yes ;;
-            esac
+            if [[ "$asset" == "Calm-alpha-latest.apk" ||
+                  "$asset" == "Calm-alpha-debug-side-by-side-latest.apk" ||
+                  "$asset" == "Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk" ||
+                  "$asset" == "Calm-alpha-debug-side-by-side-${VERSION_NAME}-${VERSION_CODE}.apk" ]]; then
+              continue
+            fi
+            gh release delete-asset apks-latest "$asset" --yes
           done

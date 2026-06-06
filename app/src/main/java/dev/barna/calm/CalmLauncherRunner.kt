@@ -30,15 +30,12 @@ import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
-import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.SeekBar
-import android.widget.ScrollView
 import android.widget.TextClock
 import android.widget.TextView
 import android.widget.Toast
@@ -58,7 +55,31 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     private val calendarRepository = CalendarRepository(activity)
     private val drawables = CalmDrawables(activity)
     private val cardSpec = CalmCardSpec()
+    private val pinnedAppResolver = PinnedAppResolver()
+    private val renderModelFactory = LauncherRenderModelFactory(
+        LauncherPageStateFactory(pinnedAppResolver = pinnedAppResolver),
+    )
+    private val appCardModelFactory = AppCardModelFactory(pinnedAppResolver = pinnedAppResolver)
     private val cardStackController = CardStackController(activity, mainHandler, ::performCardScrollHaptic)
+    private val entryAnimator = LauncherEntryAnimator(activity)
+    private val settingsPageFactory = SettingsPageFactory(
+        activity = activity,
+        settings = settings,
+        drawables = drawables,
+        calendarRepository = calendarRepository,
+        notificationRepository = notificationRepository,
+        actions = SettingsPageActions(
+            toggleNotificationSurface = ::toggleNotificationSurface,
+            toggleCardHaptics = ::toggleCardHaptics,
+            toggleSplitAppsByProfile = ::toggleSplitAppsByProfile,
+            toggleWorkNotificationChapterPlacement = ::toggleWorkNotificationChapterPlacement,
+            applyTimescapeStackPreset = ::applyTimescapeStackPreset,
+            toggleAdvancedStackControls = ::toggleAdvancedStackControls,
+            restoreNotificationSource = ::restoreNotificationSource,
+            render = { render() },
+            performCardScrollHaptic = ::performCardScrollHaptic,
+        ),
+    )
     private val focusOverlay = FocusOverlayController(
         activity,
         mainHandler,
@@ -77,7 +98,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     private var chapterCarouselRow: LinearLayout? = null
     private var currentPager: ViewPager2? = null
     private var currentScreen: View? = null
-    private var currentUiState: LauncherUiState? = null
+    private var currentUiState: LauncherRenderModel? = null
     private var activePreferences: LauncherUiPreferences = settings.uiPreferences()
     private val appSearchQueries = EnumMap<AppLibraryScope, String>(AppLibraryScope::class.java)
     private val appSearchPages = ArrayList<AppSearchPageState>()
@@ -92,16 +113,6 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     private data class AppSearchControl(
         val root: View,
         val search: EditText,
-    )
-
-    private data class LauncherUiState(
-        val preferences: LauncherUiPreferences,
-        val notificationChapters: List<AppChapter>,
-        val appEntries: List<AppEntry>,
-        val pinnedApps: List<AppEntry>,
-        val pinnedKeys: Set<String>,
-        val hasCalendarPermission: Boolean,
-        val calendarEvents: List<CalendarEvent>,
     )
 
     fun onCreate() {
@@ -142,13 +153,13 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         render(buildUiState(), animate = true)
     }
 
-    private fun render(state: LauncherUiState, animate: Boolean) {
+    private fun render(state: LauncherRenderModel, animate: Boolean) {
         mainHandler.removeCallbacks(deferredRender)
         focusOverlay.dismiss(false)
         appSearchPages.clear()
         currentUiState = state
         activePreferences = state.preferences
-        val pages = buildPages(state)
+        val pages = state.pages
         val initialPage = resolveInitialPage(pages)
 
         val screen = FrameLayout(activity).apply {
@@ -196,7 +207,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
             override fun onPageSelected(position: Int) {
                 selectedPackageName = pages[position].key
                 resetInactiveAppSearchPages(selectedPackageName)
-                pager.post { animateCurrentPage(pager) }
+                pager.post { entryAnimator.animateCurrentPage(pager) }
             }
 
             override fun onPageScrollStateChanged(state: Int) {
@@ -215,120 +226,8 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         updateChapterCarousel(pages, initialPage)
         activity.setContentView(screen)
         if (animate) {
-            pager.post { animateCurrentPage(pager) }
+            pager.post { entryAnimator.animateCurrentPage(pager) }
         }
-    }
-
-    private fun animateCurrentPage(pager: ViewPager2) {
-        val recycler = pager.getChildAt(0) as? RecyclerView ?: return
-        for (index in 0 until recycler.childCount) {
-            val child = recycler.getChildAt(index)
-            if (recycler.getChildAdapterPosition(child) == pager.currentItem) {
-                child.postDelayed({ animatePageEntry(child) }, 35L)
-                return
-            }
-        }
-    }
-
-    private fun animatePageEntry(page: View) {
-        val chromeViews = ArrayList<View>()
-        val cardStacks = ArrayList<View>()
-        collectAnimatedViews(page, chromeViews, cardStacks)
-        chromeViews.forEachIndexed { index, view -> animateChromeIntoView(view, index) }
-        cardStacks.forEach { stack -> animateCardStackIntoView(stack) }
-    }
-
-    private fun collectAnimatedViews(root: View, chromeViews: MutableList<View>, cardStacks: MutableList<View>) {
-        when (root.tag) {
-            CalmAnimationTags.CHROME -> chromeViews.add(root)
-            CalmAnimationTags.CARD_STACK -> cardStacks.add(root)
-        }
-        if (root is ViewGroup) {
-            for (index in 0 until root.childCount) {
-                collectAnimatedViews(root.getChildAt(index), chromeViews, cardStacks)
-            }
-        }
-    }
-
-    private fun animateChromeIntoView(view: View, index: Int) {
-        val targetAlpha = view.alpha.takeIf { it > 0f } ?: 1f
-        val targetY = view.translationY
-        view.animate().cancel()
-        view.alpha = 0f
-        view.translationY = targetY + activity.dp(8)
-        view.animate()
-            .alpha(targetAlpha)
-            .translationY(targetY)
-            .setStartDelay((index * 18L).coerceAtMost(90L))
-            .setDuration(170L)
-            .setInterpolator(DecelerateInterpolator())
-            .start()
-    }
-
-    private fun animateCardStackIntoView(stackView: View) {
-        val content = (stackView as? ViewGroup)?.getChildAt(0) as? ViewGroup ?: return
-        var animatedCount = 0
-        for (index in 0 until content.childCount) {
-            val card = content.getChildAt(index)
-            if (card.tag != CalmAnimationTags.CARD) continue
-            if (animatedCount >= MAX_ENTRY_ANIMATED_CARDS) break
-            animateCardIntoView(card, animatedCount)
-            animatedCount++
-        }
-    }
-
-    private fun animateCardIntoView(card: View, index: Int) {
-        val targetAlpha = card.alpha
-        val targetY = card.translationY
-        card.animate().cancel()
-        card.alpha = 0f
-        card.translationY = targetY + activity.dp(132 + (index * 18))
-        card.animate()
-            .alpha(targetAlpha)
-            .translationY(targetY)
-            .setStartDelay(80L + (index * 46L))
-            .setDuration(390L)
-            .setInterpolator(DecelerateInterpolator())
-            .start()
-    }
-
-    private fun buildPages(state: LauncherUiState): List<ChapterPage> {
-        val pages = ArrayList<ChapterPage>()
-        var chapterNumber = 1
-        val (workChapters, standardChapters) = if (state.preferences.placeWorkNotificationChaptersBeforeApps) {
-            state.notificationChapters.partition { it.isWorkProfile }
-        } else {
-            emptyList<AppChapter>() to state.notificationChapters
-        }
-
-        workChapters.forEach { chapter ->
-            pages.add(ChapterPage.notifications(chapter, roman(chapterNumber)))
-            chapterNumber++
-        }
-
-        if (state.preferences.splitAppsByProfile) {
-            if (state.appEntries.any { it.isWorkProfile }) {
-                pages.add(ChapterPage.workApps(CalmTheme.WORK_APP_LIBRARY_KEY, roman(chapterNumber)))
-                chapterNumber++
-            }
-            pages.add(ChapterPage.personalApps(CalmTheme.PERSONAL_APP_LIBRARY_KEY, roman(chapterNumber)))
-            chapterNumber++
-        } else {
-            pages.add(ChapterPage.appLibrary(CalmTheme.APP_LIBRARY_KEY).withMarker(roman(chapterNumber)))
-            chapterNumber++
-        }
-
-        if (state.pinnedApps.isNotEmpty()) {
-            pages.add(ChapterPage.pinned(CalmTheme.PINNED_KEY, roman(chapterNumber)))
-            chapterNumber++
-        }
-        pages.add(ChapterPage.overview(CalmTheme.OVERVIEW_KEY).withMarker(roman(chapterNumber)))
-        chapterNumber++
-        standardChapters.forEach { chapter ->
-            pages.add(ChapterPage.notifications(chapter, roman(chapterNumber)))
-            chapterNumber++
-        }
-        return pages
     }
 
     private fun resolveInitialPage(pages: List<ChapterPage>): Int {
@@ -339,7 +238,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         return 0
     }
 
-    private fun createPage(page: ChapterPage, state: LauncherUiState): View {
+    private fun createPage(page: ChapterPage, state: LauncherRenderModel): View {
         return when {
             page.appScope != null -> createAppLibraryPage(page, state.appEntries)
             page.key == CalmTheme.PINNED_KEY -> createPinnedPage(state.pinnedApps)
@@ -368,17 +267,11 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         stateExecutor.execute {
             val appEntries = apps.get()
             val pinnedKeys = settings.pinnedPackages()
-            val pinnedApps = if (pinnedKeys.isEmpty()) {
-                emptyList()
-            } else {
-                appEntries.filter { app -> app.identityKey in pinnedKeys || app.packageName in pinnedKeys }
-            }
             val calendarState = calendar.get()
-            val state = LauncherUiState(
+            val state = renderModelFactory.create(
                 preferences = settings.uiPreferences(),
                 notificationChapters = notifications.get(),
                 appEntries = appEntries,
-                pinnedApps = pinnedApps,
                 pinnedKeys = pinnedKeys,
                 hasCalendarPermission = calendarState.first,
                 calendarEvents = calendarState.second,
@@ -391,21 +284,15 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         }
     }
 
-    private fun buildUiState(): LauncherUiState {
+    private fun buildUiState(): LauncherRenderModel {
         val notificationChapters = notificationRepository.buildNotificationChapters()
         val appEntries = notificationRepository.loadAppEntries().filterNot(settings::isAppHidden)
         val pinnedKeys = settings.pinnedPackages()
-        val pinnedApps = if (pinnedKeys.isEmpty()) {
-            emptyList()
-        } else {
-            appEntries.filter { app -> app.identityKey in pinnedKeys || app.packageName in pinnedKeys }
-        }
         val hasCalendarPermission = calendarRepository.hasCalendarPermission()
-        return LauncherUiState(
+        return renderModelFactory.create(
             preferences = settings.uiPreferences(),
             notificationChapters = notificationChapters,
             appEntries = appEntries,
-            pinnedApps = pinnedApps,
             pinnedKeys = pinnedKeys,
             hasCalendarPermission = hasCalendarPermission,
             calendarEvents = if (hasCalendarPermission) calendarRepository.loadUpcomingEvents() else emptyList(),
@@ -477,7 +364,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         }
     }
 
-    private fun createOverviewPage(state: LauncherUiState): LinearLayout {
+    private fun createOverviewPage(state: LauncherRenderModel): LinearLayout {
         return createBarePagePanel().apply {
             addView(overviewHeader())
             addView(sectionTitle("Upcoming calendar"))
@@ -805,14 +692,13 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     }
 
     private fun appCard(app: AppEntry): TextView {
-        val pinned = isPinned(app)
-        val profileLine = if (app.isWorkProfile) "\nWork" else ""
+        val model = appCardModelFactory.create(app, currentUiState?.pinnedKeys ?: settings.pinnedPackages())
         val icon = notificationRepository.resolveAppIcon(app, cardHeight())?.bitmap
-        return stackCard("${app.label}$profileLine${if (pinned) "\nPinned" else ""}", app.hueColor, true, icon).apply {
+        return stackCard(model.text, model.hueColor, true, icon).apply {
             maxLines = 4
             setOnClickListener { openAppEntry(app) }
             setOnLongClickListener {
-                focusOverlay.show(this, appContextActions(app), app.label)
+                focusOverlay.show(this, appContextActions(model.app), model.app.label)
                 true
             }
         }
@@ -881,69 +767,10 @@ class CalmLauncherRunner(private val activity: MainActivity) {
 
     private fun isPinned(app: AppEntry): Boolean {
         val pinned = currentUiState?.pinnedKeys ?: settings.pinnedPackages()
-        return app.identityKey in pinned || app.packageName in pinned
+        return pinnedAppResolver.isPinned(app, pinned)
     }
 
-    private fun createSettingsPage(): View {
-        val page = createPagePanel(null, 0)
-        val scrollView = ScrollView(activity).apply {
-            isFillViewport = false
-            isVerticalScrollBarEnabled = false
-            overScrollMode = View.OVER_SCROLL_NEVER
-            clipToPadding = false
-            clipChildren = false
-        }
-        val content = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            clipToPadding = false
-            clipChildren = false
-            setPadding(0, 0, 0, activity.dp(18))
-        }
-        scrollView.addView(content, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        page.addView(scrollView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        content.apply {
-            addView(label("CHAPTER / SETTINGS", 12, CalmTheme.ACCENT, Typeface.BOLD))
-            addView(label("Launcher settings", 30, CalmTheme.INK, Typeface.NORMAL).apply {
-                setPadding(0, activity.dp(8), 0, 0)
-            })
-            addView(label("Wallpaper, access, and hidden notification sources live here.", 15, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
-                setPadding(0, activity.dp(6), 0, activity.dp(18))
-            })
-            addView(sectionTitle("Appearance"))
-            addView(fullWidthAction(if (settings.useTintedNotificationCards()) "Notification surface\nTinted cards" else "Notification surface\nChapter panel", ::toggleNotificationSurface))
-            addView(fullWidthAction(if (settings.cardHapticsEnabled()) "Card haptics\nOn" else "Card haptics\nOff", ::toggleCardHaptics))
-            addView(hapticStrengthControl())
-            addView(sectionTitle("Apps"))
-            addView(fullWidthAction(if (settings.splitAppsByProfile()) "App library\nSplit personal and work" else "App library\nCombined apps", ::toggleSplitAppsByProfile))
-            addView(fullWidthAction(if (settings.placeWorkNotificationChaptersBeforeApps()) "Work notification chapters\nLeft of apps" else "Work notification chapters\nWith other notifications", ::toggleWorkNotificationChapterPlacement))
-            addView(sectionTitle("Card stack"))
-            addView(fullWidthAction("Timescape preset", ::applyTimescapeStackPreset))
-            addView(cardStackHorizontalCurveControl())
-            addView(cardStackArcWidthControl())
-            addView(aboveFocusCardCountControl())
-            addView(cardStackRotationControl())
-            addView(fullWidthAction(if (settings.showAdvancedStackControls()) "Advanced stack controls\nShown" else "Advanced stack controls\nHidden", ::toggleAdvancedStackControls))
-            if (settings.showAdvancedStackControls()) {
-                addView(cardStackCurveControl())
-                addView(cardStackSpacingControl())
-                addView(visibleCardCountControl())
-            }
-            addView(sectionTitle("Access"))
-            addView(fullWidthAction("Set wallpaper", ::openWallpaperPicker))
-            addView(fullWidthAction(if (isNotificationAccessEnabled()) "Notification access enabled" else "Enable notification access", ::openNotificationAccess))
-            addView(fullWidthAction(if (calendarRepository.hasCalendarPermission()) "Calendar access enabled" else "Allow calendar access", calendarRepository::requestCalendarAccess))
-            addView(sectionTitle("Excluded"))
-            val excluded = settings.excludedSources(notificationRepository::resolveExcludedLabel)
-            if (excluded.isEmpty()) {
-                addView(emptyNote("No notification sources are excluded."))
-            } else {
-                excluded.forEach { source ->
-                    addView(fullWidthAction("Restore ${source.label}") { restoreNotificationSource(source.packageName) })
-                }
-            }
-        }
-        return page
-    }
+    private fun createSettingsPage(): View = settingsPageFactory.create()
 
     private fun createChapterPage(chapter: AppChapter): LinearLayout {
         val tintCards = activePreferences.useTintedNotificationCards
@@ -1108,7 +935,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         )
     }
 
-    private fun overviewCalendarStack(state: LauncherUiState): View {
+    private fun overviewCalendarStack(state: LauncherRenderModel): View {
         val cards = mutableListOf<TextView>()
         if (state.hasCalendarPermission) {
             if (state.calendarEvents.isEmpty()) {
@@ -1348,284 +1175,6 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         return view.apply { tag = CalmAnimationTags.CHROME }
     }
 
-    private fun fullWidthAction(text: String, action: Runnable): TextView {
-        return label(text, 16, CalmTheme.INK, Typeface.BOLD).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(activity.dp(14), activity.dp(14), activity.dp(14), activity.dp(14))
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(16))
-            elevation = 0f
-            setOnClickListener { action.run() }
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = activity.dp(10)
-            }
-        }
-    }
-
-    private fun hapticStrengthControl(): View {
-        val card = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(activity.dp(14), activity.dp(12), activity.dp(14), activity.dp(12))
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(16))
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = activity.dp(10)
-            }
-        }
-        card.addView(label("Haptic strength", 15, CalmTheme.INK, Typeface.BOLD))
-        val value = label(hapticStrengthLabel(settings.cardHapticStrength()), 13, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
-            setPadding(0, activity.dp(4), 0, activity.dp(4))
-        }
-        card.addView(value)
-        card.addView(SeekBar(activity).apply {
-            max = 4
-            progress = settings.cardHapticStrength() - 1
-            isEnabled = settings.cardHapticsEnabled()
-            alpha = if (settings.cardHapticsEnabled()) 1f else 0.42f
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                    val strength = progress + 1
-                    value.text = hapticStrengthLabel(strength)
-                    if (fromUser) {
-                        settings.setCardHapticStrength(strength)
-                        performCardScrollHaptic(card)
-                    }
-                }
-                override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
-                override fun onStopTrackingTouch(seekBar: SeekBar) = Unit
-            })
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        return card
-    }
-
-    private fun hapticStrengthLabel(strength: Int): String = "Very light / $strength of 5"
-
-    private fun cardStackCurveControl(): View {
-        val tuning = settings.cardStackTuning()
-        return sliderCard(
-            title = "Visual curve",
-            initialProgress = tuning.curve,
-            valueText = { progress -> "${progress}% depth" },
-            onChanged = { progress -> settings.setCardStackCurve(progress) },
-        )
-    }
-
-    private fun cardStackSpacingControl(): View {
-        val tuning = settings.cardStackTuning()
-        return sliderCard(
-            title = "Vertical spacing",
-            initialProgress = tuning.verticalSpacing,
-            valueText = { progress -> "${progress}% spread" },
-            onChanged = { progress -> settings.setCardStackSpacing(progress) },
-        )
-    }
-
-    private fun cardStackHorizontalCurveControl(): View {
-        val tuning = settings.cardStackTuning()
-        return signedSliderCard(
-            title = "Left / right path",
-            initialValue = tuning.horizontalCurve,
-            valueText = { value ->
-                when {
-                    value < 0 -> "Curves from left ${kotlin.math.abs(value)}%"
-                    value > 0 -> "Curves from right ${value}%"
-                    else -> "Flat centre path"
-                }
-            },
-            onChanged = { value -> settings.setCardStackHorizontalCurve(value) },
-        )
-    }
-
-    private fun cardStackArcWidthControl(): View {
-        val tuning = settings.cardStackTuning()
-        return sliderCard(
-            title = "Arc width",
-            initialProgress = tuning.arcWidth,
-            valueText = { progress ->
-                when {
-                    progress < 18 -> "Tight curve"
-                    progress > 78 -> "Wide ribbon"
-                    else -> "${progress}% broadness"
-                }
-            },
-            onChanged = { progress -> settings.setCardStackArcWidth(progress) },
-        )
-    }
-
-    private fun cardStackRotationControl(): View {
-        val tuning = settings.cardStackTuning()
-        return sliderCard(
-            title = "Card fan rotation",
-            initialProgress = tuning.rotation,
-            valueText = { progress ->
-                if (progress == 0) "Cards stay flat" else "${progress}% tilt near tail"
-            },
-            onChanged = { progress -> settings.setCardStackRotation(progress) },
-        )
-    }
-
-    private fun aboveFocusCardCountControl(): View {
-        val tuning = settings.cardStackTuning()
-        val card = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(activity.dp(14), activity.dp(12), activity.dp(14), activity.dp(12))
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(16))
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = activity.dp(10)
-            }
-        }
-        card.addView(label("Cards above focus", 15, CalmTheme.INK, Typeface.BOLD))
-        val value = label("${tuning.aboveFocusCards} cards", 13, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
-            setPadding(0, activity.dp(4), 0, activity.dp(8))
-        }
-        card.addView(value)
-        val row = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val countLabel = label(tuning.aboveFocusCards.toString(), 18, CalmTheme.INK, Typeface.BOLD).apply {
-            gravity = Gravity.CENTER
-        }
-        row.addView(stepperButton("-") {
-            val next = (settings.cardStackTuning().aboveFocusCards - 1).coerceIn(0, 4)
-            settings.setAboveFocusCardCount(next)
-            value.text = "$next cards"
-            countLabel.text = next.toString()
-            render()
-        })
-        row.addView(countLabel, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(stepperButton("+") {
-            val next = (settings.cardStackTuning().aboveFocusCards + 1).coerceIn(0, 4)
-            settings.setAboveFocusCardCount(next)
-            value.text = "$next cards"
-            countLabel.text = next.toString()
-            render()
-        })
-        card.addView(row)
-        return card
-    }
-
-    private fun visibleCardCountControl(): View {
-        val tuning = settings.cardStackTuning()
-        val card = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(activity.dp(14), activity.dp(12), activity.dp(14), activity.dp(12))
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(16))
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = activity.dp(10)
-            }
-        }
-        card.addView(label("Visible cards", 15, CalmTheme.INK, Typeface.BOLD))
-        val value = label("${tuning.visibleCards} cards", 13, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
-            setPadding(0, activity.dp(4), 0, activity.dp(8))
-        }
-        card.addView(value)
-        val row = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val countLabel = label(settings.cardStackTuning().visibleCards.toString(), 18, CalmTheme.INK, Typeface.BOLD).apply {
-            gravity = Gravity.CENTER
-        }
-        row.addView(stepperButton("-") {
-            val next = (settings.cardStackTuning().visibleCards - 1).coerceIn(1, 5)
-            settings.setVisibleCardCount(next)
-            value.text = "$next cards"
-            countLabel.text = next.toString()
-            render()
-        })
-        row.addView(countLabel, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(stepperButton("+") {
-            val next = (settings.cardStackTuning().visibleCards + 1).coerceIn(1, 5)
-            settings.setVisibleCardCount(next)
-            value.text = "$next cards"
-            countLabel.text = next.toString()
-            render()
-        })
-        card.addView(row)
-        return card
-    }
-
-    private fun sliderCard(
-        title: String,
-        initialProgress: Int,
-        valueText: (Int) -> String,
-        onChanged: (Int) -> Unit,
-    ): View {
-        val card = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(activity.dp(14), activity.dp(12), activity.dp(14), activity.dp(12))
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(16))
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = activity.dp(10)
-            }
-        }
-        card.addView(label(title, 15, CalmTheme.INK, Typeface.BOLD))
-        val value = label(valueText(initialProgress), 13, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
-            setPadding(0, activity.dp(4), 0, activity.dp(4))
-        }
-        card.addView(value)
-        card.addView(SeekBar(activity).apply {
-            max = 100
-            progress = initialProgress
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                    value.text = valueText(progress)
-                    if (fromUser) onChanged(progress)
-                }
-                override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
-                override fun onStopTrackingTouch(seekBar: SeekBar) {
-                    render()
-                }
-            })
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        return card
-    }
-
-    private fun signedSliderCard(
-        title: String,
-        initialValue: Int,
-        valueText: (Int) -> String,
-        onChanged: (Int) -> Unit,
-    ): View {
-        val card = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(activity.dp(14), activity.dp(12), activity.dp(14), activity.dp(12))
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(16))
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = activity.dp(10)
-            }
-        }
-        card.addView(label(title, 15, CalmTheme.INK, Typeface.BOLD))
-        val value = label(valueText(initialValue), 13, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
-            setPadding(0, activity.dp(4), 0, activity.dp(4))
-        }
-        card.addView(value)
-        card.addView(SeekBar(activity).apply {
-            max = 200
-            progress = initialValue + 100
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                    val signedValue = progress - 100
-                    value.text = valueText(signedValue)
-                    if (fromUser) onChanged(signedValue)
-                }
-                override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
-                override fun onStopTrackingTouch(seekBar: SeekBar) {
-                    render()
-                }
-            })
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        return card
-    }
-
-    private fun stepperButton(text: String, action: () -> Unit): TextView {
-        return label(text, 22, CalmTheme.INK, Typeface.BOLD).apply {
-            gravity = Gravity.CENTER
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(999))
-            setOnClickListener { action() }
-            layoutParams = LinearLayout.LayoutParams(activity.dp(46), activity.dp(38))
-        }
-    }
-
     private fun label(text: String, sp: Int, color: Int, style: Int): TextView {
         return TextView(activity).apply {
             this.text = text
@@ -1642,23 +1191,8 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         return if (count == 1) "1 active note" else "$count active notes"
     }
 
-    private fun isNotificationAccessEnabled(): Boolean {
-        val enabledListeners = Settings.Secure.getString(activity.contentResolver, "enabled_notification_listeners")
-        val componentName = ComponentName(activity, CalmNotificationListenerService::class.java)
-        return enabledListeners != null &&
-            enabledListeners.lowercase(Locale.ROOT).contains(componentName.flattenToString().lowercase(Locale.ROOT))
-    }
-
     private fun openSettingsActivity() {
         activity.startActivity(Intent(activity, CalmSettingsActivity::class.java))
-    }
-
-    private fun openNotificationAccess() {
-        activity.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-    }
-
-    private fun openWallpaperPicker() {
-        activity.startActivity(Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Set wallpaper"))
     }
 
     private fun notificationContextActions(
@@ -1974,9 +1508,5 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         } else {
             activity.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         }
-    }
-
-    private companion object {
-        const val MAX_ENTRY_ANIMATED_CARDS = 8
     }
 }

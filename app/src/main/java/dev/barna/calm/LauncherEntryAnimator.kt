@@ -1,0 +1,86 @@
+package dev.barna.calm
+
+import android.view.View
+import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
+import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
+
+class LauncherEntryAnimator(private val activity: MainActivity) {
+    fun animateCurrentPage(pager: ViewPager2) {
+        val recycler = pager.getChildAt(0) as? RecyclerView ?: return
+        for (index in 0 until recycler.childCount) {
+            val child = recycler.getChildAt(index)
+            if (recycler.getChildAdapterPosition(child) == pager.currentItem) {
+                child.postDelayed({ animatePageEntry(child) }, 35L)
+                return
+            }
+        }
+    }
+
+    private fun animatePageEntry(page: View) {
+        val chromeViews = ArrayList<View>()
+        val cardStacks = ArrayList<View>()
+        collectAnimatedViews(page, chromeViews, cardStacks)
+        chromeViews.forEachIndexed { index, view -> animateChromeIntoView(view, index) }
+        cardStacks.forEach { stack -> animateCardStackIntoView(stack) }
+    }
+
+    private fun collectAnimatedViews(root: View, chromeViews: MutableList<View>, cardStacks: MutableList<View>) {
+        when (root.tag) {
+            CalmAnimationTags.CHROME -> chromeViews.add(root)
+            CalmAnimationTags.CARD_STACK -> cardStacks.add(root)
+        }
+        if (root is ViewGroup) {
+            for (index in 0 until root.childCount) {
+                collectAnimatedViews(root.getChildAt(index), chromeViews, cardStacks)
+            }
+        }
+    }
+
+    private fun animateChromeIntoView(view: View, index: Int) {
+        val targetAlpha = view.alpha.takeIf { it > 0f } ?: 1f
+        val targetY = view.translationY
+        view.animate().cancel()
+        view.alpha = 0f
+        view.translationY = targetY + activity.dp(8)
+        view.animate()
+            .alpha(targetAlpha)
+            .translationY(targetY)
+            .setStartDelay((index * 18L).coerceAtMost(90L))
+            .setDuration(170L)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+    }
+
+    private fun animateCardStackIntoView(stackView: View) {
+        val content = (stackView as? ViewGroup)?.getChildAt(0) as? ViewGroup ?: return
+        var animatedCount = 0
+        for (index in 0 until content.childCount) {
+            val card = content.getChildAt(index)
+            if (card.tag != CalmAnimationTags.CARD) continue
+            if (animatedCount >= MAX_ENTRY_ANIMATED_CARDS) break
+            animateCardIntoView(card, animatedCount)
+            animatedCount++
+        }
+    }
+
+    private fun animateCardIntoView(card: View, index: Int) {
+        val targetAlpha = card.alpha
+        val targetY = card.translationY
+        card.animate().cancel()
+        card.alpha = 0f
+        card.translationY = targetY + activity.dp(132 + (index * 18))
+        card.animate()
+            .alpha(targetAlpha)
+            .translationY(targetY)
+            .setStartDelay(80L + (index * 46L))
+            .setDuration(390L)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+    }
+
+    private companion object {
+        const val MAX_ENTRY_ANIMATED_CARDS = 8
+    }
+}

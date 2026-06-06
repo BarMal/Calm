@@ -10,7 +10,6 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import java.util.EnumMap
 
 class AppQuickScrollController(
     private val activity: MainActivity,
@@ -20,54 +19,30 @@ class AppQuickScrollController(
     private val haptics: (View) -> Unit,
     private val index: AppQuickScrollIndex = AppQuickScrollIndex(),
 ) {
-    private val visibleByScope = EnumMap<AppLibraryScope, Boolean>(AppLibraryScope::class.java)
-
     fun attach(
         stackHost: FrameLayout,
         stack: ScrollView,
         model: AppLibraryPageModel,
-        refresh: () -> Unit,
+        tuning: CardStackTuning,
     ) {
         val quickScroll = index.create(model.apps)
         if (quickScroll.targets.size < 2) return
-        val visible = visibleByScope[model.scope] ?: true
-        val toggle = toggle(visible) {
-            visibleByScope[model.scope] = !visible
-            refresh()
-        }
-        stackHost.addView(toggle, FrameLayout.LayoutParams(activity.dp(48), activity.dp(40), Gravity.END or Gravity.TOP).apply {
-            topMargin = activity.dp(2)
-            rightMargin = activity.dp(4)
-        })
-        if (!visible) return
 
         val popup = popup()
-        val rail = rail(quickScroll, stack, popup)
+        val rail = rail(quickScroll, stack, popup, tuning)
         stackHost.addView(rail, FrameLayout.LayoutParams(activity.dp(36), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END or Gravity.CENTER_VERTICAL).apply {
-            topMargin = activity.dp(48)
+            topMargin = activity.dp(8)
             bottomMargin = activity.dp(8)
             rightMargin = activity.dp(6)
         })
         stackHost.addView(popup, FrameLayout.LayoutParams(activity.dp(88), activity.dp(88), Gravity.CENTER))
     }
 
-    private fun toggle(
-        visible: Boolean,
-        onToggle: () -> Unit,
-    ): TextView {
-        return label("A-Z", 12, CalmTheme.INK, Typeface.BOLD).apply {
-            gravity = Gravity.CENTER
-            background = drawables.glass(if (visible) CalmTheme.GLASS else CalmTheme.QUIET_GLASS, activity.dp(14))
-            contentDescription = if (visible) "Hide app quick-scroll" else "Show app quick-scroll"
-            tooltipText = contentDescription
-            setOnClickListener { onToggle() }
-        }
-    }
-
     private fun rail(
         quickScroll: AppQuickScrollModel,
         stack: ScrollView,
         popup: TextView,
+        tuning: CardStackTuning,
     ): View {
         val dismissPopup = Runnable {
             popup.animate()
@@ -79,57 +54,48 @@ class AppQuickScrollController(
         val lastTarget = arrayOf<AppQuickScrollTarget?>(null)
         fun activate(target: AppQuickScrollTarget?, smooth: Boolean) {
             if (target == null) return
+            if (lastTarget[0] == target) return
+            lastTarget[0] = target
             cardStackController.scrollToCard(stack, target.cardIndex, smooth)
             popup.text = target.label
             popup.animate().cancel()
             popup.alpha = 1f
             popup.visibility = View.VISIBLE
             mainHandler.removeCallbacks(dismissPopup)
-            if (lastTarget[0] != target) {
-                lastTarget[0] = target
-                haptics(stack)
-            }
+            haptics(stack)
         }
 
-        val content = LinearLayout(activity).apply {
+        return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             clipToPadding = false
             clipChildren = false
-            setPadding(0, activity.dp(8), 0, activity.dp(8))
-            quickScroll.targets.forEach { target ->
+            val lastIndex = quickScroll.targets.lastIndex.coerceAtLeast(1)
+            quickScroll.targets.forEachIndexed { targetIndex, target ->
+                val visualDepth = (targetIndex / lastIndex.toFloat()) * maxOf(1, tuning.visibleCards - 1)
                 addView(label(target.label, 11, CalmTheme.INK, Typeface.BOLD).apply {
                     gravity = Gravity.CENTER
                     contentDescription = "Jump to ${target.label}"
+                    translationX = -activity.dp(20) * tuning.horizontalCurveFactor * tuning.horizontalPathProgress(visualDepth)
+                    rotation = -6f * tuning.rotationFactor * tuning.rotationProgress(visualDepth)
                     setOnClickListener { activate(target, smooth = true) }
-                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(22)))
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
             }
-        }
-
-        return ScrollView(activity).apply {
-            isVerticalScrollBarEnabled = false
-            overScrollMode = View.OVER_SCROLL_NEVER
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(14))
-            clipToPadding = false
-            clipChildren = false
-            addView(content, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             setOnTouchListener { view, event ->
-                val contentHeight = content.height
-                val contentY = event.y + (view as ScrollView).scrollY
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN,
                     MotionEvent.ACTION_MOVE -> {
                         view.parent?.requestDisallowInterceptTouchEvent(true)
-                        activate(index.targetAt(quickScroll, contentHeight, contentY), smooth = event.actionMasked == MotionEvent.ACTION_DOWN)
-                        false
+                        activate(index.targetAt(quickScroll, view.height, event.y), smooth = false)
+                        true
                     }
                     MotionEvent.ACTION_UP,
                     MotionEvent.ACTION_CANCEL -> {
                         view.parent?.requestDisallowInterceptTouchEvent(false)
-                        activate(index.targetAt(quickScroll, contentHeight, contentY), smooth = false)
+                        activate(index.targetAt(quickScroll, view.height, event.y), smooth = false)
                         mainHandler.removeCallbacks(dismissPopup)
                         mainHandler.postDelayed(dismissPopup, POPUP_DISMISS_DELAY_MS)
-                        false
+                        true
                     }
                     else -> false
                 }

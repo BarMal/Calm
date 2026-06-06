@@ -1,4 +1,4 @@
-name: Android Debug APK
+name: Android APKs
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: Build debug APK
+    name: Build APKs
     runs-on: ubuntu-latest
 
     steps:
@@ -34,39 +34,47 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
+      - name: Build debug and release APKs
+        run: ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
 
-      - name: Prepare debug APK
+      - name: Prepare APKs
         run: |
           set -euo pipefail
           mkdir -p dist
-          APK_PATH="$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
-          cp "$APK_PATH" dist/Calm-debug.apk
+          DEBUG_APK_PATH="$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
+          RELEASE_APK_PATH="$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)"
+          cp "$DEBUG_APK_PATH" dist/Calm-debug.apk
+          cp "$RELEASE_APK_PATH" dist/Calm-release-unsigned.apk
 
-      - name: Upload debug APK artifact
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Calm-debug-apk
-          path: dist/Calm-debug.apk
+          name: Calm-apks
+          path: |
+            dist/Calm-debug.apk
+            dist/Calm-release-unsigned.apk
           if-no-files-found: error
 
       - name: Generate release notes
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
           set -euo pipefail
           {
-            echo "Debug build for commit \`${GITHUB_SHA}\`."
+            echo "Build for commit \`${GITHUB_SHA}\`."
             echo
             echo "Built from branch \`${GITHUB_REF_NAME}\`."
+            echo
+            echo "### APKs"
+            echo "- Calm-debug.apk: debug build for direct testing"
+            echo "- Calm-release-unsigned.apk: unsigned release build artifact"
             echo
             echo "### Recent changes"
             git log -10 --pretty=format:'- %s (%h)'
             echo
           } > dist/release-notes.md
 
-      - name: Publish latest debug release
-        if: github.event_name != 'pull_request'
+      - name: Publish latest APK release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -74,18 +82,18 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git tag -f debug-latest "$GITHUB_SHA"
-          git push -f origin debug-latest
+          git tag -f apks-latest "$GITHUB_SHA"
+          git push -f origin apks-latest
 
-          if gh release view debug-latest >/dev/null 2>&1; then
-            gh release upload debug-latest dist/Calm-debug.apk --clobber
-            gh release edit debug-latest \
-              --title "Latest debug APK" \
+          if gh release view apks-latest >/dev/null 2>&1; then
+            gh release upload apks-latest dist/Calm-debug.apk dist/Calm-release-unsigned.apk --clobber
+            gh release edit apks-latest \
+              --title "Latest Calm APKs" \
               --notes-file dist/release-notes.md \
               --prerelease
           else
-            gh release create debug-latest dist/Calm-debug.apk \
-              --title "Latest debug APK" \
+            gh release create apks-latest dist/Calm-debug.apk dist/Calm-release-unsigned.apk \
+              --title "Latest Calm APKs" \
               --notes-file dist/release-notes.md \
               --prerelease \
               --target "$GITHUB_SHA"

@@ -49,13 +49,19 @@ jobs:
       - name: Prepare APKs
         run: |
           set -euo pipefail
-          mkdir -p dist
+          mkdir -p dist release-assets
           DEBUG_APK_PATH="$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
           RELEASE_APK_PATH="$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)"
+
           cp "$DEBUG_APK_PATH" "dist/Calm-debug-${VERSION_NAME}-${VERSION_CODE}.apk"
           cp "$RELEASE_APK_PATH" "dist/Calm-release-${VERSION_NAME}-${VERSION_CODE}.apk"
           cp "$DEBUG_APK_PATH" dist/Calm-debug-latest.apk
           cp "$RELEASE_APK_PATH" dist/Calm-release-latest.apk
+
+          cp "dist/Calm-debug-${VERSION_NAME}-${VERSION_CODE}.apk" release-assets/
+          cp "dist/Calm-release-${VERSION_NAME}-${VERSION_CODE}.apk" release-assets/
+          cp dist/Calm-debug-latest.apk release-assets/
+          cp dist/Calm-release-latest.apk release-assets/
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
@@ -95,28 +101,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          gh release delete apks-latest --yes --cleanup-tag || true
           git tag -f apks-latest "$GITHUB_SHA"
           git push -f origin apks-latest
 
-          if gh release view apks-latest >/dev/null 2>&1; then
-            gh release upload apks-latest \
-              dist/Calm-debug-*.apk \
-              dist/Calm-release-*.apk \
-              dist/Calm-debug-latest.apk \
-              dist/Calm-release-latest.apk \
-              --clobber
-            gh release edit apks-latest \
-              --title "Latest Calm APKs" \
-              --notes-file dist/release-notes.md \
-              --prerelease
-          else
-            gh release create apks-latest \
-              dist/Calm-debug-*.apk \
-              dist/Calm-release-*.apk \
-              dist/Calm-debug-latest.apk \
-              dist/Calm-release-latest.apk \
-              --title "Latest Calm APKs" \
-              --notes-file dist/release-notes.md \
-              --prerelease \
-              --target "$GITHUB_SHA"
-          fi
+          gh release create apks-latest release-assets/*.apk \
+            --title "Latest Calm APKs" \
+            --notes-file dist/release-notes.md \
+            --prerelease \
+            --target "$GITHUB_SHA"

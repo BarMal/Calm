@@ -53,23 +53,22 @@ jobs:
           DEBUG_APK_PATH="$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
           RELEASE_APK_PATH="$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)"
 
-          cp "$DEBUG_APK_PATH" "dist/Calm-debug-${VERSION_NAME}-${VERSION_CODE}.apk"
-          cp "$RELEASE_APK_PATH" "dist/Calm-release-${VERSION_NAME}-${VERSION_CODE}.apk"
-          cp "$DEBUG_APK_PATH" dist/Calm-debug-latest.apk
-          cp "$RELEASE_APK_PATH" dist/Calm-release-latest.apk
+          cp "$RELEASE_APK_PATH" "dist/Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk"
+          cp "$RELEASE_APK_PATH" dist/Calm-alpha-latest.apk
+          cp "$DEBUG_APK_PATH" "dist/Calm-alpha-debug-side-by-side-${VERSION_NAME}-${VERSION_CODE}.apk"
+          cp "$DEBUG_APK_PATH" dist/Calm-alpha-debug-side-by-side-latest.apk
 
-          cp "dist/Calm-debug-${VERSION_NAME}-${VERSION_CODE}.apk" release-assets/
-          cp "dist/Calm-release-${VERSION_NAME}-${VERSION_CODE}.apk" release-assets/
-          cp dist/Calm-debug-latest.apk release-assets/
-          cp dist/Calm-release-latest.apk release-assets/
+          cp "dist/Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk" release-assets/
+          cp dist/Calm-alpha-latest.apk release-assets/
+          cp "dist/Calm-alpha-debug-side-by-side-${VERSION_NAME}-${VERSION_CODE}.apk" release-assets/
+          cp dist/Calm-alpha-debug-side-by-side-latest.apk release-assets/
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Calm-apks
+          name: Calm-alpha-apks
           path: |
-            dist/Calm-debug-*.apk
-            dist/Calm-release-*.apk
+            dist/Calm-alpha-*.apk
           if-no-files-found: error
 
       - name: Generate release notes
@@ -83,9 +82,13 @@ jobs:
             echo
             echo "Version: \`${VERSION_NAME}\` / code \`${VERSION_CODE}\`."
             echo
-            echo "### APKs"
-            echo "- Calm-debug-latest.apk: side-by-side alpha debug build using package \`dev.barna.calm.debug\`"
-            echo "- Calm-release-latest.apk: signed CI/test alpha release build using package \`dev.barna.calm\`"
+            echo "### Which APK should I install?"
+            echo "- **Calm-alpha-latest.apk** updates the existing Calm install using package \`dev.barna.calm\`. Use this for normal alpha testing."
+            echo "- **Calm-alpha-debug-side-by-side-latest.apk** installs separately using package \`dev.barna.calm.debug\`. Use this only when you intentionally want a second test copy."
+            echo
+            echo "### Versioned APKs"
+            echo "- Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk"
+            echo "- Calm-alpha-debug-side-by-side-${VERSION_NAME}-${VERSION_CODE}.apk"
             echo
             echo "### Recent changes"
             git log -10 --pretty=format:'- %s (%h)'

@@ -4,19 +4,28 @@ plugins {
 }
 
 val ciVersionCode = providers.environmentVariable("VERSION_CODE").orNull?.toIntOrNull() ?: 1
-val ciVersionName = providers.environmentVariable("VERSION_NAME").orNull ?: "0.1.0-alpha.0"
-val ciDebugKeystore = file("ci-debug.keystore")
+val ciVersionName = providers.environmentVariable("VERSION_NAME").orNull ?: "${providers.gradleProperty("calm.versionNameBase").get()}.0"
+val signingKeystoreFile = providers.environmentVariable("CALM_SIGNING_KEYSTORE_FILE").orNull?.let(::file)
+val signingStorePassword = providers.environmentVariable("CALM_SIGNING_STORE_PASSWORD").orNull
+val signingKeyAlias = providers.environmentVariable("CALM_SIGNING_KEY_ALIAS").orNull
+val signingKeyPassword = providers.environmentVariable("CALM_SIGNING_KEY_PASSWORD").orNull
+val hasReleaseSigning = signingKeystoreFile?.exists() == true &&
+    !signingStorePassword.isNullOrBlank() &&
+    !signingKeyAlias.isNullOrBlank() &&
+    !signingKeyPassword.isNullOrBlank()
 
 android {
     namespace = "dev.barna.calm"
     compileSdk = 36
 
     signingConfigs {
-        create("ciDebug") {
-            storeFile = ciDebugKeystore
-            storePassword = "calmdebug"
-            keyAlias = "calm-debug"
-            keyPassword = "calmdebug"
+        if (hasReleaseSigning) {
+            create("releaseSigning") {
+                storeFile = signingKeystoreFile
+                storePassword = signingStorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
+            }
         }
     }
 
@@ -32,14 +41,11 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
-            if (ciDebugKeystore.exists()) {
-                signingConfig = signingConfigs.getByName("ciDebug")
-            }
         }
         release {
             isMinifyEnabled = false
-            if (ciDebugKeystore.exists()) {
-                signingConfig = signingConfigs.getByName("ciDebug")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("releaseSigning")
             }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

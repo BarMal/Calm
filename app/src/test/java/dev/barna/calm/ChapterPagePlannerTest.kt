@@ -62,8 +62,20 @@ class ChapterPagePlannerTest {
             placeWorkNotificationChaptersBeforeApps = placeWorkNotificationChaptersBeforeApps,
             cardHapticsEnabled = false,
             cardHapticStrength = 1,
-            cardStackTuning = CardStackTuning.DEFAULT,
+            cardStackTuning = defaultCardStackTuning(),
             showAdvancedStackControls = false,
+        )
+    }
+
+    private fun defaultCardStackTuning(): CardStackTuning {
+        return CardStackTuning(
+            curve = 50,
+            horizontalCurve = 0,
+            arcWidth = 50,
+            aboveFocusCards = 2,
+            rotation = 0,
+            verticalSpacing = 50,
+            visibleCards = 3,
         )
     }
 

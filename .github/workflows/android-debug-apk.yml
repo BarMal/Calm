@@ -1,4 +1,4 @@
-name: Android APKs
+name: Build and Publish Calm APKs
 
 on:
   push:
@@ -67,13 +67,13 @@ jobs:
           if-no-files-found: error
 
       - name: Generate release notes
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
         run: |
           set -euo pipefail
           {
             echo "Build for commit \`${GITHUB_SHA}\`."
             echo
-            echo "Built from branch \`${GITHUB_REF_NAME}\`."
+            echo "Built from branch \`${GITHUB_REF_NAME}\` via \`${GITHUB_EVENT_NAME}\`."
             echo
             echo "Version: \`${VERSION_NAME}\` / code \`${VERSION_CODE}\`."
             echo
@@ -87,7 +87,7 @@ jobs:
           } > dist/release-notes.md
 
       - name: Publish latest APK release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

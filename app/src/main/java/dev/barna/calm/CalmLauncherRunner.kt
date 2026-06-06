@@ -4,9 +4,11 @@ import android.app.AlarmManager
 import android.app.AlertDialog
 import android.app.PendingIntent
 import android.app.RemoteInput
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.Typeface
@@ -62,6 +64,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         LauncherPageStateFactory(pinnedAppResolver = pinnedAppResolver),
     )
     private val appCardModelFactory = AppCardModelFactory(pinnedAppResolver = pinnedAppResolver)
+    private val appCardDisplayCache = AppCardDisplayCache(notificationRepository, appCardModelFactory)
     private val appLibraryPageModelFactory = AppLibraryPageModelFactory()
     private val contextActionFactory = LauncherContextActionFactory(
         LauncherContextActionCallbacks(
@@ -119,6 +122,11 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     private val stateGeneration = AtomicInteger(0)
     private val deferredRender = Runnable { refreshStateAsync() }
     private val notificationRefresh = Runnable { requestRender() }
+    private val packageChangeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            invalidateAppDataAndRefresh()
+        }
+    }
 
     private var selectedPackageName = CalmTheme.OVERVIEW_KEY
     private var chapterCarousel: HorizontalScrollView? = null
@@ -127,14 +135,18 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     private var currentScreen: View? = null
     private var currentUiState: LauncherRenderModel? = null
     private var activePreferences: LauncherUiPreferences = settings.uiPreferences()
+    private var appCardSettingsSnapshot: LauncherUiPreferences = activePreferences
+    private var packageChangeReceiverRegistered = false
     private val appSearchQueries = EnumMap<AppLibraryScope, String>(AppLibraryScope::class.java)
     private val appSearchPages = ArrayList<AppSearchPageState>()
 
     private data class AppSearchPageState(
         val key: String,
+        val scope: AppLibraryScope,
         val page: View,
         val header: View,
         val search: EditText,
+        val cardCache: MutableMap<String, TextView>,
     )
 
     private data class AppSearchControl(
@@ -144,7 +156,12 @@ class CalmLauncherRunner(private val activity: MainActivity) {
 
     fun onCreate() {
         configureWindow()
-        notificationRepository.setOnHueResolved(Runnable { requestRender() })
+        registerPackageChangeReceiver()
+        notificationRepository.setOnHueResolved(Runnable {
+            notificationRepository.invalidateLaunchableApps()
+            appCardDisplayCache.clear()
+            requestRender()
+        })
         render(buildUiState(), animate = true)
     }
 
@@ -157,6 +174,10 @@ class CalmLauncherRunner(private val activity: MainActivity) {
 
     fun onPause() {
         CalmNotificationListenerService.removeListener(notificationRefresh)
+    }
+
+    fun onDestroy() {
+        unregisterPackageChangeReceiver()
     }
 
     fun onRequestPermissionsResult(requestCode: Int) {
@@ -183,6 +204,11 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         focusOverlay.dismiss(false)
         appSearchPages.clear()
         currentUiState = state
+        if (appCardSettingsSnapshot != state.preferences) {
+            appCardDisplayCache.clear()
+            appCardSettingsSnapshot = state.preferences
+        }
+        appCardDisplayCache.preload(state.appEntries, state.pinnedKeys, stateExecutor)
         activePreferences = state.preferences
         val pages = state.pages
         val initialPage = resolveInitialPage(pages)
@@ -301,6 +327,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
                 hasCalendarPermission = calendarState.first,
                 calendarEvents = calendarState.second,
             )
+            appCardDisplayCache.preloadNow(state.appEntries, state.pinnedKeys)
             mainHandler.post {
                 if (generation == stateGeneration.get()) {
                     render(state, animate = false)
@@ -442,14 +469,15 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         }
         page.addView(stackHost, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        val searchControl = appSearchBox(page, header, stackHost, pageModel, appEntries)
+        val cardCache = LinkedHashMap<String, TextView>()
+        val searchControl = appSearchBox(page, header, stackHost, pageModel, appEntries, cardCache)
         page.addView(animatedChrome(searchControl.root), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = activity.dp(12)
         })
         val search = searchControl.search
-        appSearchPages.add(AppSearchPageState(pageModel.key, page, header, search))
+        appSearchPages.add(AppSearchPageState(pageModel.key, scope, page, header, search, cardCache))
         installAppSearchKeyboardAnimator(page, header, search)
-        refreshAppStack(stackHost, model)
+        refreshAppStack(stackHost, model, cardCache)
         return page
     }
 
@@ -459,6 +487,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         stackHost: FrameLayout,
         pageModel: ChapterPage,
         appEntries: List<AppEntry>,
+        cardCache: MutableMap<String, TextView>,
     ): AppSearchControl {
         val scope = pageModel.appScope ?: AppLibraryScope.ALL
         val initialQuery = appSearchQuery(scope)
@@ -501,9 +530,10 @@ class CalmLauncherRunner(private val activity: MainActivity) {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                     val query = s?.toString().orEmpty()
+                    if (query == appSearchQuery(scope)) return
                     setAppSearchQuery(scope, query)
                     clearButton.visibility = if (query.isBlank()) View.GONE else View.VISIBLE
-                    refreshAppStack(stackHost, appLibraryPageModelFactory.create(pageModel, appEntries, query))
+                    refreshAppStack(stackHost, appLibraryPageModelFactory.create(pageModel, appEntries, query), cardCache)
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
             })
@@ -586,10 +616,19 @@ class CalmLauncherRunner(private val activity: MainActivity) {
             .forEach(::resetAppSearchPage)
     }
 
+    private fun resetAllAppSearchPages() {
+        appSearchPages.forEach(::resetAppSearchPage)
+    }
+
     private fun resetAppSearchPage(state: AppSearchPageState) {
         if (state.search.hasFocus()) {
             state.search.clearFocus()
             hideKeyboard(state.search)
+        }
+        if (state.search.text?.isNotBlank() == true) {
+            state.search.setText("")
+        } else {
+            setAppSearchQuery(state.scope, "")
         }
         state.header.animate().cancel()
         state.page.animate().cancel()
@@ -606,20 +645,24 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     private fun refreshAppStack(
         stackHost: FrameLayout,
         model: AppLibraryPageModel,
+        cardCache: MutableMap<String, TextView>? = null,
     ) {
+        cardCache?.values?.forEach { card ->
+            (card.parent as? ViewGroup)?.removeView(card)
+        }
         stackHost.removeAllViews()
         if (model.apps.isEmpty()) {
             stackHost.addView(appSearchEmptyStack(model.emptyMessage), matchParentParams())
         } else {
-            val stack = appStack(model.apps)
+            val stack = appStack(model.apps, cardCache)
             stackHost.addView(stack, matchParentParams())
             appQuickScrollController.attach(stackHost, stack, model, activePreferences.cardStackTuning)
         }
     }
 
-    private fun appStack(apps: List<AppEntry>): ScrollView {
+    private fun appStack(apps: List<AppEntry>, cardCache: MutableMap<String, TextView>? = null): ScrollView {
         return cardStackController.cardStack(
-            apps.map(::appCard),
+            apps.map { app -> cardCache?.getOrPut(app.identityKey) { appCard(app) } ?: appCard(app) },
             cardHeight(),
             cardStep(),
             activePreferences.cardStackTuning,
@@ -690,13 +733,12 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     }
 
     private fun appCard(app: AppEntry): TextView {
-        val model = appCardModelFactory.create(app, currentUiState?.pinnedKeys ?: settings.pinnedPackages())
-        val icon = notificationRepository.resolveAppIcon(app, cardHeight())?.bitmap
-        return stackCard(model.text, model.hueColor, true, icon).apply {
+        val data = appCardDisplayCache.getOrCreate(app, currentUiState?.pinnedKeys ?: settings.pinnedPackages())
+        return stackCard(data.text, data.hueColor, true, data.icon).apply {
             maxLines = 4
             setOnClickListener { openAppEntry(app) }
             setOnLongClickListener {
-                focusOverlay.show(this, contextActionFactory.appActions(model.app, model.isPinned), model.app.label)
+                focusOverlay.show(this, contextActionFactory.appActions(data.app, data.isPinned), data.app.label)
                 true
             }
         }
@@ -1197,7 +1239,9 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     }
 
     private fun openAppEntry(app: AppEntry) {
-        if (!notificationRepository.openApp(app)) {
+        if (notificationRepository.openApp(app)) {
+            resetAllAppSearchPages()
+        } else {
             Toast.makeText(activity, "This app cannot be opened directly", Toast.LENGTH_SHORT).show()
         }
     }
@@ -1475,5 +1519,31 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         } else {
             activity.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         }
+    }
+
+    private fun registerPackageChangeReceiver() {
+        if (packageChangeReceiverRegistered) return
+        activity.registerReceiver(packageChangeReceiver, IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_CHANGED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addDataScheme("package")
+        })
+        packageChangeReceiverRegistered = true
+    }
+
+    private fun unregisterPackageChangeReceiver() {
+        if (!packageChangeReceiverRegistered) return
+        runCatching { activity.unregisterReceiver(packageChangeReceiver) }
+        packageChangeReceiverRegistered = false
+    }
+
+    private fun invalidateAppDataAndRefresh() {
+        notificationRepository.invalidateAppCaches()
+        appCardDisplayCache.clear()
+        appSearchQueries.clear()
+        appSearchPages.clear()
+        refreshStateAsync()
     }
 }

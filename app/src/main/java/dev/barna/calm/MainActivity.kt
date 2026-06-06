@@ -22,6 +22,11 @@ class MainActivity : Activity() {
         super.onPause()
     }
 
+    override fun onDestroy() {
+        runner.onDestroy()
+        super.onDestroy()
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,

@@ -145,6 +145,10 @@ class NotificationChapterRepository(
         return resolveAppIcon(app.identityKey, app.packageName, app.userHandle, sizePx)
     }
 
+    fun resolveAppIconBitmap(app: AppEntry): Bitmap? {
+        return resolveAppBitmap(app.identityKey, app.packageName, app.userHandle)
+    }
+
     fun resolveAppIcon(chapter: AppChapter, sizePx: Int): BitmapDrawable? {
         return resolveAppIcon(chapter.launcherIdentityKey, chapter.packageName, chapter.userHandle, sizePx)
     }
@@ -333,6 +337,20 @@ class NotificationChapterRepository(
         } catch (_: PackageManager.NameNotFoundException) {
             friendlyPackageName(packageName)
         }
+    }
+
+    @Synchronized
+    fun invalidateLaunchableApps() {
+        launchableAppsCache = null
+    }
+
+    @Synchronized
+    fun invalidateAppCaches() {
+        launchableAppsCache = null
+        hueCache.clear()
+        iconCache.clear()
+        maskedIconCache.clear()
+        pendingHueKeys.clear()
     }
 
     private fun resolveAppHue(

@@ -9,6 +9,8 @@ class ChapterPagerAdapter(
     private val pages: List<ChapterPage>,
     private val pageFactory: (ChapterPage) -> View,
 ) : RecyclerView.Adapter<PageHolder>() {
+    private val pageViews = LinkedHashMap<String, View>()
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PageHolder {
         val container = FrameLayout(parent.context)
         container.layoutParams = RecyclerView.LayoutParams(
@@ -19,8 +21,16 @@ class ChapterPagerAdapter(
     }
 
     override fun onBindViewHolder(holder: PageHolder, position: Int) {
+        val page = pages[position]
+        val view = pageViews.getOrPut(page.key) { pageFactory(page) }
+        (view.parent as? ViewGroup)?.removeView(view)
         holder.container.removeAllViews()
-        holder.container.addView(pageFactory(pages[position]), matchParentParams())
+        holder.container.addView(view, matchParentParams())
+    }
+
+    override fun onViewRecycled(holder: PageHolder) {
+        holder.container.removeAllViews()
+        super.onViewRecycled(holder)
     }
 
     override fun getItemCount(): Int = pages.size

@@ -65,6 +65,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     )
     private val appCardModelFactory = AppCardModelFactory(pinnedAppResolver = pinnedAppResolver)
     private val appCardDisplayCache = AppCardDisplayCache(notificationRepository, appCardModelFactory)
+    private val notificationCardDisplayCache = NotificationCardDisplayCache(notificationRepository)
     private val appLibraryPageModelFactory = AppLibraryPageModelFactory()
     private val contextActionFactory = LauncherContextActionFactory(
         LauncherContextActionCallbacks(
@@ -121,7 +122,10 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     private val stateExecutor = Executors.newFixedThreadPool(4)
     private val stateGeneration = AtomicInteger(0)
     private val deferredRender = Runnable { refreshStateAsync() }
-    private val notificationRefresh = Runnable { requestRender() }
+    private val notificationRefresh = Runnable {
+        notificationCardDisplayCache.clear()
+        requestRender()
+    }
     private val packageChangeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             invalidateAppDataAndRefresh()
@@ -160,6 +164,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         notificationRepository.setOnHueResolved(Runnable {
             notificationRepository.invalidateLaunchableApps()
             appCardDisplayCache.clear()
+            notificationCardDisplayCache.clear()
             requestRender()
         })
         render(buildUiState(), animate = true)
@@ -206,9 +211,16 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         currentUiState = state
         if (appCardSettingsSnapshot != state.preferences) {
             appCardDisplayCache.clear()
+            notificationCardDisplayCache.clear()
             appCardSettingsSnapshot = state.preferences
         }
         appCardDisplayCache.preload(state.appEntries, state.pinnedKeys, stateExecutor)
+        notificationCardDisplayCache.preload(
+            state.notificationChapters,
+            { chapter -> settings.groupNotifications(chapter.identityKey) },
+            ::formatNotificationTime,
+            stateExecutor,
+        )
         activePreferences = state.preferences
         val pages = state.pages
         val initialPage = resolveInitialPage(pages)
@@ -250,6 +262,8 @@ class CalmLauncherRunner(private val activity: MainActivity) {
             overScrollMode = View.OVER_SCROLL_NEVER
         }
         pager.setCurrentItem(initialPage, false)
+        var userSwipeInProgress = false
+        var lastAnimatedPageKey: String? = null
         pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageScrolled(position: Int, positionOffset: Float, positionOffsetPixels: Int) {
                 centerCarouselPosition(position, positionOffset)
@@ -258,13 +272,23 @@ class CalmLauncherRunner(private val activity: MainActivity) {
             override fun onPageSelected(position: Int) {
                 selectedPackageName = pages[position].key
                 resetInactiveAppSearchPages(selectedPackageName)
-                pager.post { entryAnimator.animateCurrentPage(pager) }
             }
 
             override fun onPageScrollStateChanged(state: Int) {
-                if (state == ViewPager2.SCROLL_STATE_IDLE) {
-                    updateChapterCarousel(pages, pager.currentItem)
-                    resetInactiveAppSearchPages(pages[pager.currentItem].key)
+                when (state) {
+                    ViewPager2.SCROLL_STATE_DRAGGING -> {
+                        userSwipeInProgress = true
+                    }
+                    ViewPager2.SCROLL_STATE_IDLE -> {
+                        val currentPage = pages[pager.currentItem]
+                        updateChapterCarousel(pages, pager.currentItem)
+                        resetInactiveAppSearchPages(currentPage.key)
+                        if (!userSwipeInProgress && lastAnimatedPageKey != currentPage.key) {
+                            lastAnimatedPageKey = currentPage.key
+                            pager.post { entryAnimator.animateCurrentPage(pager) }
+                        }
+                        userSwipeInProgress = false
+                    }
                 }
             }
         })
@@ -863,7 +887,9 @@ class CalmLauncherRunner(private val activity: MainActivity) {
             contentDescription = "Open ${chapter.label}"
             tooltipText = "Open ${chapter.label}"
             setPadding(activity.dp(10), activity.dp(10), activity.dp(10), activity.dp(10))
-            notificationRepository.resolveMaskedAppIcon(chapter, activity.dp(42))?.let(::setImageDrawable)
+            notificationCardDisplayCache.chapterMaskedIcon(chapter)?.let { icon ->
+                setImageDrawable(icon.toSizedDrawable(activity.dp(42)))
+            }
             alpha = if (chapter.launchable) 0.96f else 0.36f
             isEnabled = chapter.launchable
             if (chapter.launchable) {
@@ -1051,13 +1077,13 @@ class CalmLauncherRunner(private val activity: MainActivity) {
                 background = null
                 page.chapter?.let { chapter ->
                     compoundDrawablePadding = activity.dp(6)
-                    notificationRepository.resolveMaskedAppIcon(chapter, activity.dp(if (selected) 20 else 16))?.let { icon ->
-                        setCompoundDrawables(icon, null, null, null)
+                    notificationCardDisplayCache.chapterMaskedIcon(chapter)?.let { icon ->
+                        setCompoundDrawables(icon.toSizedDrawable(activity.dp(if (selected) 20 else 16)), null, null, null)
                     }
                 }
                 maxWidth = activity.dp(if (selected) 176 else 126)
                 minWidth = activity.dp(if (selected) 118 else 74)
-                setOnClickListener { currentPager?.setCurrentItem(index, true) }
+                setOnClickListener { navigateToChapterPage(index) }
             }
             row.addView(item, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 leftMargin = activity.dp(1)
@@ -1067,6 +1093,20 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         row.post {
             updateCarouselCenterPadding()
             centerCarouselItem(selectedPosition)
+        }
+    }
+
+    private fun navigateToChapterPage(index: Int) {
+        val pager = currentPager ?: return
+        val current = pager.currentItem
+        if (index == current) return
+        val smooth = kotlin.math.abs(index - current) == 1
+        pager.setCurrentItem(index, smooth)
+        if (!smooth) {
+            currentUiState?.pages?.let { pages ->
+                updateChapterCarousel(pages, index)
+                resetInactiveAppSearchPages(pages[index].key)
+            }
         }
     }
 
@@ -1157,29 +1197,19 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         chapter: AppChapter,
         tintCards: Boolean,
     ): TextView {
-        val title = item.title()
-        val body = item.previewText()
-        val time = DateFormat.getTimeFormat(activity).format(Date(item.primary.postTime))
-        val artwork = item.notifications.firstNotNullOfOrNull { it.backgroundImage }
-        val isMedia = isMediaCard(item)
-        val sideImage = when {
-            isMedia -> null
-            artwork != null -> artwork.toRectangularCardArtwork()
-            else -> notificationRepository.resolveAppIcon(chapter, cardHeight())?.bitmap
-        }
-        val sideImageAlpha = if (artwork != null && !isMedia) 156 else 64
-        return stackCard("$title\n$body\n$time", chapter.hueColor, tintCards, sideImage, sideImageAlpha).apply {
-            if (artwork != null && isMedia) {
+        val data = notificationCardDisplayCache.getOrCreate(item, chapter, ::formatNotificationTime)
+        return stackCard(data.text, chapter.hueColor, tintCards, data.sideImage, data.sideImageAlpha).apply {
+            if (data.mediaBackgroundImage != null) {
                 background = drawables.notificationCardWithImage(
                     cardCornerRadius(),
-                    artwork,
+                    data.mediaBackgroundImage,
                     chapter.hueColor,
                     tintCards,
                 )
             }
             maxLines = 4
             setOnClickListener {
-                focusOverlay.show(this, contextActionFactory.notificationActions(item, chapter), item.fullText())
+                focusOverlay.show(this, contextActionFactory.notificationActions(item, chapter), data.fullText)
             }
             setOnLongClickListener {
                 showNotificationHideOptions(item, chapter)
@@ -1192,8 +1222,14 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         return activity.getDrawable(drawableRes)?.toBitmap()
     }
 
-    private fun isMediaCard(item: NotificationCardItem): Boolean {
-        return MediaNotificationControls.from(item.notifications).hasAnyAction
+    private fun android.graphics.Bitmap.toSizedDrawable(size: Int): android.graphics.drawable.BitmapDrawable {
+        return android.graphics.drawable.BitmapDrawable(activity.resources, this).apply {
+            setBounds(0, 0, size, size)
+        }
+    }
+
+    private fun formatNotificationTime(postTime: Long): String {
+        return DateFormat.getTimeFormat(activity).format(Date(postTime))
     }
 
     private fun emptyNote(text: String): TextView {
@@ -1542,6 +1578,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     private fun invalidateAppDataAndRefresh() {
         notificationRepository.invalidateAppCaches()
         appCardDisplayCache.clear()
+        notificationCardDisplayCache.clear()
         appSearchQueries.clear()
         appSearchPages.clear()
         refreshStateAsync()

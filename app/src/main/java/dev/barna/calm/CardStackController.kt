@@ -171,7 +171,7 @@ class CardStackController(
             append(cards.size)
             append(':')
             cards.take(12).forEach { card ->
-                append(card.text?.lineSequence()?.firstOrNull().orEmpty())
+                append(card.text?.toString()?.lineSequence()?.firstOrNull().orEmpty())
                 append('|')
             }
         }

@@ -36,6 +36,7 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextClock
 import android.widget.TextView
 import android.widget.Toast
@@ -78,6 +79,13 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         ),
     )
     private val cardStackController = CardStackController(activity, mainHandler, ::performCardScrollHaptic)
+    private val appQuickScrollController = AppQuickScrollController(
+        activity,
+        mainHandler,
+        drawables,
+        cardStackController,
+        ::performCardScrollHaptic,
+    )
     private val entryAnimator = LauncherEntryAnimator(activity)
     private val settingsPageFactory = SettingsPageFactory(
         activity = activity,
@@ -603,11 +611,15 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         if (model.apps.isEmpty()) {
             stackHost.addView(appSearchEmptyStack(model.emptyMessage), matchParentParams())
         } else {
-            stackHost.addView(appStack(model.apps), matchParentParams())
+            val stack = appStack(model.apps)
+            stackHost.addView(stack, matchParentParams())
+            appQuickScrollController.attach(stackHost, stack, model) {
+                refreshAppStack(stackHost, model)
+            }
         }
     }
 
-    private fun appStack(apps: List<AppEntry>): View {
+    private fun appStack(apps: List<AppEntry>): ScrollView {
         return cardStackController.cardStack(
             apps.map(::appCard),
             cardHeight(),

@@ -41,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
-          echo "VERSION_NAME=0.1.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=0.1.0-alpha.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
 
       - name: Build debug and release APKs
         run: ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
@@ -77,15 +77,15 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "Build for commit \`${GITHUB_SHA}\`."
+            echo "Alpha build for commit \`${GITHUB_SHA}\`."
             echo
             echo "Built from branch \`${GITHUB_REF_NAME}\` via \`${GITHUB_EVENT_NAME}\`."
             echo
             echo "Version: \`${VERSION_NAME}\` / code \`${VERSION_CODE}\`."
             echo
             echo "### APKs"
-            echo "- Calm-debug-latest.apk: side-by-side debug build using package \`dev.barna.calm.debug\`"
-            echo "- Calm-release-latest.apk: signed CI/test release build using package \`dev.barna.calm\`"
+            echo "- Calm-debug-latest.apk: side-by-side alpha debug build using package \`dev.barna.calm.debug\`"
+            echo "- Calm-release-latest.apk: signed CI/test alpha release build using package \`dev.barna.calm\`"
             echo
             echo "### Recent changes"
             git log -10 --pretty=format:'- %s (%h)'
@@ -106,7 +106,7 @@ jobs:
           git push -f origin apks-latest
 
           gh release create apks-latest release-assets/*.apk \
-            --title "Latest Calm APKs" \
+            --title "Latest Calm Alpha APKs" \
             --notes-file dist/release-notes.md \
             --prerelease \
             --target "$GITHUB_SHA"

@@ -10,6 +10,7 @@ import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
+import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.Drawable
@@ -26,6 +27,7 @@ class AppIconCardDrawable(
     }
     private val blurPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val washPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val veilPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
@@ -33,10 +35,12 @@ class AppIconCardDrawable(
     private val iconMatrix = Matrix()
     private val rect = RectF()
     private val clipPath = Path()
-    private val edgeColor = sampleRightEdgeColor(icon)
-    private val washEndAlpha = if (imageAlpha >= 120) 128 else 84
-    private val veilMidAlpha = if (imageAlpha >= 120) 18 else 36
-    private val veilEndAlpha = if (imageAlpha >= 120) 52 else 108
+    private val leftColor = sampleRegionColor(icon, 0f, 0.36f)
+    private val midColor = sampleRegionColor(icon, 0.32f, 0.72f)
+    private val edgeColor = sampleRegionColor(icon, 0.64f, 1f)
+    private val washEndAlpha = if (imageAlpha >= 120) 126 else 78
+    private val veilMidAlpha = if (imageAlpha >= 120) 14 else 26
+    private val veilEndAlpha = if (imageAlpha >= 120) 44 else 92
 
     override fun draw(canvas: Canvas) {
         base.bounds = bounds
@@ -50,6 +54,7 @@ class AppIconCardDrawable(
         val checkpoint = canvas.save()
         canvas.clipPath(clipPath)
         drawIconWash(canvas)
+        drawIconGlows(canvas)
         drawIcon(canvas)
         drawRightVeil(canvas)
         canvas.restoreToCount(checkpoint)
@@ -71,9 +76,9 @@ class AppIconCardDrawable(
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 
     private fun drawIcon(canvas: Canvas) {
-        val targetSize = bounds.height() * 1.12f
+        val targetSize = bounds.height() * 1.18f
         val scale = maxOf(targetSize / icon.width.toFloat(), targetSize / icon.height.toFloat())
-        val left = bounds.right - targetSize + (targetSize * 0.08f)
+        val left = bounds.right - targetSize + (targetSize * 0.06f)
         val top = bounds.top + (bounds.height() - targetSize) / 2f
 
         iconMatrix.reset()
@@ -83,8 +88,8 @@ class AppIconCardDrawable(
         val layer = canvas.saveLayer(rect, null)
         drawBlurredIconCopies(canvas, targetSize)
         canvas.drawBitmap(icon, iconMatrix, iconPaint)
-        val fadeStart = left - (targetSize * 0.62f)
-        val fadeEnd = left + (targetSize * 0.92f)
+        val fadeStart = left - (targetSize * 0.72f)
+        val fadeEnd = left + (targetSize * 0.96f)
         maskPaint.shader = LinearGradient(
             fadeStart,
             0f,
@@ -92,12 +97,12 @@ class AppIconCardDrawable(
             0f,
             intArrayOf(
                 Color.argb(0, 255, 255, 255),
-                Color.argb(28, 255, 255, 255),
-                Color.argb(94, 255, 255, 255),
-                Color.argb(178, 255, 255, 255),
+                Color.argb(18, 255, 255, 255),
+                Color.argb(70, 255, 255, 255),
+                Color.argb(152, 255, 255, 255),
                 Color.WHITE,
             ),
-            floatArrayOf(0f, 0.22f, 0.50f, 0.76f, 1f),
+            floatArrayOf(0f, 0.24f, 0.52f, 0.78f, 1f),
             Shader.TileMode.CLAMP,
         )
         canvas.drawRect(rect, maskPaint)
@@ -106,9 +111,9 @@ class AppIconCardDrawable(
     }
 
     private fun drawBlurredIconCopies(canvas: Canvas, targetSize: Float) {
-        if (blurStrength <= 0) return
-        val distance = targetSize * (0.012f + (blurStrength.coerceIn(0, 100) / 100f) * 0.052f)
-        val alpha = (imageAlpha * (0.08f + (blurStrength.coerceIn(0, 100) / 100f) * 0.26f)).toInt().coerceIn(0, 180)
+        val strength = maxOf(blurStrength.coerceIn(0, 100), 28)
+        val distance = targetSize * (0.018f + (strength / 100f) * 0.052f)
+        val alpha = (imageAlpha * (0.12f + (strength / 100f) * 0.28f)).toInt().coerceIn(18, 180)
         blurPaint.alpha = alpha
         canvas.save()
         canvas.translate(-distance, 0f)
@@ -129,17 +134,39 @@ class AppIconCardDrawable(
             bounds.right.toFloat(),
             0f,
             intArrayOf(
-                Color.argb(8, Color.red(edgeColor), Color.green(edgeColor), Color.blue(edgeColor)),
-                Color.argb(16, Color.red(edgeColor), Color.green(edgeColor), Color.blue(edgeColor)),
-                Color.argb(32, Color.red(edgeColor), Color.green(edgeColor), Color.blue(edgeColor)),
-                Color.argb((washEndAlpha * 0.58f).toInt(), Color.red(edgeColor), Color.green(edgeColor), Color.blue(edgeColor)),
+                Color.argb(6, Color.red(leftColor), Color.green(leftColor), Color.blue(leftColor)),
+                Color.argb(18, Color.red(leftColor), Color.green(leftColor), Color.blue(leftColor)),
+                Color.argb(38, Color.red(midColor), Color.green(midColor), Color.blue(midColor)),
+                Color.argb((washEndAlpha * 0.68f).toInt(), Color.red(edgeColor), Color.green(edgeColor), Color.blue(edgeColor)),
                 Color.argb(washEndAlpha, Color.red(edgeColor), Color.green(edgeColor), Color.blue(edgeColor)),
             ),
-            floatArrayOf(0f, 0.24f, 0.48f, 0.74f, 1f),
+            floatArrayOf(0f, 0.22f, 0.48f, 0.74f, 1f),
             Shader.TileMode.CLAMP,
         )
         canvas.drawRect(rect, washPaint)
         washPaint.shader = null
+    }
+
+    private fun drawIconGlows(canvas: Canvas) {
+        drawGlow(canvas, bounds.right - bounds.height() * 0.74f, bounds.centerY().toFloat(), bounds.height() * 0.92f, midColor, 34)
+        drawGlow(canvas, bounds.right - bounds.height() * 0.18f, bounds.centerY().toFloat(), bounds.height() * 0.72f, edgeColor, 46)
+    }
+
+    private fun drawGlow(canvas: Canvas, cx: Float, cy: Float, radius: Float, color: Int, alpha: Int) {
+        glowPaint.shader = RadialGradient(
+            cx,
+            cy,
+            radius,
+            intArrayOf(
+                Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)),
+                Color.argb((alpha * 0.42f).toInt(), Color.red(color), Color.green(color), Color.blue(color)),
+                Color.TRANSPARENT,
+            ),
+            floatArrayOf(0f, 0.48f, 1f),
+            Shader.TileMode.CLAMP,
+        )
+        canvas.drawCircle(cx, cy, radius, glowPaint)
+        glowPaint.shader = null
     }
 
     private fun drawRightVeil(canvas: Canvas) {
@@ -153,31 +180,32 @@ class AppIconCardDrawable(
                 Color.argb(veilMidAlpha / 2, 4, 4, 8),
                 Color.argb(veilEndAlpha, 4, 4, 8),
             ),
-            floatArrayOf(0f, 0.72f, 1f),
+            floatArrayOf(0f, 0.74f, 1f),
             Shader.TileMode.CLAMP,
         )
         canvas.drawRect(rect, veilPaint)
         veilPaint.shader = null
     }
 
-    private fun sampleRightEdgeColor(bitmap: Bitmap): Int {
+    private fun sampleRegionColor(bitmap: Bitmap, startRatio: Float, endRatio: Float): Int {
         var red = 0L
         var green = 0L
         var blue = 0L
-        var count = 0L
-        val startX = (bitmap.width * 0.72f).toInt().coerceIn(0, bitmap.width - 1)
-        for (x in startX until bitmap.width) {
+        var weight = 0L
+        val startX = (bitmap.width * startRatio).toInt().coerceIn(0, bitmap.width - 1)
+        val endX = (bitmap.width * endRatio).toInt().coerceIn(startX + 1, bitmap.width)
+        for (x in startX until endX) {
             for (y in 0 until bitmap.height) {
                 val pixel = bitmap.getPixel(x, y)
                 val alpha = Color.alpha(pixel)
-                if (alpha < 48) continue
-                red += Color.red(pixel).toLong()
-                green += Color.green(pixel).toLong()
-                blue += Color.blue(pixel).toLong()
-                count++
+                if (alpha < 32) continue
+                red += Color.red(pixel).toLong() * alpha
+                green += Color.green(pixel).toLong() * alpha
+                blue += Color.blue(pixel).toLong() * alpha
+                weight += alpha.toLong()
             }
         }
-        if (count == 0L) return Color.rgb(64, 60, 70)
-        return Color.rgb((red / count).toInt(), (green / count).toInt(), (blue / count).toInt())
+        if (weight == 0L) return Color.rgb(64, 60, 70)
+        return Color.rgb((red / weight).toInt(), (green / weight).toInt(), (blue / weight).toInt())
     }
 }

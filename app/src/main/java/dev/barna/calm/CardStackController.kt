@@ -12,7 +12,10 @@ class CardStackController(
     private val mainHandler: Handler,
     private val haptics: (android.view.View) -> Unit,
 ) {
+    private val rememberedScrollPositions = LinkedHashMap<String, Int>()
+
     fun cardStack(cards: List<TextView>, cardHeight: Int, cardStep: Int, tuning: CardStackTuning): ScrollView {
+        val stackKey = stackKey(cards)
         val scroller = ScrollView(activity).apply {
             tag = CalmAnimationTags.CARD_STACK
             isFillViewport = true
@@ -37,14 +40,22 @@ class CardStackController(
         val stackOverlap = cardHeight - tunedStep
         cards.forEachIndexed { index, card ->
             card.tag = CalmAnimationTags.CARD
+            card.alpha = 0f
+            card.translationX = 0f
+            card.translationY = 0f
+            card.translationZ = 0f
+            card.rotation = 0f
+            card.scaleX = 1f
+            card.scaleY = 1f
             val params = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, cardHeight)
             params.topMargin = if (index == 0) 0 else -stackOverlap
             stack.addView(card, params)
         }
 
         val lastHapticIndex = intArrayOf(-1)
-        val magneticSnap = Runnable { magnetize(scroller, cards, tunedStep) }
-        scroller.setOnScrollChangeListener { _, _, _, _, _ ->
+        val magneticSnap = Runnable { magnetize(scroller, cards, tunedStep, stackKey) }
+        scroller.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+            rememberScroll(stackKey, scrollY)
             style(scroller, cards, tunedStep, tuning, true, lastHapticIndex)
             mainHandler.removeCallbacks(magneticSnap)
             mainHandler.postDelayed(magneticSnap, 90)
@@ -70,6 +81,8 @@ class CardStackController(
             stack.post {
                 val maxScroll = maxOf(0, (cards.lastOrNull()?.top ?: stackTopPadding) - stackTopPadding)
                 stack.minimumHeight = scroller.height + maxScroll
+                val restored = rememberedScrollPositions[stackKey]?.coerceIn(0, maxScroll) ?: 0
+                if (restored != scroller.scrollY) scroller.scrollTo(0, restored)
                 style(scroller, cards, tunedStep, tuning, false, lastHapticIndex)
             }
         }
@@ -101,6 +114,7 @@ class CardStackController(
         }
 
         cards.forEach { card ->
+            card.animate().cancel()
             val visualDepth = (card.top - threshold) / cardStep.toFloat()
             val focusDistance = kotlin.math.abs(visualDepth)
             val scale = scale(visualDepth, tuning)
@@ -131,7 +145,7 @@ class CardStackController(
         return clamped
     }
 
-    private fun magnetize(scroller: ScrollView, cards: List<TextView>, cardStep: Int) {
+    private fun magnetize(scroller: ScrollView, cards: List<TextView>, cardStep: Int, stackKey: String) {
         if (cards.isEmpty() || cardStep <= 0) return
         val readingAnchor = cards.first().top
         val scrollY = clampedScroll(scroller, cards, readingAnchor)
@@ -139,7 +153,28 @@ class CardStackController(
         val target = (Math.round(scrollY / cardStep.toFloat()) * cardStep).coerceIn(0, maxScroll)
         val distance = kotlin.math.abs(target - scrollY)
         if (distance > activity.dp(42) || distance < activity.dp(1)) return
+        rememberScroll(stackKey, target)
         scroller.smoothScrollTo(0, target)
+    }
+
+    private fun rememberScroll(stackKey: String, scrollY: Int) {
+        rememberedScrollPositions[stackKey] = scrollY.coerceAtLeast(0)
+        if (rememberedScrollPositions.size > MAX_REMEMBERED_STACKS) {
+            val first = rememberedScrollPositions.keys.firstOrNull()
+            if (first != null) rememberedScrollPositions.remove(first)
+        }
+    }
+
+    private fun stackKey(cards: List<TextView>): String {
+        if (cards.isEmpty()) return "empty"
+        return buildString {
+            append(cards.size)
+            append(':')
+            cards.take(12).forEach { card ->
+                append(card.text?.lineSequence()?.firstOrNull().orEmpty())
+                append('|')
+            }
+        }
     }
 
     private fun scale(visualDepth: Float, tuning: CardStackTuning): Float {
@@ -185,5 +220,9 @@ class CardStackController(
     private fun textColor(visualDepth: Float): Int {
         val depth = CalmColor.clamp01(maxOf(0f, visualDepth) / 2f)
         return CalmColor.blend(CalmTheme.INK, android.graphics.Color.rgb(128, 124, 116), depth)
+    }
+
+    private companion object {
+        const val MAX_REMEMBERED_STACKS = 48
     }
 }

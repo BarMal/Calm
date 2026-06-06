@@ -89,6 +89,22 @@ class CardStackController(
         return scroller
     }
 
+    fun scrollToCard(scroller: ScrollView, cardIndex: Int, smooth: Boolean) {
+        val stack = scroller.getChildAt(0) as? LinearLayout ?: return
+        if (stack.childCount == 0) return
+        val targetCard = stack.getChildAt(cardIndex.coerceIn(0, stack.childCount - 1)) ?: return
+        val firstCard = stack.getChildAt(0) ?: return
+        val lastCard = stack.getChildAt(stack.childCount - 1) ?: return
+        val cards = (0 until stack.childCount).mapNotNull { index -> stack.getChildAt(index) as? TextView }
+        val target = (targetCard.top - firstCard.top).coerceIn(0, maxOf(0, lastCard.top - firstCard.top))
+        rememberScroll(stackKey(cards), target)
+        if (smooth) {
+            scroller.smoothScrollTo(0, target)
+        } else {
+            scroller.scrollTo(0, target)
+        }
+    }
+
     private fun tunedCardStep(baseStep: Int, tuning: CardStackTuning): Int {
         val minStep = activity.dp(34)
         val maxStep = activity.dp(88)

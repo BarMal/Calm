@@ -149,8 +149,16 @@ class NotificationChapterRepository(
         return resolveAppBitmap(app.identityKey, app.packageName, app.userHandle)
     }
 
+    fun resolveAppIconBitmap(chapter: AppChapter): Bitmap? {
+        return resolveAppBitmap(chapter.launcherIdentityKey, chapter.packageName, chapter.userHandle)
+    }
+
     fun resolveAppIcon(chapter: AppChapter, sizePx: Int): BitmapDrawable? {
         return resolveAppIcon(chapter.launcherIdentityKey, chapter.packageName, chapter.userHandle, sizePx)
+    }
+
+    fun resolveMaskedAppIconBitmap(chapter: AppChapter): Bitmap? {
+        return resolveMaskedAppBitmap(chapter.launcherIdentityKey, chapter.packageName, chapter.userHandle)
     }
 
     fun resolveMaskedAppIcon(chapter: AppChapter, sizePx: Int): BitmapDrawable? {

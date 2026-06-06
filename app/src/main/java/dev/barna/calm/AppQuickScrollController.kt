@@ -68,6 +68,7 @@ class AppQuickScrollController(
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
+            isClickable = true
             clipToPadding = false
             clipChildren = false
             val lastIndex = quickScroll.targets.lastIndex.coerceAtLeast(1)
@@ -78,7 +79,8 @@ class AppQuickScrollController(
                     contentDescription = "Jump to ${target.label}"
                     translationX = -activity.dp(20) * tuning.horizontalCurveFactor * tuning.horizontalPathProgress(visualDepth)
                     rotation = -6f * tuning.rotationFactor * tuning.rotationProgress(visualDepth)
-                    setOnClickListener { activate(target, smooth = true) }
+                    isClickable = false
+                    isFocusable = false
                 }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
             }
             setOnTouchListener { view, event ->

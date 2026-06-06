@@ -4,7 +4,7 @@ plugins {
 }
 
 val ciVersionCode = providers.environmentVariable("VERSION_CODE").orNull?.toIntOrNull() ?: 1
-val ciVersionName = providers.environmentVariable("VERSION_NAME").orNull ?: "0.1.0"
+val ciVersionName = providers.environmentVariable("VERSION_NAME").orNull ?: "0.1.0-alpha.0"
 val ciDebugKeystore = file("ci-debug.keystore")
 
 android {

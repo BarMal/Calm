@@ -172,27 +172,16 @@ jobs:
           git tag -f apks-latest "$GITHUB_SHA"
           git push -f origin apks-latest
 
-          if gh release view apks-latest >/dev/null 2>&1; then
-            gh release edit apks-latest \
-              --title "Latest Calm Alpha APKs" \
-              --notes-file release-notes.md \
-              --prerelease \
-              --target "$GITHUB_SHA"
-            gh release upload apks-latest release-assets/*.apk --clobber
-          else
-            gh release create apks-latest release-assets/*.apk \
-              --title "Latest Calm Alpha APKs" \
-              --notes-file release-notes.md \
-              --prerelease \
-              --target "$GITHUB_SHA"
+          if gh release view debug-latest >/dev/null 2>&1; then
+            gh release delete debug-latest --yes --cleanup-tag
           fi
 
-          gh release view apks-latest --json assets --jq '.assets[].name' | while read -r asset; do
-            if [[ "$asset" == "Calm-alpha-latest.apk" ||
-                  "$asset" == "Calm-alpha-debug-side-by-side-latest.apk" ||
-                  "$asset" == "Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk" ||
-                  "$asset" == "Calm-alpha-debug-side-by-side-${VERSION_NAME}-${VERSION_CODE}.apk" ]]; then
-              continue
-            fi
-            gh release delete-asset apks-latest "$asset" --yes
-          done
+          if gh release view apks-latest >/dev/null 2>&1; then
+            gh release delete apks-latest --yes
+          fi
+
+          gh release create apks-latest release-assets/*.apk \
+            --title "Latest Calm Alpha APKs" \
+            --notes-file release-notes.md \
+            --prerelease \
+            --target "$GITHUB_SHA"

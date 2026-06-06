@@ -5,10 +5,14 @@ plugins {
 
 val ciVersionCode = providers.environmentVariable("VERSION_CODE").orNull?.toIntOrNull() ?: 1
 val ciVersionName = providers.environmentVariable("VERSION_NAME").orNull ?: "${providers.gradleProperty("calm.versionNameBase").get()}.0"
-val signingKeystoreFile = providers.environmentVariable("CALM_SIGNING_KEYSTORE_FILE").orNull?.let(::file)
-val signingStorePassword = providers.environmentVariable("CALM_SIGNING_STORE_PASSWORD").orNull
-val signingKeyAlias = providers.environmentVariable("CALM_SIGNING_KEY_ALIAS").orNull
-val signingKeyPassword = providers.environmentVariable("CALM_SIGNING_KEY_PASSWORD").orNull
+fun signingValue(propertyName: String, environmentName: String): String? {
+    return providers.gradleProperty(propertyName).orNull ?: providers.environmentVariable(environmentName).orNull
+}
+
+val signingKeystoreFile = signingValue("calmSigningKeystoreFile", "CALM_SIGNING_KEYSTORE_FILE")?.let(rootProject::file)
+val signingStorePassword = signingValue("calmSigningStorePassword", "CALM_SIGNING_STORE_PASSWORD")
+val signingKeyAlias = signingValue("calmSigningKeyAlias", "CALM_SIGNING_KEY_ALIAS")
+val signingKeyPassword = signingValue("calmSigningKeyPassword", "CALM_SIGNING_KEY_PASSWORD")
 val hasReleaseSigning = signingKeystoreFile?.exists() == true &&
     !signingStorePassword.isNullOrBlank() &&
     !signingKeyAlias.isNullOrBlank() &&

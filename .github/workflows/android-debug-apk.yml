@@ -56,10 +56,10 @@ jobs:
           echo "${CALM_RELEASE_KEYSTORE_BASE64}" | base64 --decode > app/calm-release.keystore
           {
             echo "HAS_RELEASE_SIGNING=true"
-            echo "CALM_SIGNING_KEYSTORE_FILE=app/calm-release.keystore"
-            echo "CALM_SIGNING_STORE_PASSWORD=${CALM_RELEASE_STORE_PASSWORD}"
-            echo "CALM_SIGNING_KEY_ALIAS=${CALM_RELEASE_KEY_ALIAS}"
-            echo "CALM_SIGNING_KEY_PASSWORD=${CALM_RELEASE_KEY_PASSWORD}"
+            echo "ORG_GRADLE_PROJECT_calmSigningKeystoreFile=app/calm-release.keystore"
+            echo "ORG_GRADLE_PROJECT_calmSigningStorePassword=${CALM_RELEASE_STORE_PASSWORD}"
+            echo "ORG_GRADLE_PROJECT_calmSigningKeyAlias=${CALM_RELEASE_KEY_ALIAS}"
+            echo "ORG_GRADLE_PROJECT_calmSigningKeyPassword=${CALM_RELEASE_KEY_PASSWORD}"
           } >> "$GITHUB_ENV"
 
       - name: Compute APK version

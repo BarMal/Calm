@@ -5,6 +5,7 @@
 build/
 captures/
 local.properties
+.calm-secrets/
 
 # Android
 *.apk

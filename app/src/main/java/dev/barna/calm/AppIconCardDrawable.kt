@@ -75,17 +75,6 @@ class AppIconCardDrawable(
     @Deprecated("Deprecated in Java")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 
-    override fun getConstantState(): ConstantState {
-        return AppIconCardConstantState(
-            base.constantState,
-            base,
-            icon,
-            radius,
-            imageAlpha,
-            blurStrength,
-        )
-    }
-
     private fun drawIcon(canvas: Canvas) {
         val targetSize = bounds.height() * 1.18f
         val scale = maxOf(targetSize / icon.width.toFloat(), targetSize / icon.height.toFloat())
@@ -218,21 +207,5 @@ class AppIconCardDrawable(
         }
         if (weight == 0L) return Color.rgb(64, 60, 70)
         return Color.rgb((red / weight).toInt(), (green / weight).toInt(), (blue / weight).toInt())
-    }
-
-    private class AppIconCardConstantState(
-        private val baseState: ConstantState?,
-        private val fallbackBase: Drawable,
-        private val icon: Bitmap,
-        private val radius: Float,
-        private val imageAlpha: Int,
-        private val blurStrength: Int,
-    ) : ConstantState() {
-        override fun newDrawable(): Drawable {
-            val base = baseState?.newDrawable()?.mutate() ?: fallbackBase.constantState?.newDrawable()?.mutate() ?: fallbackBase.mutate()
-            return AppIconCardDrawable(base, icon, radius, imageAlpha, blurStrength)
-        }
-
-        override fun getChangingConfigurations(): Int = baseState?.changingConfigurations ?: 0
     }
 }

@@ -29,6 +29,37 @@ class AppLibrarySnapshotCacheTest {
     }
 
     @Test
+    fun loadCachedOrEmptyReturnsSnapshotWithoutCallingFreshLoader() {
+        val store = FakeAppLibrarySnapshotStore(AppLibrarySnapshot.from(listOf(app("cached.pkg", "Cached"))))
+        var loadCalls = 0
+        val cache = AppLibrarySnapshotCache(store) {
+            loadCalls++
+            listOf(app("fresh.pkg", "Fresh"))
+        }
+
+        val apps = cache.loadCachedOrEmpty()
+
+        assertEquals(listOf("cached.pkg"), apps.map { it.packageName })
+        assertEquals(0, loadCalls)
+        assertTrue(cache.shouldRefreshInBackground())
+    }
+
+    @Test
+    fun loadCachedOrEmptyAvoidsColdFreshLoadAndRequestsBackgroundRefresh() {
+        var loadCalls = 0
+        val cache = AppLibrarySnapshotCache(FakeAppLibrarySnapshotStore()) {
+            loadCalls++
+            listOf(app("fresh.pkg", "Fresh"))
+        }
+
+        val apps = cache.loadCachedOrEmpty()
+
+        assertEquals(emptyList<AppEntry>(), apps)
+        assertEquals(0, loadCalls)
+        assertTrue(cache.shouldRefreshInBackground())
+    }
+
+    @Test
     fun loadFallsBackToFreshAppsAndPersistsSnapshot() {
         val store = FakeAppLibrarySnapshotStore()
         var loadCalls = 0
@@ -45,6 +76,7 @@ class AppLibrarySnapshotCacheTest {
         assertEquals(1, loadCalls)
         assertNotNull(store.snapshot)
         assertFalse(cache.shouldRefreshPersistedSnapshot())
+        assertFalse(cache.shouldRefreshInBackground())
     }
 
     @Test

@@ -43,8 +43,7 @@ class NotificationChapterRepository(
         onHueResolved = listener
     }
 
-    fun buildNotificationChapters(): List<AppChapter> {
-        val launchableApps = loadLaunchableApps()
+    fun buildNotificationChapters(launchableApps: List<AppEntry> = loadLaunchableApps()): List<AppChapter> {
         val launchableBySource = launchableApps
             .groupBy { it.notificationSourceKey }
             .mapValues { it.value.first() }
@@ -100,11 +99,15 @@ class NotificationChapterRepository(
         return launchableAppsCache.load()
     }
 
+    fun loadCachedLaunchableApps(): List<AppEntry> {
+        return launchableAppsCache.loadCachedOrEmpty()
+    }
+
     fun refreshLaunchableApps(
         executor: Executor,
         onRefreshed: (AppLibraryRefreshResult) -> Unit,
     ): Boolean {
-        if (!launchableAppsCache.shouldRefreshPersistedSnapshot()) return false
+        if (!launchableAppsCache.shouldRefreshInBackground()) return false
         launchableAppsCache.refreshAsync(executor, onRefreshed)
         return true
     }
@@ -123,6 +126,10 @@ class NotificationChapterRepository(
 
     fun loadAppEntries(): List<AppEntry> {
         return loadLaunchableApps()
+    }
+
+    fun loadCachedAppEntries(): List<AppEntry> {
+        return loadCachedLaunchableApps()
     }
 
     fun loadPinnedAppEntries(pinnedKeys: Set<String>): List<AppEntry> {

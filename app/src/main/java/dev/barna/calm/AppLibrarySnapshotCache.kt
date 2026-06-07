@@ -27,8 +27,25 @@ class AppLibrarySnapshotCache(
     }
 
     @Synchronized
+    fun loadCachedOrEmpty(): List<AppEntry> {
+        cachedApps?.let { return it }
+        store.load()?.let { snapshot ->
+            cachedApps = snapshot.apps
+            cachedFingerprint = snapshot.fingerprint
+            loadedFromSnapshot = true
+            return snapshot.apps
+        }
+        return emptyList()
+    }
+
+    @Synchronized
     fun shouldRefreshPersistedSnapshot(): Boolean {
         return loadedFromSnapshot
+    }
+
+    @Synchronized
+    fun shouldRefreshInBackground(): Boolean {
+        return loadedFromSnapshot || cachedApps == null
     }
 
     @Synchronized

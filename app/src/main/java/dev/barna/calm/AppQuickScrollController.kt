@@ -24,12 +24,13 @@ class AppQuickScrollController(
         stack: ScrollView,
         model: AppLibraryPageModel,
         tuning: CardStackTuning,
+        ensureCardRendered: (Int) -> Unit = {},
     ) {
         val quickScroll = index.create(model.apps)
         if (quickScroll.targets.size < 2) return
 
         val popup = popup()
-        val rail = rail(quickScroll, stack, popup, tuning)
+        val rail = rail(quickScroll, stack, popup, tuning, ensureCardRendered)
         stackHost.addView(rail, FrameLayout.LayoutParams(activity.dp(36), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END or Gravity.CENTER_VERTICAL).apply {
             topMargin = activity.dp(8)
             bottomMargin = activity.dp(8)
@@ -43,6 +44,7 @@ class AppQuickScrollController(
         stack: ScrollView,
         popup: TextView,
         tuning: CardStackTuning,
+        ensureCardRendered: (Int) -> Unit,
     ): View {
         val dismissPopup = Runnable {
             popup.animate()
@@ -56,6 +58,7 @@ class AppQuickScrollController(
             if (target == null) return
             if (lastTarget[0] == target) return
             lastTarget[0] = target
+            ensureCardRendered(target.cardIndex)
             cardStackController.scrollToCard(stack, target.cardIndex, smooth)
             popup.text = target.label
             popup.animate().cancel()

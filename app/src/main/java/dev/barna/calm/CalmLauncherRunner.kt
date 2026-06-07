@@ -174,6 +174,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
             requestRender()
         })
         render(buildUiState(), animate = true)
+        refreshLaunchableAppsInBackground()
     }
 
     fun onResume() {
@@ -415,6 +416,16 @@ class CalmLauncherRunner(private val activity: MainActivity) {
                 if (generation == stateGeneration.get()) {
                     render(state, animate = false)
                 }
+            }
+        }
+    }
+
+    private fun refreshLaunchableAppsInBackground() {
+        notificationRepository.refreshLaunchableApps(stateExecutor) {
+            mainHandler.post {
+                appCardDisplayCache.clear()
+                notificationCardDisplayCache.clear()
+                requestRender()
             }
         }
     }

@@ -51,7 +51,10 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
-class CalmLauncherRunner(private val activity: MainActivity) {
+class CalmLauncherRunner(
+    private val activity: MainActivity,
+    private val launcherStateViewModel: LauncherStateViewModel,
+) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val settings = LauncherSettings(activity)
     private val notificationRepository = NotificationChapterRepository(activity, settings)
@@ -68,6 +71,8 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     private val notificationCardDisplayCache = NotificationCardDisplayCache(notificationRepository)
     private val appLibraryPageModelFactory = AppLibraryPageModelFactory()
     private val appStackRenderPlanner = AppStackRenderPlanner()
+    private val appLibraryStore = AppLibraryRenderStore()
+    private val appLibraryEventPlanner = AppLibraryEventPlanner()
     private val contextActionFactory = LauncherContextActionFactory(
         LauncherContextActionCallbacks(
             openNotification = ::openNotification,
@@ -139,12 +144,14 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     private var chapterCarouselRow: LinearLayout? = null
     private var currentPager: ViewPager2? = null
     private var currentScreen: View? = null
-    private var currentUiState: LauncherRenderModel? = null
+    private val currentUiState: LauncherRenderModel?
+        get() = launcherStateViewModel.uiState.value.renderModel
     private var activePreferences: LauncherUiPreferences = settings.uiPreferences()
     private var appCardSettingsSnapshot: LauncherUiPreferences = activePreferences
     private var settingsChangeToken = settings.launcherChangeToken()
     private var packageChangeReceiverRegistered = false
     private var pagePrewarmGeneration = 0
+    private var appLibraryEventGeneration = 0
     private var suppressedPageEntryKey: String? = null
     private var selectedCarouselPosition = -1
     private val appSearchQueries = EnumMap<AppLibraryScope, String>(AppLibraryScope::class.java)
@@ -153,8 +160,10 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     private data class AppSearchPageState(
         val key: String,
         val scope: AppLibraryScope,
+        val pageModel: ChapterPage,
         val page: View,
         val header: View,
+        val stackHost: FrameLayout,
         val search: EditText,
         val cardCache: MutableMap<String, TextView>,
     )
@@ -173,7 +182,13 @@ class CalmLauncherRunner(private val activity: MainActivity) {
             notificationCardDisplayCache.clear()
             requestRender()
         })
-        render(buildUiState(), animate = true)
+        val existingState = currentUiState
+        if (existingState != null) {
+            render(existingState, animate = false)
+            refreshStateAsync()
+        } else {
+            render(buildUiState(), animate = true)
+        }
         refreshLaunchableAppsInBackground()
     }
 
@@ -227,7 +242,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         mainHandler.removeCallbacks(deferredRender)
         focusOverlay.dismiss(false)
         appSearchPages.clear()
-        currentUiState = state
+        launcherStateViewModel.publish(state)
         if (appCardSettingsSnapshot != state.preferences) {
             appCardDisplayCache.clear()
             notificationCardDisplayCache.clear()
@@ -388,12 +403,13 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     }
 
     private fun refreshStateAsync() {
+        launcherStateViewModel.markLoading()
         val generation = stateGeneration.incrementAndGet()
         val notifications = stateExecutor.submit<List<AppChapter>> {
             notificationRepository.buildNotificationChapters()
         }
         val apps = stateExecutor.submit<List<AppEntry>> {
-            notificationRepository.loadAppEntries().filterNot(settings::isAppHidden)
+            loadAppEntries()
         }
         val calendar = stateExecutor.submit<Pair<Boolean, List<CalendarEvent>>> {
             val hasPermission = calendarRepository.hasCalendarPermission()
@@ -421,18 +437,65 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     }
 
     private fun refreshLaunchableAppsInBackground() {
-        notificationRepository.refreshLaunchableApps(stateExecutor) {
+        val previousApps = appLibraryStore.state().apps
+        val scheduled = notificationRepository.refreshLaunchableApps(stateExecutor) { result ->
             mainHandler.post {
-                appCardDisplayCache.clear()
-                notificationCardDisplayCache.clear()
-                requestRender()
+                if (result.changed) {
+                    appCardDisplayCache.clear()
+                    notificationCardDisplayCache.clear()
+                }
+                scheduleAppLibraryEvents(
+                    appLibraryEventPlanner.plan(
+                        currentApps = previousApps,
+                        nextApps = result.apps.filterNot(settings::isAppHidden),
+                        batchSize = APP_LIBRARY_EVENT_BATCH_SIZE,
+                    ),
+                )
             }
+        }
+        if (scheduled) {
+            applyAppLibraryEvent(AppLibraryRenderEvent.LoadingStarted)
+        }
+    }
+
+    private fun scheduleAppLibraryEvents(events: List<AppLibraryRenderEvent>) {
+        val generation = ++appLibraryEventGeneration
+        scheduleNextAppLibraryEvent(events, generation, 0)
+    }
+
+    private fun scheduleNextAppLibraryEvent(
+        events: List<AppLibraryRenderEvent>,
+        generation: Int,
+        index: Int,
+    ) {
+        if (index >= events.size) return
+        mainHandler.postDelayed({
+            if (generation != appLibraryEventGeneration) return@postDelayed
+            applyAppLibraryEvent(events[index])
+            scheduleNextAppLibraryEvent(events, generation, index + 1)
+        }, if (index == 0) 0L else APP_LIBRARY_EVENT_STEP_DELAY_MS)
+    }
+
+    private fun applyAppLibraryEvent(event: AppLibraryRenderEvent) {
+        val state = appLibraryStore.dispatch(event)
+        refreshVisibleAppLibraryPages(state)
+    }
+
+    private fun refreshVisibleAppLibraryPages(state: AppLibraryRenderState) {
+        appSearchPages.forEach { pageState ->
+            val model = appLibraryPageModelFactory.create(
+                page = pageState.pageModel,
+                appEntries = state.apps,
+                query = appSearchQuery(pageState.scope),
+                loading = state.loading,
+            )
+            refreshAppStack(pageState.stackHost, model, pageState.cardCache)
         }
     }
 
     private fun buildUiState(): LauncherRenderModel {
         val notificationChapters = notificationRepository.buildNotificationChapters()
-        val appEntries = notificationRepository.loadAppEntries().filterNot(settings::isAppHidden)
+        val appEntries = loadAppEntries()
         val pinnedKeys = settings.pinnedPackages()
         val hasCalendarPermission = calendarRepository.hasCalendarPermission()
         return renderModelFactory.create(
@@ -536,7 +599,12 @@ class CalmLauncherRunner(private val activity: MainActivity) {
 
     private fun createAppLibraryPage(pageModel: ChapterPage, appEntries: List<AppEntry>): LinearLayout {
         val scope = pageModel.appScope ?: AppLibraryScope.ALL
-        val model = appLibraryPageModelFactory.create(pageModel, appEntries, appSearchQuery(scope))
+        val model = appLibraryPageModelFactory.create(
+            page = pageModel,
+            appEntries = appEntries,
+            query = appSearchQuery(scope),
+            loading = appLibraryStore.state().loading,
+        )
         val page = createBarePagePanel(activity.dp(20))
         val header = LinearLayout(activity).apply {
             tag = CalmAnimationTags.CHROME
@@ -564,12 +632,12 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         page.addView(stackHost, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
         val cardCache = LinkedHashMap<String, TextView>()
-        val searchControl = appSearchBox(page, header, stackHost, pageModel, appEntries, cardCache)
+        val searchControl = appSearchBox(page, header, stackHost, pageModel, cardCache)
         page.addView(animatedChrome(searchControl.root), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = activity.dp(12)
         })
         val search = searchControl.search
-        appSearchPages.add(AppSearchPageState(pageModel.key, scope, page, header, search, cardCache))
+        appSearchPages.add(AppSearchPageState(pageModel.key, scope, pageModel, page, header, stackHost, search, cardCache))
         installAppSearchKeyboardAnimator(page, header, search)
         refreshAppStack(stackHost, model, cardCache)
         return page
@@ -580,7 +648,6 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         header: LinearLayout,
         stackHost: FrameLayout,
         pageModel: ChapterPage,
-        appEntries: List<AppEntry>,
         cardCache: MutableMap<String, TextView>,
     ): AppSearchControl {
         val scope = pageModel.appScope ?: AppLibraryScope.ALL
@@ -631,7 +698,16 @@ class CalmLauncherRunner(private val activity: MainActivity) {
                     clearButton.visibility = if (query.isBlank()) View.GONE else View.VISIBLE
                     pendingSearchRefresh?.let(mainHandler::removeCallbacks)
                     pendingSearchRefresh = Runnable {
-                        refreshAppStack(stackHost, appLibraryPageModelFactory.create(pageModel, appEntries, query), cardCache)
+                        refreshAppStack(
+                            stackHost,
+                            appLibraryPageModelFactory.create(
+                                page = pageModel,
+                                appEntries = appLibraryStore.state().apps,
+                                query = query,
+                                loading = appLibraryStore.state().loading,
+                            ),
+                            cardCache,
+                        )
                     }.also { refresh ->
                         mainHandler.postDelayed(refresh, APP_SEARCH_REFRESH_DELAY_MS)
                     }
@@ -930,8 +1006,11 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     }
 
     private fun loadAppEntries(): List<AppEntry> {
-        return notificationRepository.loadAppEntries()
+        val apps = notificationRepository.loadAppEntries()
             .filterNot(settings::isAppHidden)
+        appLibraryEventGeneration++
+        appLibraryStore.replace(apps)
+        return apps
     }
 
     private fun loadPinnedApps(): List<AppEntry> {
@@ -1733,6 +1812,8 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         const val PAGE_PREWARM_INITIAL_DELAY_MS = 140L
         const val PAGE_PREWARM_STEP_DELAY_MS = 32L
         const val APP_SEARCH_REFRESH_DELAY_MS = 90L
+        const val APP_LIBRARY_EVENT_BATCH_SIZE = 24
+        const val APP_LIBRARY_EVENT_STEP_DELAY_MS = 24L
         const val APP_STACK_DEFERRED_BATCH_SIZE = 16
         const val APP_STACK_DEFERRED_INITIAL_DELAY_MS = 48L
         const val APP_STACK_DEFERRED_BATCH_DELAY_MS = 32L

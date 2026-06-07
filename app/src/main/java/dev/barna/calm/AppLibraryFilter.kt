@@ -30,6 +30,14 @@ class AppLibraryFilter {
         }
     }
 
+    fun loadingMessage(scope: AppLibraryScope): String {
+        return when (scope) {
+            AppLibraryScope.ALL -> "Loading apps..."
+            AppLibraryScope.PERSONAL -> "Loading personal apps..."
+            AppLibraryScope.WORK -> "Loading work apps..."
+        }
+    }
+
     fun subtitle(scope: AppLibraryScope): String? {
         return when (scope) {
             AppLibraryScope.ALL -> "Search, launch, and pin apps into the launcher spine."

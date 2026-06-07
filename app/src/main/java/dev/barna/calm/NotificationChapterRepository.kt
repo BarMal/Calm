@@ -100,9 +100,13 @@ class NotificationChapterRepository(
         return launchableAppsCache.load()
     }
 
-    fun refreshLaunchableApps(executor: Executor, onChanged: () -> Unit) {
-        if (!launchableAppsCache.shouldRefreshPersistedSnapshot()) return
-        launchableAppsCache.refreshAsync(executor, onChanged)
+    fun refreshLaunchableApps(
+        executor: Executor,
+        onRefreshed: (AppLibraryRefreshResult) -> Unit,
+    ): Boolean {
+        if (!launchableAppsCache.shouldRefreshPersistedSnapshot()) return false
+        launchableAppsCache.refreshAsync(executor, onRefreshed)
+        return true
     }
 
     private fun loadFreshLaunchableApps(): List<AppEntry> {

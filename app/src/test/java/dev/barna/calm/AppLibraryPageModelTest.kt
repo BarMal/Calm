@@ -52,6 +52,17 @@ class AppLibraryPageModelTest {
         assertEquals("No work apps are available.", model.emptyMessage)
     }
 
+    @Test
+    fun loadingEmptyPageUsesLoadingMessageInsteadOfEmptyMessage() {
+        val page = ChapterPage.appLibrary(CalmTheme.APP_LIBRARY_KEY)
+
+        val model = factory.create(page, emptyList(), "", loading = true)
+
+        assertEquals(emptyList<AppEntry>(), model.apps)
+        assertEquals("Loading apps...", model.emptyMessage)
+        assertEquals(true, model.loading)
+    }
+
     private fun app(
         packageName: String,
         label: String,

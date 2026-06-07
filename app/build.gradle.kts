@@ -71,6 +71,8 @@ kotlin {
 }
 
 dependencies {
+    implementation("androidx.activity:activity-ktx:1.13.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0")
     implementation("androidx.viewpager2:viewpager2:1.1.0")
 
     testImplementation("junit:junit:4.13.2")

@@ -4,8 +4,11 @@ import android.graphics.Bitmap
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 import java.util.concurrent.Executor
 
+@RunWith(RobolectricTestRunner::class)
 class NotificationCardDisplayCacheTest {
     private val resolver = FakeNotificationCardAssetResolver()
     private val cache = NotificationCardDisplayCache(resolver)
@@ -77,6 +80,18 @@ class NotificationCardDisplayCacheTest {
     }
 
     @Test
+    fun cachedChapterMaskedIconDoesNotResolveIconOnUiPath() {
+        assertEquals(null, cache.cachedChapterMaskedIcon(chapter))
+        assertEquals(0, resolver.maskedIconCalls)
+
+        val resolved = cache.chapterMaskedIcon(chapter)
+        val cached = cache.cachedChapterMaskedIcon(chapter)
+
+        assertSame(resolved, cached)
+        assertEquals(1, resolver.maskedIconCalls)
+    }
+
+    @Test
     fun duplicatePreloadRequestsOnlyScheduleOneJobWhilePending() {
         val executor = QueuedExecutor()
         val chapterWithNotifications = AppChapter(
@@ -118,13 +133,15 @@ class NotificationCardDisplayCacheTest {
 
 private class FakeNotificationCardAssetResolver : NotificationCardAssetResolver {
     var appIconCalls = 0
+    var maskedIconCalls = 0
     override fun resolveAppIconBitmap(chapter: AppChapter): Bitmap? {
         appIconCalls++
         return null
     }
 
     override fun resolveMaskedAppIconBitmap(chapter: AppChapter): Bitmap? {
-        return null
+        maskedIconCalls++
+        return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
     }
 }
 

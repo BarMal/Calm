@@ -17,6 +17,16 @@ class ChapterPagePrewarmPlannerTest {
     }
 
     @Test
+    fun limitsPrewarmCountWhenRequested() {
+        assertEquals(listOf(2, 4, 1), planner.positions(pageCount = 7, initialPage = 3, maxPositions = 3))
+    }
+
+    @Test
+    fun ignoresNonPositivePrewarmLimit() {
+        assertEquals(emptyList<Int>(), planner.positions(pageCount = 7, initialPage = 3, maxPositions = 0))
+    }
+
+    @Test
     fun clampsInvalidInitialPage() {
         assertEquals(listOf(1, 0), planner.positions(pageCount = 3, initialPage = 8))
         assertEquals(listOf(1, 2), planner.positions(pageCount = 3, initialPage = -2))

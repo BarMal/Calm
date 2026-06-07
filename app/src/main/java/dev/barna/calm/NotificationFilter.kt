@@ -5,6 +5,7 @@ data class NotificationFilter(
     val packageName: String,
     val value: String,
     val sourceKey: String = AppIdentity.packageOnly(packageName).notificationSourceKey,
+    val matchMode: MatchMode = MatchMode.EXACT,
 ) {
     enum class Kind {
         APP,
@@ -13,32 +14,55 @@ data class NotificationFilter(
         EMPTY_CONTENT,
     }
 
+    enum class MatchMode {
+        EXACT,
+        CONTAINS,
+        WILDCARD,
+    }
+
     fun matches(notification: CalmNotificationListenerService.CalmNotification): Boolean {
         if (notification.packageName != packageName) return false
         if (sourceKey != AppIdentity.packageOnly(packageName).notificationSourceKey && notification.sourceKey != sourceKey) return false
         return when (kind) {
             Kind.APP -> true
-            Kind.TITLE -> normalized(notification.title) == normalized(value)
-            Kind.BODY -> normalized(notification.bodyText()) == normalized(value)
+            Kind.TITLE -> textMatches(notification.title)
+            Kind.BODY -> textMatches(notification.bodyText())
             Kind.EMPTY_CONTENT -> normalized(notification.title).isEmpty() && normalized(notification.bodyText()).isEmpty()
         }
     }
 
     fun encode(): String {
-        return listOf(kind.name, packageName, sourceKey, value).joinToString(SEPARATOR)
+        if (matchMode == MatchMode.EXACT) {
+            return listOf(kind.name, packageName, sourceKey, value).joinToString(SEPARATOR)
+        }
+        return listOf(kind.name, packageName, sourceKey, matchMode.name, value).joinToString(SEPARATOR)
+    }
+
+    private fun textMatches(candidate: String): Boolean {
+        val normalizedCandidate = normalized(candidate)
+        val normalizedValue = normalized(value)
+        return when (matchMode) {
+            MatchMode.EXACT -> normalizedCandidate == normalizedValue
+            MatchMode.CONTAINS -> normalizedValue.isNotEmpty() && normalizedCandidate.contains(normalizedValue)
+            MatchMode.WILDCARD -> wildcardRegex(normalizedValue).matches(normalizedCandidate)
+        }
     }
 
     companion object {
         private const val SEPARATOR = "\u001f"
+        private const val ANY_PLACEHOLDER = "{?}"
 
         fun decode(encoded: String): NotificationFilter? {
-            val parts = encoded.split(SEPARATOR, limit = 4)
-            if (parts.size != 3 && parts.size != 4) return null
+            val parts = encoded.split(SEPARATOR, limit = 5)
+            if (parts.size !in 3..5) return null
             val kind = runCatching { Kind.valueOf(parts[0]) }.getOrNull() ?: return null
-            return if (parts.size == 3) {
-                NotificationFilter(kind, parts[1], parts[2])
-            } else {
-                NotificationFilter(kind, parts[1], parts[3], parts[2])
+            return when (parts.size) {
+                3 -> NotificationFilter(kind, parts[1], parts[2])
+                4 -> NotificationFilter(kind, parts[1], parts[3], parts[2])
+                else -> {
+                    val matchMode = runCatching { MatchMode.valueOf(parts[3]) }.getOrNull() ?: return null
+                    NotificationFilter(kind, parts[1], parts[4], parts[2], matchMode)
+                }
             }
         }
 
@@ -58,6 +82,22 @@ data class NotificationFilter(
             return NotificationFilter(Kind.BODY, packageName, body, sourceKey)
         }
 
+        fun titleContains(sourceKey: String, packageName: String, title: String): NotificationFilter {
+            return NotificationFilter(Kind.TITLE, packageName, title, sourceKey, MatchMode.CONTAINS)
+        }
+
+        fun bodyContains(sourceKey: String, packageName: String, body: String): NotificationFilter {
+            return NotificationFilter(Kind.BODY, packageName, body, sourceKey, MatchMode.CONTAINS)
+        }
+
+        fun titleWildcard(sourceKey: String, packageName: String, title: String): NotificationFilter {
+            return NotificationFilter(Kind.TITLE, packageName, title, sourceKey, MatchMode.WILDCARD)
+        }
+
+        fun bodyWildcard(sourceKey: String, packageName: String, body: String): NotificationFilter {
+            return NotificationFilter(Kind.BODY, packageName, body, sourceKey, MatchMode.WILDCARD)
+        }
+
         fun emptyContent(sourceKey: String, packageName: String): NotificationFilter {
             return NotificationFilter(Kind.EMPTY_CONTENT, packageName, "", sourceKey)
         }
@@ -71,7 +111,32 @@ data class NotificationFilter(
         }
 
         private fun normalized(value: String): String {
-            return value.trim().lowercase()
+            return value.trim().replace(Regex("\\s+"), " ").lowercase()
+        }
+
+        private fun wildcardRegex(pattern: String): Regex {
+            val regex = buildString {
+                append("^")
+                var index = 0
+                while (index < pattern.length) {
+                    when {
+                        pattern.startsWith(ANY_PLACEHOLDER, index) -> {
+                            append(".*")
+                            index += ANY_PLACEHOLDER.length
+                        }
+                        pattern[index] == '*' -> {
+                            append(".*")
+                            index += 1
+                        }
+                        else -> {
+                            append(Regex.escape(pattern[index].toString()))
+                            index += 1
+                        }
+                    }
+                }
+                append("$")
+            }
+            return Regex(regex)
         }
     }
 }

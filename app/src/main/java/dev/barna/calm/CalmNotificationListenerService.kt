@@ -4,6 +4,8 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.graphics.Bitmap
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.UserManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -11,6 +13,8 @@ import java.util.concurrent.CopyOnWriteArraySet
 
 class CalmNotificationListenerService : NotificationListenerService() {
     private val artworkExtractor by lazy { NotificationArtworkExtractor(this) }
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val refreshRunnable = Runnable { refreshSnapshot() }
 
     data class CalmNotification(
         val key: String,
@@ -44,11 +48,11 @@ class CalmNotificationListenerService : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        refreshSnapshot()
+        scheduleSnapshotRefresh()
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        refreshSnapshot()
+        scheduleSnapshotRefresh()
     }
 
     override fun onDestroy() {
@@ -58,8 +62,14 @@ class CalmNotificationListenerService : NotificationListenerService() {
                 currentNotifications = emptyList()
             }
         }
+        mainHandler.removeCallbacks(refreshRunnable)
         notifyListeners()
         super.onDestroy()
+    }
+
+    private fun scheduleSnapshotRefresh() {
+        mainHandler.removeCallbacks(refreshRunnable)
+        mainHandler.postDelayed(refreshRunnable, SNAPSHOT_REFRESH_DELAY_MS)
     }
 
     private fun refreshSnapshot() {
@@ -177,6 +187,7 @@ class CalmNotificationListenerService : NotificationListenerService() {
         private val listeners = CopyOnWriteArraySet<Runnable>()
         private var currentService: CalmNotificationListenerService? = null
         private var currentNotifications: List<CalmNotification> = emptyList()
+        private const val SNAPSHOT_REFRESH_DELAY_MS = 80L
 
         @JvmStatic
         fun addListener(listener: Runnable) {

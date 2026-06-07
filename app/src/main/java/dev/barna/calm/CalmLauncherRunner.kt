@@ -86,6 +86,12 @@ class CalmLauncherRunner(
             pinApp = ::pinApp,
             unpinApp = ::unpinApp,
             openAppInfo = { app -> openAppInfo(app.packageName, app.userHandle, app.componentName) },
+            appShortcuts = { chapter -> notificationRepository.getAppShortcuts(chapter) },
+            launchShortcut = { shortcut ->
+                if (!notificationRepository.launchShortcut(shortcut)) {
+                    Toast.makeText(activity, "Shortcut unavailable", Toast.LENGTH_SHORT).show()
+                }
+            },
         ),
     )
     private val cardStackController = CardStackController(activity, mainHandler, ::performCardScrollHaptic)
@@ -310,12 +316,18 @@ class CalmLauncherRunner(
         }
         var userSwipeInProgress = false
         var lastAnimatedPageKey: String? = null
+        var previousPageIndex = initialPage
         pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageScrolled(position: Int, positionOffset: Float, positionOffsetPixels: Int) {
                 centerCarouselPosition(position, positionOffset)
             }
 
             override fun onPageSelected(position: Int) {
+                val prev = previousPageIndex
+                previousPageIndex = position
+                if (userSwipeInProgress && prev != position) {
+                    entryAnimator.animatePageExit(pager, prev)
+                }
                 selectPage(pages[position].key)
                 if (suppressedPageEntryKey != selectedPackageName) {
                     suppressedPageEntryKey = null

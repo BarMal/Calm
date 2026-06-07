@@ -13,6 +13,8 @@ data class LauncherContextActionCallbacks(
     val pinApp: (AppEntry) -> Unit,
     val unpinApp: (AppEntry) -> Unit,
     val openAppInfo: (AppEntry) -> Unit,
+    val appShortcuts: (AppChapter) -> List<AppShortcutEntry>,
+    val launchShortcut: (AppShortcutEntry) -> Unit,
 )
 
 class LauncherContextActionFactory(
@@ -42,6 +44,9 @@ class LauncherContextActionFactory(
         item.allActions().forEach { action ->
             actions.add(ContextAction(action.label, Runnable { callbacks.performNotificationAction(action) }))
         }
+        callbacks.appShortcuts(chapter).take(MAX_SHORTCUTS).forEach { shortcut ->
+            actions.add(ContextAction(shortcut.label, Runnable { callbacks.launchShortcut(shortcut) }))
+        }
         return actions
     }
 
@@ -57,6 +62,10 @@ class LauncherContextActionFactory(
             ),
             ContextAction("Settings", Runnable { callbacks.openSettings() }),
         )
+    }
+
+    private companion object {
+        const val MAX_SHORTCUTS = 3
     }
 
     fun appActions(

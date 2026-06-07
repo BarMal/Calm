@@ -427,6 +427,33 @@ class NotificationChapterRepository(
         return CalmColor.dominant(icon, CalmTheme.ACCENT)
     }
 
+    fun getAppShortcuts(chapter: AppChapter): List<AppShortcutEntry> {
+        val launcher = launcherApps ?: return emptyList()
+        val userHandle = chapter.userHandle ?: return emptyList()
+        val query = LauncherApps.ShortcutQuery().apply {
+            setQueryFlags(
+                LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
+                LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST,
+            )
+            setPackage(chapter.packageName)
+        }
+        return runCatching { launcher.getShortcuts(query, userHandle).orEmpty() }
+            .getOrDefault(emptyList())
+            .mapNotNull { info ->
+                val label = info.shortLabel?.toString()?.takeIf { it.isNotBlank() }
+                    ?: info.longLabel?.toString()?.takeIf { it.isNotBlank() }
+                    ?: return@mapNotNull null
+                AppShortcutEntry(label, info.id, chapter.packageName, userHandle)
+            }
+    }
+
+    fun launchShortcut(shortcut: AppShortcutEntry): Boolean {
+        val launcher = launcherApps ?: return false
+        return runCatching {
+            launcher.startShortcut(shortcut.packageName, shortcut.id, null, null, shortcut.userHandle)
+        }.isSuccess
+    }
+
     private fun openPackageFallback(packageName: String): Boolean {
         val intent = activity.packageManager.getLaunchIntentForPackage(packageName) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

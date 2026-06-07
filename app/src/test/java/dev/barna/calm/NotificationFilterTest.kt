@@ -23,6 +23,27 @@ class NotificationFilterTest {
     }
 
     @Test
+    fun containsFilterMatchesTitleSubstring() {
+        val filter = NotificationFilter.titleContains(AppIdentity.packageOnly("pkg").notificationSourceKey, "pkg", "WhatsApp messages")
+
+        assertTrue(filter.matches(notification(packageName = "pkg", title = "6 WhatsApp messages from 2 chats")))
+        assertFalse(filter.matches(notification(packageName = "pkg", title = "Signal messages")))
+    }
+
+    @Test
+    fun wildcardFilterMatchesIgnoredTitleSegments() {
+        val filter = NotificationFilter.titleWildcard(
+            AppIdentity.packageOnly("pkg").notificationSourceKey,
+            "pkg",
+            "{?} WhatsApp messages from {?} chats",
+        )
+
+        assertTrue(filter.matches(notification(packageName = "pkg", title = "6 WhatsApp messages from 2 chats")))
+        assertTrue(filter.matches(notification(packageName = "pkg", title = "12 WhatsApp messages from 4 chats")))
+        assertFalse(filter.matches(notification(packageName = "pkg", title = "12 Signal messages from 4 chats")))
+    }
+
+    @Test
     fun emptyContentFilterMatchesOnlyBlankTitleAndBlankBody() {
         val filter = NotificationFilter.emptyContent(AppIdentity.notificationKey("pkg", 10), "pkg")
 
@@ -37,6 +58,29 @@ class NotificationFilterTest {
         val filter = NotificationFilter.body("pkg", "Body text")
 
         assertEquals(filter, NotificationFilter.decode(filter.encode()))
+    }
+
+    @Test
+    fun flexibleFilterRoundTripsThroughEncodedPreferenceValue() {
+        val filter = NotificationFilter.bodyWildcard(
+            AppIdentity.packageOnly("pkg").notificationSourceKey,
+            "pkg",
+            "Order {?} is ready",
+        )
+
+        assertEquals(filter, NotificationFilter.decode(filter.encode()))
+    }
+
+    @Test
+    fun digitRunsCanBeGeneralizedIntoWildcardPattern() {
+        assertEquals(
+            "{?} WhatsApp messages from {?} chats",
+            NotificationFilterPattern.generalizeNumbers("6 WhatsApp messages from 2 chats"),
+        )
+        assertEquals(
+            "Invoice {?} / {?}",
+            NotificationFilterPattern.generalizeNumbers("Invoice 12345 / 99"),
+        )
     }
 
     @Test

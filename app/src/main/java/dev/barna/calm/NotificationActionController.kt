@@ -86,6 +86,13 @@ class NotificationActionController(
             options.add("Hide all notifications with title\n$title" to {
                 addNotificationFilter(NotificationFilter.title(chapter.identityKey, chapter.packageName, title), "Hidden matching title")
             })
+            addFlexibleNotificationFilterOptions(
+                options = options,
+                label = "title",
+                text = title,
+                containsFilter = { NotificationFilter.titleContains(chapter.identityKey, chapter.packageName, it) },
+                wildcardFilter = { NotificationFilter.titleWildcard(chapter.identityKey, chapter.packageName, it) },
+            )
         } else {
             options.add("Hide all notifications with no title" to {
                 addNotificationFilter(NotificationFilter.title(chapter.identityKey, chapter.packageName, ""), "Hidden notifications with no title")
@@ -96,6 +103,13 @@ class NotificationActionController(
             options.add("Hide all notifications with body\n${body.take(80)}" to {
                 addNotificationFilter(NotificationFilter.body(chapter.identityKey, chapter.packageName, body), "Hidden matching body")
             })
+            addFlexibleNotificationFilterOptions(
+                options = options,
+                label = "body",
+                text = body,
+                containsFilter = { NotificationFilter.bodyContains(chapter.identityKey, chapter.packageName, it) },
+                wildcardFilter = { NotificationFilter.bodyWildcard(chapter.identityKey, chapter.packageName, it) },
+            )
         } else {
             options.add("Hide all notifications with no body" to {
                 addNotificationFilter(NotificationFilter.body(chapter.identityKey, chapter.packageName, ""), "Hidden notifications with no body")
@@ -163,6 +177,23 @@ class NotificationActionController(
         } catch (_: PendingIntent.CanceledException) {
             Toast.makeText(activity, "Action expired", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun addFlexibleNotificationFilterOptions(
+        options: MutableList<Pair<String, () -> Unit>>,
+        label: String,
+        text: String,
+        containsFilter: (String) -> NotificationFilter,
+        wildcardFilter: (String) -> NotificationFilter,
+    ) {
+        val preview = text.take(80)
+        options.add("Hide notifications containing $label\n$preview" to {
+            addNotificationFilter(containsFilter(text), "Hidden notifications containing $label")
+        })
+        val pattern = NotificationFilterPattern.generalizeNumbers(text) ?: return
+        options.add("Hide similar notifications with $label\n${pattern.take(80)}" to {
+            addNotificationFilter(wildcardFilter(pattern), "Hidden similar notifications")
+        })
     }
 
     private fun addNotificationFilter(filter: NotificationFilter, message: String) {

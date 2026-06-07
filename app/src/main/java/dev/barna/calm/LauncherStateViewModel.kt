@@ -25,7 +25,14 @@ class LauncherStateViewModel : ViewModel() {
                 renderModel = renderModel,
                 loading = false,
                 generation = state.generation + 1,
+                selectedPageKey = state.selectedPageKey,
             )
+        }
+    }
+
+    fun selectPage(pageKey: String) {
+        _uiState.update { state ->
+            state.copy(selectedPageKey = pageKey)
         }
     }
 }
@@ -34,4 +41,5 @@ data class LauncherUiState(
     val renderModel: LauncherRenderModel? = null,
     val loading: Boolean = false,
     val generation: Int = 0,
+    val selectedPageKey: String? = null,
 )

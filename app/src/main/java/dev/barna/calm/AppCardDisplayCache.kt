@@ -42,6 +42,20 @@ class AppCardDisplayCache(
         return cards.putIfAbsent(key, data) ?: data
     }
 
+    fun getCachedOrCreateLightweight(app: AppEntry, pinnedKeys: Set<String>): AppCardDisplayData {
+        val key = key(app, pinnedKeys)
+        cards[key]?.let { return it }
+        val model = modelFactory.create(app, pinnedKeys)
+        return AppCardDisplayData(
+            app = model.app,
+            text = model.text,
+            hueColor = model.hueColor,
+            isPinned = model.isPinned,
+            icon = null,
+            iconRenderKey = app.identityKey,
+        )
+    }
+
     fun clear() {
         cards.clear()
         pendingKeys.clear()
@@ -55,6 +69,7 @@ class AppCardDisplayCache(
             hueColor = model.hueColor,
             isPinned = model.isPinned,
             icon = notificationRepository.resolveAppIconBitmap(app),
+            iconRenderKey = app.identityKey,
         )
     }
 
@@ -88,4 +103,5 @@ data class AppCardDisplayData(
     val hueColor: Int,
     val isPinned: Boolean,
     val icon: Bitmap?,
+    val iconRenderKey: String,
 )

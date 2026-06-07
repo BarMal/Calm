@@ -69,10 +69,10 @@ class CalmLauncherRunner(
     private val appCardModelFactory = AppCardModelFactory(pinnedAppResolver = pinnedAppResolver)
     private val appCardDisplayCache = AppCardDisplayCache(notificationRepository, appCardModelFactory)
     private val notificationCardDisplayCache = NotificationCardDisplayCache(notificationRepository)
+    private val cardRenderAssetCache = CardRenderAssetCache()
     private val appLibraryPageModelFactory = AppLibraryPageModelFactory()
     private val appStackRenderPlanner = AppStackRenderPlanner()
     private val appLibraryStore = AppLibraryRenderStore()
-    private val appLibraryEventPlanner = AppLibraryEventPlanner()
     private val contextActionFactory = LauncherContextActionFactory(
         LauncherContextActionCallbacks(
             openNotification = ::openNotification,
@@ -156,6 +156,7 @@ class CalmLauncherRunner(
     private var selectedCarouselPosition = -1
     private val appSearchQueries = EnumMap<AppLibraryScope, String>(AppLibraryScope::class.java)
     private val appSearchPages = ArrayList<AppSearchPageState>()
+    private val sideIconCache = HashMap<Int, android.graphics.Bitmap?>()
 
     private data class AppSearchPageState(
         val key: String,
@@ -244,8 +245,6 @@ class CalmLauncherRunner(
         appSearchPages.clear()
         launcherStateViewModel.publish(state)
         if (appCardSettingsSnapshot != state.preferences) {
-            appCardDisplayCache.clear()
-            notificationCardDisplayCache.clear()
             appCardSettingsSnapshot = state.preferences
         }
         appCardDisplayCache.preload(state.appEntries, state.pinnedKeys, stateExecutor)
@@ -437,43 +436,20 @@ class CalmLauncherRunner(
     }
 
     private fun refreshLaunchableAppsInBackground() {
-        val previousApps = appLibraryStore.state().apps
         val scheduled = notificationRepository.refreshLaunchableApps(stateExecutor) { result ->
             mainHandler.post {
                 if (result.changed) {
                     appCardDisplayCache.clear()
                     notificationCardDisplayCache.clear()
                 }
-                scheduleAppLibraryEvents(
-                    appLibraryEventPlanner.plan(
-                        currentApps = previousApps,
-                        nextApps = result.apps.filterNot(settings::isAppHidden),
-                        batchSize = APP_LIBRARY_EVENT_BATCH_SIZE,
-                    ),
-                )
+                appLibraryEventGeneration++
+                val state = appLibraryStore.replace(result.apps.filterNot(settings::isAppHidden))
+                refreshVisibleAppLibraryPages(state)
             }
         }
         if (scheduled) {
             applyAppLibraryEvent(AppLibraryRenderEvent.LoadingStarted)
         }
-    }
-
-    private fun scheduleAppLibraryEvents(events: List<AppLibraryRenderEvent>) {
-        val generation = ++appLibraryEventGeneration
-        scheduleNextAppLibraryEvent(events, generation, 0)
-    }
-
-    private fun scheduleNextAppLibraryEvent(
-        events: List<AppLibraryRenderEvent>,
-        generation: Int,
-        index: Int,
-    ) {
-        if (index >= events.size) return
-        mainHandler.postDelayed({
-            if (generation != appLibraryEventGeneration) return@postDelayed
-            applyAppLibraryEvent(events[index])
-            scheduleNextAppLibraryEvent(events, generation, index + 1)
-        }, if (index == 0) 0L else APP_LIBRARY_EVENT_STEP_DELAY_MS)
     }
 
     private fun applyAppLibraryEvent(event: AppLibraryRenderEvent) {
@@ -494,8 +470,8 @@ class CalmLauncherRunner(
     }
 
     private fun buildUiState(): LauncherRenderModel {
-        val notificationChapters = notificationRepository.buildNotificationChapters()
-        val appEntries = loadAppEntries()
+        val appEntries = loadCachedAppEntries()
+        val notificationChapters = notificationRepository.buildNotificationChapters(appEntries)
         val pinnedKeys = settings.pinnedPackages()
         val hasCalendarPermission = calendarRepository.hasCalendarPermission()
         return renderModelFactory.create(
@@ -847,20 +823,31 @@ class CalmLauncherRunner(
         cardCache: MutableMap<String, TextView>?,
         model: AppLibraryPageModel,
     ) {
-        val batches = appStackRenderPlanner.batches(deferredApps, APP_STACK_DEFERRED_BATCH_SIZE)
-        if (batches.isEmpty()) {
-            appQuickScrollController.attach(stackHost, stack, model, activePreferences.cardStackTuning)
-            return
+        var nextDeferredIndex = 0
+        fun appendNextBatch(): Boolean {
+            if (nextDeferredIndex >= deferredApps.size) return false
+            val end = (nextDeferredIndex + APP_STACK_DEFERRED_BATCH_SIZE).coerceAtMost(deferredApps.size)
+            val batch = deferredApps.subList(nextDeferredIndex, end)
+            nextDeferredIndex = end
+            val newCards = batch.map { app -> appCardFromCache(app, cardCache) }
+            cardStackController.appendCards(stack, renderedCards, newCards, cardHeight(), cardStep(), activePreferences.cardStackTuning)
+            return true
         }
-        batches.forEachIndexed { index, batch ->
+        fun ensureRendered(cardIndex: Int) {
+            while (renderedCards.size <= cardIndex && appendNextBatch()) {
+            }
+        }
+        fun scheduleNextBatch(delayMs: Long) {
             mainHandler.postDelayed({
                 if (stack.parent == null || !stackHost.isAttachedToWindow) return@postDelayed
-                val newCards = batch.map { app -> appCardFromCache(app, cardCache) }
-                cardStackController.appendCards(stack, renderedCards, newCards, cardHeight(), cardStep(), activePreferences.cardStackTuning)
-                if (index == batches.lastIndex) {
-                    appQuickScrollController.attach(stackHost, stack, model, activePreferences.cardStackTuning)
+                if (appendNextBatch()) {
+                    scheduleNextBatch(APP_STACK_DEFERRED_BATCH_DELAY_MS)
                 }
-            }, APP_STACK_DEFERRED_INITIAL_DELAY_MS + (index * APP_STACK_DEFERRED_BATCH_DELAY_MS))
+            }, delayMs)
+        }
+        appQuickScrollController.attach(stackHost, stack, model, activePreferences.cardStackTuning, ::ensureRendered)
+        if (deferredApps.isNotEmpty()) {
+            scheduleNextBatch(APP_STACK_DEFERRED_INITIAL_DELAY_MS)
         }
     }
 
@@ -882,7 +869,13 @@ class CalmLauncherRunner(
     }
 
     private fun appSearchEmptyStack(message: String): View {
-        val card = stackCard("Search\n$message", CalmTheme.ACCENT, true, cardSideIcon(R.drawable.ic_search_card)).apply {
+        val card = stackCard(
+            "Search\n$message",
+            CalmTheme.ACCENT,
+            true,
+            cardSideIcon(R.drawable.ic_search_card),
+            sideImageRenderKey = "res:${R.drawable.ic_search_card}",
+        ).apply {
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
             maxLines = 3
             isEnabled = false
@@ -907,9 +900,26 @@ class CalmLauncherRunner(
         tinted: Boolean,
         sideImage: android.graphics.Bitmap? = null,
         sideImageAlpha: Int = 64,
+        sideImageRenderKey: String? = null,
     ): TextView {
         return label(text, cardSpec.titleSp, CalmTheme.INK, Typeface.NORMAL).apply {
             val showImageAsBackground = sideImage != null && activePreferences.useCardIconBackgrounds
+            val iconRenderData = if (showImageAsBackground) {
+                cardRenderAssetCache.iconRenderData(
+                    imageKey = sideImageRenderKey ?: "bitmap-${sideImage.generationId}",
+                    image = sideImage,
+                    style = CardRenderStyleKey(
+                        radiusPx = cardCornerRadius(),
+                        hueColor = hueColor,
+                        tintCards = tinted,
+                        imageAlpha = sideImageAlpha,
+                        imageBlur = activePreferences.cardIconBlur,
+                        useIconBackgrounds = activePreferences.useCardIconBackgrounds,
+                    ),
+                )
+            } else {
+                null
+            }
             setLineSpacing(activity.dp(2).toFloat(), 1.0f)
             setPadding(
                 activity.dp(cardSpec.horizontalPaddingDp),
@@ -927,6 +937,7 @@ class CalmLauncherRunner(
                 sideImage.takeIf { showImageAsBackground },
                 sideImageAlpha,
                 activePreferences.cardIconBlur,
+                iconRenderData,
             )
             if (sideImage != null && !showImageAsBackground) {
                 compoundDrawablePadding = activity.dp(14)
@@ -945,8 +956,8 @@ class CalmLauncherRunner(
     }
 
     private fun appCard(app: AppEntry): TextView {
-        val data = appCardDisplayCache.getOrCreate(app, currentUiState?.pinnedKeys ?: settings.pinnedPackages())
-        return stackCard(data.text, data.hueColor, true, data.icon).apply {
+        val data = appCardDisplayCache.getCachedOrCreateLightweight(app, currentUiState?.pinnedKeys ?: settings.pinnedPackages())
+        return stackCard(data.text, data.hueColor, true, data.icon, sideImageRenderKey = data.iconRenderKey).apply {
             maxLines = 4
             setOnClickListener { openAppEntry(app) }
             setOnLongClickListener {
@@ -1007,6 +1018,14 @@ class CalmLauncherRunner(
 
     private fun loadAppEntries(): List<AppEntry> {
         val apps = notificationRepository.loadAppEntries()
+            .filterNot(settings::isAppHidden)
+        appLibraryEventGeneration++
+        appLibraryStore.replace(apps)
+        return apps
+    }
+
+    private fun loadCachedAppEntries(): List<AppEntry> {
+        val apps = notificationRepository.loadCachedAppEntries()
             .filterNot(settings::isAppHidden)
         appLibraryEventGeneration++
         appLibraryStore.replace(apps)
@@ -1196,12 +1215,28 @@ class CalmLauncherRunner(
         val cards = mutableListOf<TextView>()
         if (state.hasCalendarPermission) {
             if (state.calendarEvents.isEmpty()) {
-                cards.add(stackCard("Upcoming calendar\nNo upcoming calendar events found.", CalmTheme.ACCENT, true, cardSideIcon(R.drawable.ic_calendar_card)))
+                cards.add(
+                    stackCard(
+                        "Upcoming calendar\nNo upcoming calendar events found.",
+                        CalmTheme.ACCENT,
+                        true,
+                        cardSideIcon(R.drawable.ic_calendar_card),
+                        sideImageRenderKey = "res:${R.drawable.ic_calendar_card}",
+                    ),
+                )
             } else {
                 cards.addAll(state.calendarEvents.map(::calendarCard))
             }
         } else {
-            cards.add(stackCard("Calendar access\nCalendar access is needed before Calm can index upcoming events.\nManage it in Settings.", CalmTheme.ACCENT, true, cardSideIcon(R.drawable.ic_calendar_card)))
+            cards.add(
+                stackCard(
+                    "Calendar access\nCalendar access is needed before Calm can index upcoming events.\nManage it in Settings.",
+                    CalmTheme.ACCENT,
+                    true,
+                    cardSideIcon(R.drawable.ic_calendar_card),
+                    sideImageRenderKey = "res:${R.drawable.ic_calendar_card}",
+                ),
+            )
         }
         return cardStackController.cardStack(cards, cardHeight(), cardStep(), activePreferences.cardStackTuning)
     }
@@ -1404,7 +1439,13 @@ class CalmLauncherRunner(
         val title = event.title.takeUnless { it.isBlank() } ?: "Untitled event"
         val location = event.location.takeUnless { it.isBlank() }?.let { "\n$it" }.orEmpty()
         val today = calendarRepository.isToday(event.begin)
-        return stackCard("${if (today) "Today" else "Upcoming"}\n$title\n${calendarRepository.formatEventTime(event)}$location", if (today) CalmTheme.ACCENT else Color.rgb(122, 146, 178), true, cardSideIcon(R.drawable.ic_calendar_card)).apply {
+        return stackCard(
+            "${if (today) "Today" else "Upcoming"}\n$title\n${calendarRepository.formatEventTime(event)}$location",
+            if (today) CalmTheme.ACCENT else Color.rgb(122, 146, 178),
+            true,
+            cardSideIcon(R.drawable.ic_calendar_card),
+            sideImageRenderKey = "res:${R.drawable.ic_calendar_card}",
+        ).apply {
             setOnClickListener { openCalendarEvent(event) }
             setOnLongClickListener {
                 focusOverlay.show(
@@ -1422,7 +1463,14 @@ class CalmLauncherRunner(
         tintCards: Boolean,
     ): TextView {
         val data = notificationCardDisplayCache.getOrCreate(item, chapter, ::formatNotificationTime)
-        return stackCard(data.text, chapter.hueColor, tintCards, data.sideImage, data.sideImageAlpha).apply {
+        return stackCard(
+            data.text,
+            chapter.hueColor,
+            tintCards,
+            data.sideImage,
+            data.sideImageAlpha,
+            data.sideImageRenderKey,
+        ).apply {
             if (data.mediaBackgroundImage != null) {
                 background = drawables.notificationCardWithImage(
                     cardCornerRadius(),
@@ -1443,7 +1491,9 @@ class CalmLauncherRunner(
     }
 
     private fun cardSideIcon(drawableRes: Int): android.graphics.Bitmap? {
-        return activity.getDrawable(drawableRes)?.toBitmap()
+        return sideIconCache.getOrPut(drawableRes) {
+            activity.getDrawable(drawableRes)?.toBitmap()
+        }
     }
 
     private fun android.graphics.Bitmap.toSizedDrawable(size: Int): android.graphics.drawable.BitmapDrawable {
@@ -1803,6 +1853,8 @@ class CalmLauncherRunner(
         notificationRepository.invalidateAppCaches()
         appCardDisplayCache.clear()
         notificationCardDisplayCache.clear()
+        cardRenderAssetCache.clear()
+        sideIconCache.clear()
         appSearchQueries.clear()
         appSearchPages.clear()
         refreshStateAsync()
@@ -1812,8 +1864,6 @@ class CalmLauncherRunner(
         const val PAGE_PREWARM_INITIAL_DELAY_MS = 140L
         const val PAGE_PREWARM_STEP_DELAY_MS = 32L
         const val APP_SEARCH_REFRESH_DELAY_MS = 90L
-        const val APP_LIBRARY_EVENT_BATCH_SIZE = 24
-        const val APP_LIBRARY_EVENT_STEP_DELAY_MS = 24L
         const val APP_STACK_DEFERRED_BATCH_SIZE = 16
         const val APP_STACK_DEFERRED_INITIAL_DELAY_MS = 48L
         const val APP_STACK_DEFERRED_BATCH_DELAY_MS = 32L

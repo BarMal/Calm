@@ -67,10 +67,17 @@ class NotificationCardDisplayCache(
             artwork != null -> artwork.toRectangularCardArtwork()
             else -> assetResolver.resolveAppIconBitmap(chapter)
         }
+        val sideImageKey = when {
+            isMedia -> null
+            artwork != null -> artworkKey(item, artwork)
+            sideImage != null -> chapter.launcherIdentityKey
+            else -> null
+        }
         return NotificationCardDisplayData(
             text = "${item.title()}\n${item.previewText()}\n${timeFormatter(item.primary.postTime)}",
             fullText = item.fullText(),
             sideImage = sideImage,
+            sideImageRenderKey = sideImageKey,
             sideImageAlpha = if (artwork != null && !isMedia) 156 else 64,
             mediaBackgroundImage = artwork.takeIf { isMedia },
         )
@@ -113,12 +120,29 @@ class NotificationCardDisplayCache(
             }
         }
     }
+
+    private fun artworkKey(item: NotificationCardItem, artwork: Bitmap): String {
+        return buildString {
+            append("artwork")
+            item.notifications.forEach { notification ->
+                append('|')
+                append(notification.key)
+            }
+            append('|')
+            append(artwork.width)
+            append('x')
+            append(artwork.height)
+            append('|')
+            append(artwork.generationId)
+        }
+    }
 }
 
 data class NotificationCardDisplayData(
     val text: String,
     val fullText: String,
     val sideImage: Bitmap?,
+    val sideImageRenderKey: String?,
     val sideImageAlpha: Int,
     val mediaBackgroundImage: Bitmap?,
 )

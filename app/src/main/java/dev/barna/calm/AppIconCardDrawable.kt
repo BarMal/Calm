@@ -21,6 +21,7 @@ class AppIconCardDrawable(
     private val radius: Float,
     private val imageAlpha: Int = 64,
     private val blurStrength: Int = 0,
+    private val renderData: AppIconCardRenderData = AppIconCardRenderData.from(icon, imageAlpha),
 ) : Drawable() {
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
         alpha = imageAlpha.coerceIn(0, 255)
@@ -35,12 +36,12 @@ class AppIconCardDrawable(
     private val iconMatrix = Matrix()
     private val rect = RectF()
     private val clipPath = Path()
-    private val leftColor = sampleRegionColor(icon, 0f, 0.36f)
-    private val midColor = sampleRegionColor(icon, 0.32f, 0.72f)
-    private val edgeColor = sampleRegionColor(icon, 0.64f, 1f)
-    private val washEndAlpha = if (imageAlpha >= 120) 126 else 78
-    private val veilMidAlpha = if (imageAlpha >= 120) 14 else 26
-    private val veilEndAlpha = if (imageAlpha >= 120) 44 else 92
+    private val leftColor = renderData.leftColor
+    private val midColor = renderData.midColor
+    private val edgeColor = renderData.edgeColor
+    private val washEndAlpha = renderData.washEndAlpha
+    private val veilMidAlpha = renderData.veilMidAlpha
+    private val veilEndAlpha = renderData.veilEndAlpha
 
     override fun draw(canvas: Canvas) {
         base.bounds = bounds
@@ -187,25 +188,49 @@ class AppIconCardDrawable(
         veilPaint.shader = null
     }
 
-    private fun sampleRegionColor(bitmap: Bitmap, startRatio: Float, endRatio: Float): Int {
-        var red = 0L
-        var green = 0L
-        var blue = 0L
-        var weight = 0L
-        val startX = (bitmap.width * startRatio).toInt().coerceIn(0, bitmap.width - 1)
-        val endX = (bitmap.width * endRatio).toInt().coerceIn(startX + 1, bitmap.width)
-        for (x in startX until endX) {
-            for (y in 0 until bitmap.height) {
-                val pixel = bitmap.getPixel(x, y)
-                val alpha = Color.alpha(pixel)
-                if (alpha < 32) continue
-                red += Color.red(pixel).toLong() * alpha
-                green += Color.green(pixel).toLong() * alpha
-                blue += Color.blue(pixel).toLong() * alpha
-                weight += alpha.toLong()
-            }
+}
+
+data class AppIconCardRenderData(
+    val leftColor: Int,
+    val midColor: Int,
+    val edgeColor: Int,
+    val washEndAlpha: Int,
+    val veilMidAlpha: Int,
+    val veilEndAlpha: Int,
+) {
+    companion object {
+        fun from(icon: Bitmap, imageAlpha: Int): AppIconCardRenderData {
+            return AppIconCardRenderData(
+                leftColor = sampleRegionColor(icon, 0f, 0.36f),
+                midColor = sampleRegionColor(icon, 0.32f, 0.72f),
+                edgeColor = sampleRegionColor(icon, 0.64f, 1f),
+                washEndAlpha = if (imageAlpha >= 120) 126 else 78,
+                veilMidAlpha = if (imageAlpha >= 120) 14 else 26,
+                veilEndAlpha = if (imageAlpha >= 120) 44 else 92,
+            )
         }
-        if (weight == 0L) return Color.rgb(64, 60, 70)
-        return Color.rgb((red / weight).toInt(), (green / weight).toInt(), (blue / weight).toInt())
+
+        private fun sampleRegionColor(bitmap: Bitmap, startRatio: Float, endRatio: Float): Int {
+            if (bitmap.width <= 0 || bitmap.height <= 0) return Color.rgb(64, 60, 70)
+            var red = 0L
+            var green = 0L
+            var blue = 0L
+            var weight = 0L
+            val startX = (bitmap.width * startRatio).toInt().coerceIn(0, bitmap.width - 1)
+            val endX = (bitmap.width * endRatio).toInt().coerceIn(startX + 1, bitmap.width)
+            for (x in startX until endX) {
+                for (y in 0 until bitmap.height) {
+                    val pixel = bitmap.getPixel(x, y)
+                    val alpha = Color.alpha(pixel)
+                    if (alpha < 32) continue
+                    red += Color.red(pixel).toLong() * alpha
+                    green += Color.green(pixel).toLong() * alpha
+                    blue += Color.blue(pixel).toLong() * alpha
+                    weight += alpha.toLong()
+                }
+            }
+            if (weight == 0L) return Color.rgb(64, 60, 70)
+            return Color.rgb((red / weight).toInt(), (green / weight).toInt(), (blue / weight).toInt())
+        }
     }
 }

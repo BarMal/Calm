@@ -69,6 +69,7 @@ class CalmLauncherRunner(
     private val appCardModelFactory = AppCardModelFactory(pinnedAppResolver = pinnedAppResolver)
     private val appCardDisplayCache = AppCardDisplayCache(notificationRepository, appCardModelFactory)
     private val notificationCardDisplayCache = NotificationCardDisplayCache(notificationRepository)
+    private val cardRenderAssetCache = CardRenderAssetCache()
     private val appLibraryPageModelFactory = AppLibraryPageModelFactory()
     private val appStackRenderPlanner = AppStackRenderPlanner()
     private val appLibraryStore = AppLibraryRenderStore()
@@ -155,6 +156,7 @@ class CalmLauncherRunner(
     private var selectedCarouselPosition = -1
     private val appSearchQueries = EnumMap<AppLibraryScope, String>(AppLibraryScope::class.java)
     private val appSearchPages = ArrayList<AppSearchPageState>()
+    private val sideIconCache = HashMap<Int, android.graphics.Bitmap?>()
 
     private data class AppSearchPageState(
         val key: String,
@@ -243,8 +245,6 @@ class CalmLauncherRunner(
         appSearchPages.clear()
         launcherStateViewModel.publish(state)
         if (appCardSettingsSnapshot != state.preferences) {
-            appCardDisplayCache.clear()
-            notificationCardDisplayCache.clear()
             appCardSettingsSnapshot = state.preferences
         }
         appCardDisplayCache.preload(state.appEntries, state.pinnedKeys, stateExecutor)
@@ -869,7 +869,13 @@ class CalmLauncherRunner(
     }
 
     private fun appSearchEmptyStack(message: String): View {
-        val card = stackCard("Search\n$message", CalmTheme.ACCENT, true, cardSideIcon(R.drawable.ic_search_card)).apply {
+        val card = stackCard(
+            "Search\n$message",
+            CalmTheme.ACCENT,
+            true,
+            cardSideIcon(R.drawable.ic_search_card),
+            sideImageRenderKey = "res:${R.drawable.ic_search_card}",
+        ).apply {
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
             maxLines = 3
             isEnabled = false
@@ -894,9 +900,26 @@ class CalmLauncherRunner(
         tinted: Boolean,
         sideImage: android.graphics.Bitmap? = null,
         sideImageAlpha: Int = 64,
+        sideImageRenderKey: String? = null,
     ): TextView {
         return label(text, cardSpec.titleSp, CalmTheme.INK, Typeface.NORMAL).apply {
             val showImageAsBackground = sideImage != null && activePreferences.useCardIconBackgrounds
+            val iconRenderData = if (showImageAsBackground) {
+                cardRenderAssetCache.iconRenderData(
+                    imageKey = sideImageRenderKey ?: "bitmap-${sideImage.generationId}",
+                    image = sideImage,
+                    style = CardRenderStyleKey(
+                        radiusPx = cardCornerRadius(),
+                        hueColor = hueColor,
+                        tintCards = tinted,
+                        imageAlpha = sideImageAlpha,
+                        imageBlur = activePreferences.cardIconBlur,
+                        useIconBackgrounds = activePreferences.useCardIconBackgrounds,
+                    ),
+                )
+            } else {
+                null
+            }
             setLineSpacing(activity.dp(2).toFloat(), 1.0f)
             setPadding(
                 activity.dp(cardSpec.horizontalPaddingDp),
@@ -914,6 +937,7 @@ class CalmLauncherRunner(
                 sideImage.takeIf { showImageAsBackground },
                 sideImageAlpha,
                 activePreferences.cardIconBlur,
+                iconRenderData,
             )
             if (sideImage != null && !showImageAsBackground) {
                 compoundDrawablePadding = activity.dp(14)
@@ -933,7 +957,7 @@ class CalmLauncherRunner(
 
     private fun appCard(app: AppEntry): TextView {
         val data = appCardDisplayCache.getCachedOrCreateLightweight(app, currentUiState?.pinnedKeys ?: settings.pinnedPackages())
-        return stackCard(data.text, data.hueColor, true, data.icon).apply {
+        return stackCard(data.text, data.hueColor, true, data.icon, sideImageRenderKey = data.iconRenderKey).apply {
             maxLines = 4
             setOnClickListener { openAppEntry(app) }
             setOnLongClickListener {
@@ -1191,12 +1215,28 @@ class CalmLauncherRunner(
         val cards = mutableListOf<TextView>()
         if (state.hasCalendarPermission) {
             if (state.calendarEvents.isEmpty()) {
-                cards.add(stackCard("Upcoming calendar\nNo upcoming calendar events found.", CalmTheme.ACCENT, true, cardSideIcon(R.drawable.ic_calendar_card)))
+                cards.add(
+                    stackCard(
+                        "Upcoming calendar\nNo upcoming calendar events found.",
+                        CalmTheme.ACCENT,
+                        true,
+                        cardSideIcon(R.drawable.ic_calendar_card),
+                        sideImageRenderKey = "res:${R.drawable.ic_calendar_card}",
+                    ),
+                )
             } else {
                 cards.addAll(state.calendarEvents.map(::calendarCard))
             }
         } else {
-            cards.add(stackCard("Calendar access\nCalendar access is needed before Calm can index upcoming events.\nManage it in Settings.", CalmTheme.ACCENT, true, cardSideIcon(R.drawable.ic_calendar_card)))
+            cards.add(
+                stackCard(
+                    "Calendar access\nCalendar access is needed before Calm can index upcoming events.\nManage it in Settings.",
+                    CalmTheme.ACCENT,
+                    true,
+                    cardSideIcon(R.drawable.ic_calendar_card),
+                    sideImageRenderKey = "res:${R.drawable.ic_calendar_card}",
+                ),
+            )
         }
         return cardStackController.cardStack(cards, cardHeight(), cardStep(), activePreferences.cardStackTuning)
     }
@@ -1399,7 +1439,13 @@ class CalmLauncherRunner(
         val title = event.title.takeUnless { it.isBlank() } ?: "Untitled event"
         val location = event.location.takeUnless { it.isBlank() }?.let { "\n$it" }.orEmpty()
         val today = calendarRepository.isToday(event.begin)
-        return stackCard("${if (today) "Today" else "Upcoming"}\n$title\n${calendarRepository.formatEventTime(event)}$location", if (today) CalmTheme.ACCENT else Color.rgb(122, 146, 178), true, cardSideIcon(R.drawable.ic_calendar_card)).apply {
+        return stackCard(
+            "${if (today) "Today" else "Upcoming"}\n$title\n${calendarRepository.formatEventTime(event)}$location",
+            if (today) CalmTheme.ACCENT else Color.rgb(122, 146, 178),
+            true,
+            cardSideIcon(R.drawable.ic_calendar_card),
+            sideImageRenderKey = "res:${R.drawable.ic_calendar_card}",
+        ).apply {
             setOnClickListener { openCalendarEvent(event) }
             setOnLongClickListener {
                 focusOverlay.show(
@@ -1417,7 +1463,14 @@ class CalmLauncherRunner(
         tintCards: Boolean,
     ): TextView {
         val data = notificationCardDisplayCache.getOrCreate(item, chapter, ::formatNotificationTime)
-        return stackCard(data.text, chapter.hueColor, tintCards, data.sideImage, data.sideImageAlpha).apply {
+        return stackCard(
+            data.text,
+            chapter.hueColor,
+            tintCards,
+            data.sideImage,
+            data.sideImageAlpha,
+            data.sideImageRenderKey,
+        ).apply {
             if (data.mediaBackgroundImage != null) {
                 background = drawables.notificationCardWithImage(
                     cardCornerRadius(),
@@ -1438,7 +1491,9 @@ class CalmLauncherRunner(
     }
 
     private fun cardSideIcon(drawableRes: Int): android.graphics.Bitmap? {
-        return activity.getDrawable(drawableRes)?.toBitmap()
+        return sideIconCache.getOrPut(drawableRes) {
+            activity.getDrawable(drawableRes)?.toBitmap()
+        }
     }
 
     private fun android.graphics.Bitmap.toSizedDrawable(size: Int): android.graphics.drawable.BitmapDrawable {
@@ -1798,6 +1853,8 @@ class CalmLauncherRunner(
         notificationRepository.invalidateAppCaches()
         appCardDisplayCache.clear()
         notificationCardDisplayCache.clear()
+        cardRenderAssetCache.clear()
+        sideIconCache.clear()
         appSearchQueries.clear()
         appSearchPages.clear()
         refreshStateAsync()

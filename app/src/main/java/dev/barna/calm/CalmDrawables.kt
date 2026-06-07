@@ -134,12 +134,20 @@ class CalmDrawables(private val context: Context) {
         image: Bitmap?,
         imageAlpha: Int = 64,
         imageBlur: Int = 0,
+        iconRenderData: AppIconCardRenderData? = null,
     ): Drawable {
         val base = notificationCard(radius, hueColor, tintCards)
         return if (image == null) {
             base
         } else {
-            AppIconCardDrawable(base, image, radius.toFloat(), imageAlpha, imageBlur)
+            AppIconCardDrawable(
+                base,
+                image,
+                radius.toFloat(),
+                imageAlpha,
+                imageBlur,
+                iconRenderData ?: AppIconCardRenderData.from(image, imageAlpha),
+            )
         }
     }
 

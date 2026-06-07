@@ -52,6 +52,7 @@ class AppCardDisplayCache(
             hueColor = model.hueColor,
             isPinned = model.isPinned,
             icon = null,
+            iconRenderKey = app.identityKey,
         )
     }
 
@@ -68,6 +69,7 @@ class AppCardDisplayCache(
             hueColor = model.hueColor,
             isPinned = model.isPinned,
             icon = notificationRepository.resolveAppIconBitmap(app),
+            iconRenderKey = app.identityKey,
         )
     }
 
@@ -101,4 +103,5 @@ data class AppCardDisplayData(
     val hueColor: Int,
     val isPinned: Boolean,
     val icon: Bitmap?,
+    val iconRenderKey: String,
 )

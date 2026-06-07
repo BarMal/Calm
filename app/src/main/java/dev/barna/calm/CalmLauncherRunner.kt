@@ -292,6 +292,9 @@ class CalmLauncherRunner(
             overScrollMode = View.OVER_SCROLL_NEVER
         }
         pager.setCurrentItem(initialPage, false)
+        if (!animate) {
+            suppressedPageEntryKey = pages.getOrNull(initialPage)?.key
+        }
         var userSwipeInProgress = false
         var lastAnimatedPageKey: String? = null
         pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {

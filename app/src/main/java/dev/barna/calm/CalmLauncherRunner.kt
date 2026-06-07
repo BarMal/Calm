@@ -841,6 +841,10 @@ class CalmLauncherRunner(
         fun scheduleNextBatch(delayMs: Long) {
             mainHandler.postDelayed({
                 if (stack.parent == null || !stackHost.isAttachedToWindow) return@postDelayed
+                if (currentPager?.scrollState != ViewPager2.SCROLL_STATE_IDLE) {
+                    scheduleNextBatch(APP_STACK_DEFERRED_BATCH_DELAY_MS)
+                    return@postDelayed
+                }
                 if (appendNextBatch()) {
                     scheduleNextBatch(nextDeferredBatchDelay(stack))
                 }

@@ -43,10 +43,28 @@ class AppIconCardDrawable(
     private val veilMidAlpha = renderData.veilMidAlpha
     private val veilEndAlpha = renderData.veilEndAlpha
 
+    // Shaders and geometry are rebuilt only when bounds dimensions change.
+    private var cachedBoundsWidth = -1
+    private var cachedBoundsHeight = -1
+    private var cachedGlow1Cx = 0f
+    private var cachedGlow1Cy = 0f
+    private var cachedGlow1Radius = 0f
+    private var cachedGlow2Cx = 0f
+    private var cachedGlow2Cy = 0f
+    private var cachedGlow2Radius = 0f
+    private var cachedGlow1Shader: RadialGradient? = null
+    private var cachedGlow2Shader: RadialGradient? = null
+    private var cachedBlurDistance = 0f
+    private var cachedBlurAlpha = 0
+
     override fun draw(canvas: Canvas) {
         base.bounds = bounds
         base.draw(canvas)
         if (icon.width <= 0 || icon.height <= 0 || bounds.isEmpty) return
+
+        if (bounds.width() != cachedBoundsWidth || bounds.height() != cachedBoundsHeight) {
+            rebuildBoundsDependentState()
+        }
 
         rect.set(bounds)
         clipPath.reset()
@@ -54,11 +72,98 @@ class AppIconCardDrawable(
 
         val checkpoint = canvas.save()
         canvas.clipPath(clipPath)
-        drawIconWash(canvas)
-        drawIconGlows(canvas)
+        canvas.drawRect(rect, washPaint)
+        glowPaint.shader = cachedGlow1Shader
+        canvas.drawCircle(cachedGlow1Cx, cachedGlow1Cy, cachedGlow1Radius, glowPaint)
+        glowPaint.shader = cachedGlow2Shader
+        canvas.drawCircle(cachedGlow2Cx, cachedGlow2Cy, cachedGlow2Radius, glowPaint)
         drawIcon(canvas)
-        drawRightVeil(canvas)
+        canvas.drawRect(rect, veilPaint)
         canvas.restoreToCount(checkpoint)
+    }
+
+    private fun rebuildBoundsDependentState() {
+        cachedBoundsWidth = bounds.width()
+        cachedBoundsHeight = bounds.height()
+
+        washPaint.shader = LinearGradient(
+            bounds.left.toFloat(), 0f, bounds.right.toFloat(), 0f,
+            intArrayOf(
+                Color.argb(6, Color.red(leftColor), Color.green(leftColor), Color.blue(leftColor)),
+                Color.argb(18, Color.red(leftColor), Color.green(leftColor), Color.blue(leftColor)),
+                Color.argb(38, Color.red(midColor), Color.green(midColor), Color.blue(midColor)),
+                Color.argb((washEndAlpha * 0.68f).toInt(), Color.red(edgeColor), Color.green(edgeColor), Color.blue(edgeColor)),
+                Color.argb(washEndAlpha, Color.red(edgeColor), Color.green(edgeColor), Color.blue(edgeColor)),
+            ),
+            floatArrayOf(0f, 0.22f, 0.48f, 0.74f, 1f),
+            Shader.TileMode.CLAMP,
+        )
+
+        cachedGlow1Cx = bounds.right - cachedBoundsHeight * 0.74f
+        cachedGlow1Cy = bounds.centerY().toFloat()
+        cachedGlow1Radius = cachedBoundsHeight * 0.92f
+        cachedGlow1Shader = RadialGradient(
+            cachedGlow1Cx, cachedGlow1Cy, cachedGlow1Radius,
+            intArrayOf(
+                Color.argb(34, Color.red(midColor), Color.green(midColor), Color.blue(midColor)),
+                Color.argb((34 * 0.42f).toInt(), Color.red(midColor), Color.green(midColor), Color.blue(midColor)),
+                Color.TRANSPARENT,
+            ),
+            floatArrayOf(0f, 0.48f, 1f),
+            Shader.TileMode.CLAMP,
+        )
+
+        cachedGlow2Cx = bounds.right - cachedBoundsHeight * 0.18f
+        cachedGlow2Cy = bounds.centerY().toFloat()
+        cachedGlow2Radius = cachedBoundsHeight * 0.72f
+        cachedGlow2Shader = RadialGradient(
+            cachedGlow2Cx, cachedGlow2Cy, cachedGlow2Radius,
+            intArrayOf(
+                Color.argb(46, Color.red(edgeColor), Color.green(edgeColor), Color.blue(edgeColor)),
+                Color.argb((46 * 0.42f).toInt(), Color.red(edgeColor), Color.green(edgeColor), Color.blue(edgeColor)),
+                Color.TRANSPARENT,
+            ),
+            floatArrayOf(0f, 0.48f, 1f),
+            Shader.TileMode.CLAMP,
+        )
+
+        val targetSize = cachedBoundsHeight * 1.18f
+        val scale = maxOf(targetSize / icon.width.toFloat(), targetSize / icon.height.toFloat())
+        val iconLeft = bounds.right - targetSize + (targetSize * 0.06f)
+        val iconTop = bounds.top + (cachedBoundsHeight - targetSize) / 2f
+        iconMatrix.reset()
+        iconMatrix.setScale(scale, scale)
+        iconMatrix.postTranslate(iconLeft, iconTop)
+
+        val fadeStart = iconLeft - (targetSize * 0.72f)
+        val fadeEnd = iconLeft + (targetSize * 0.96f)
+        maskPaint.shader = LinearGradient(
+            fadeStart, 0f, fadeEnd, 0f,
+            intArrayOf(
+                Color.argb(0, 255, 255, 255),
+                Color.argb(18, 255, 255, 255),
+                Color.argb(70, 255, 255, 255),
+                Color.argb(152, 255, 255, 255),
+                Color.WHITE,
+            ),
+            floatArrayOf(0f, 0.24f, 0.52f, 0.78f, 1f),
+            Shader.TileMode.CLAMP,
+        )
+
+        val strength = maxOf(blurStrength.coerceIn(0, 100), 28)
+        cachedBlurDistance = targetSize * (0.018f + (strength / 100f) * 0.052f)
+        cachedBlurAlpha = (imageAlpha * (0.12f + (strength / 100f) * 0.28f)).toInt().coerceIn(18, 180)
+
+        veilPaint.shader = LinearGradient(
+            bounds.left.toFloat(), 0f, bounds.right.toFloat(), 0f,
+            intArrayOf(
+                Color.argb(0, 0, 0, 0),
+                Color.argb(veilMidAlpha / 2, 4, 4, 8),
+                Color.argb(veilEndAlpha, 4, 4, 8),
+            ),
+            floatArrayOf(0f, 0.74f, 1f),
+            Shader.TileMode.CLAMP,
+        )
     }
 
     override fun setAlpha(alpha: Int) {
@@ -77,117 +182,22 @@ class AppIconCardDrawable(
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 
     private fun drawIcon(canvas: Canvas) {
-        val targetSize = bounds.height() * 1.18f
-        val scale = maxOf(targetSize / icon.width.toFloat(), targetSize / icon.height.toFloat())
-        val left = bounds.right - targetSize + (targetSize * 0.06f)
-        val top = bounds.top + (bounds.height() - targetSize) / 2f
-
-        iconMatrix.reset()
-        iconMatrix.setScale(scale, scale)
-        iconMatrix.postTranslate(left, top)
-
         val layer = canvas.saveLayer(rect, null)
-        drawBlurredIconCopies(canvas, targetSize)
-        canvas.drawBitmap(icon, iconMatrix, iconPaint)
-        val fadeStart = left - (targetSize * 0.72f)
-        val fadeEnd = left + (targetSize * 0.96f)
-        maskPaint.shader = LinearGradient(
-            fadeStart,
-            0f,
-            fadeEnd,
-            0f,
-            intArrayOf(
-                Color.argb(0, 255, 255, 255),
-                Color.argb(18, 255, 255, 255),
-                Color.argb(70, 255, 255, 255),
-                Color.argb(152, 255, 255, 255),
-                Color.WHITE,
-            ),
-            floatArrayOf(0f, 0.24f, 0.52f, 0.78f, 1f),
-            Shader.TileMode.CLAMP,
-        )
-        canvas.drawRect(rect, maskPaint)
-        maskPaint.shader = null
-        canvas.restoreToCount(layer)
-    }
-
-    private fun drawBlurredIconCopies(canvas: Canvas, targetSize: Float) {
-        val strength = maxOf(blurStrength.coerceIn(0, 100), 28)
-        val distance = targetSize * (0.018f + (strength / 100f) * 0.052f)
-        val alpha = (imageAlpha * (0.12f + (strength / 100f) * 0.28f)).toInt().coerceIn(18, 180)
-        blurPaint.alpha = alpha
+        blurPaint.alpha = cachedBlurAlpha
         canvas.save()
-        canvas.translate(-distance, 0f)
+        canvas.translate(-cachedBlurDistance, 0f)
         canvas.drawBitmap(icon, iconMatrix, blurPaint)
-        canvas.translate(distance * 2f, 0f)
+        canvas.translate(cachedBlurDistance * 2f, 0f)
         canvas.drawBitmap(icon, iconMatrix, blurPaint)
-        canvas.translate(-distance, -distance)
+        canvas.translate(-cachedBlurDistance, -cachedBlurDistance)
         canvas.drawBitmap(icon, iconMatrix, blurPaint)
-        canvas.translate(0f, distance * 2f)
+        canvas.translate(0f, cachedBlurDistance * 2f)
         canvas.drawBitmap(icon, iconMatrix, blurPaint)
         canvas.restore()
+        canvas.drawBitmap(icon, iconMatrix, iconPaint)
+        canvas.drawRect(rect, maskPaint)
+        canvas.restoreToCount(layer)
     }
-
-    private fun drawIconWash(canvas: Canvas) {
-        washPaint.shader = LinearGradient(
-            bounds.left.toFloat(),
-            0f,
-            bounds.right.toFloat(),
-            0f,
-            intArrayOf(
-                Color.argb(6, Color.red(leftColor), Color.green(leftColor), Color.blue(leftColor)),
-                Color.argb(18, Color.red(leftColor), Color.green(leftColor), Color.blue(leftColor)),
-                Color.argb(38, Color.red(midColor), Color.green(midColor), Color.blue(midColor)),
-                Color.argb((washEndAlpha * 0.68f).toInt(), Color.red(edgeColor), Color.green(edgeColor), Color.blue(edgeColor)),
-                Color.argb(washEndAlpha, Color.red(edgeColor), Color.green(edgeColor), Color.blue(edgeColor)),
-            ),
-            floatArrayOf(0f, 0.22f, 0.48f, 0.74f, 1f),
-            Shader.TileMode.CLAMP,
-        )
-        canvas.drawRect(rect, washPaint)
-        washPaint.shader = null
-    }
-
-    private fun drawIconGlows(canvas: Canvas) {
-        drawGlow(canvas, bounds.right - bounds.height() * 0.74f, bounds.centerY().toFloat(), bounds.height() * 0.92f, midColor, 34)
-        drawGlow(canvas, bounds.right - bounds.height() * 0.18f, bounds.centerY().toFloat(), bounds.height() * 0.72f, edgeColor, 46)
-    }
-
-    private fun drawGlow(canvas: Canvas, cx: Float, cy: Float, radius: Float, color: Int, alpha: Int) {
-        glowPaint.shader = RadialGradient(
-            cx,
-            cy,
-            radius,
-            intArrayOf(
-                Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color)),
-                Color.argb((alpha * 0.42f).toInt(), Color.red(color), Color.green(color), Color.blue(color)),
-                Color.TRANSPARENT,
-            ),
-            floatArrayOf(0f, 0.48f, 1f),
-            Shader.TileMode.CLAMP,
-        )
-        canvas.drawCircle(cx, cy, radius, glowPaint)
-        glowPaint.shader = null
-    }
-
-    private fun drawRightVeil(canvas: Canvas) {
-        veilPaint.shader = LinearGradient(
-            bounds.left.toFloat(),
-            0f,
-            bounds.right.toFloat(),
-            0f,
-            intArrayOf(
-                Color.argb(0, 0, 0, 0),
-                Color.argb(veilMidAlpha / 2, 4, 4, 8),
-                Color.argb(veilEndAlpha, 4, 4, 8),
-            ),
-            floatArrayOf(0f, 0.74f, 1f),
-            Shader.TileMode.CLAMP,
-        )
-        canvas.drawRect(rect, veilPaint)
-        veilPaint.shader = null
-    }
-
 }
 
 data class AppIconCardRenderData(

@@ -54,4 +54,14 @@ class SettingsCopyFormatter {
     }
 
     fun hapticStrength(strength: Int): String = "Very light / $strength of 5"
+
+    fun stackPeakPosition(position: Int): String {
+        return when {
+            position < 20 -> "Peak at top"
+            position > 80 -> "Peak at bottom"
+            position in 40..60 -> "Peak at centre"
+            position < 40 -> "Peak above centre"
+            else -> "Peak below centre"
+        }
+    }
 }

@@ -231,6 +231,7 @@ class LauncherSettings(private val context: Context) {
             focusedCardGap = preferences.getInt(PREF_CARD_STACK_FOCUSED_GAP, 36).coerceIn(0, 100),
             focusedCardScale = preferences.getInt(PREF_CARD_STACK_FOCUSED_SCALE, 32).coerceIn(0, 100),
             magnetStrength = preferences.getInt(PREF_CARD_STACK_MAGNET_STRENGTH, 70).coerceIn(0, 100),
+            stackPeakPosition = preferences.getInt(PREF_CARD_STACK_PEAK_POSITION, 50).coerceIn(0, 100),
         )
     }
 
@@ -272,6 +273,10 @@ class LauncherSettings(private val context: Context) {
 
     fun setMagnetStrength(strength: Int) {
         preferences.edit().putInt(PREF_CARD_STACK_MAGNET_STRENGTH, strength.coerceIn(0, 100)).apply()
+    }
+
+    fun setStackPeakPosition(position: Int) {
+        preferences.edit().putInt(PREF_CARD_STACK_PEAK_POSITION, position.coerceIn(0, 100)).apply()
     }
 
     fun showAdvancedStackControls(): Boolean {
@@ -350,5 +355,6 @@ class LauncherSettings(private val context: Context) {
         private const val PREF_CARD_STACK_FOCUSED_SCALE = "card_stack_focused_scale"
         private const val PREF_CARD_STACK_MAGNET_STRENGTH = "card_stack_magnet_strength"
         private const val PREF_CARD_STACK_ADVANCED = "card_stack_advanced"
+        private const val PREF_CARD_STACK_PEAK_POSITION = "card_stack_peak_position"
     }
 }

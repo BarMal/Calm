@@ -5,11 +5,9 @@ object CardStackLayout {
         viewportHeight: Int,
         cardHeight: Int,
         minimumTopPadding: Int,
-        viewportTopOnScreen: Int = 0,
-        targetTopOnScreen: Int? = null,
+        peakFraction: Float = 0.5f,
     ): Int {
-        val centeredTop = (viewportHeight - cardHeight) / 2
-        val desiredTop = targetTopOnScreen?.minus(viewportTopOnScreen) ?: centeredTop
+        val desiredTop = (viewportHeight * peakFraction - cardHeight / 2f).toInt()
         val maximumTopPadding = maxOf(minimumTopPadding, viewportHeight - cardHeight)
         return desiredTop.coerceIn(minimumTopPadding, maximumTopPadding)
     }

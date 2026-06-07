@@ -62,6 +62,7 @@ class SettingsPageFactory(
             addView(aboveFocusCardCountControl())
             addView(focusedCardGapControl())
             addView(focusedCardScaleControl())
+            addView(stackPeakPositionControl())
             addView(cardStackRotationControl())
             addView(fullWidthAction(copyFormatter.advancedStackControls(settings.showAdvancedStackControls()), actions.toggleAdvancedStackControls))
             if (settings.showAdvancedStackControls()) {
@@ -210,6 +211,16 @@ class SettingsPageFactory(
             initialProgress = tuning.magnetStrength,
             valueText = copyFormatter::magnetStrength,
             onChanged = settings::setMagnetStrength,
+        )
+    }
+
+    private fun stackPeakPositionControl(): View {
+        val tuning = settings.cardStackTuning()
+        return sliderCard(
+            title = "Stack peak position",
+            initialProgress = tuning.stackPeakPosition,
+            valueText = copyFormatter::stackPeakPosition,
+            onChanged = settings::setStackPeakPosition,
         )
     }
 

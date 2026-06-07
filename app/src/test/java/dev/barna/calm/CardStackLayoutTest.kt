@@ -34,27 +34,36 @@ class CardStackLayoutTest {
     }
 
     @Test
-    fun screenAnchorKeepsCardsAtTheSameAbsoluteHeightAcrossDifferentViewports() {
-        val firstViewportTop = 120
-        val secondViewportTop = 260
-        val targetScreenTop = 420
-        val firstTop = CardStackLayout.activeTopPadding(
-            viewportHeight = 620,
-            cardHeight = 180,
+    fun peakFractionZeroPlacesCardAtTop() {
+        val top = CardStackLayout.activeTopPadding(
+            viewportHeight = 600,
+            cardHeight = 120,
             minimumTopPadding = 6,
-            viewportTopOnScreen = firstViewportTop,
-            targetTopOnScreen = targetScreenTop,
+            peakFraction = 0f,
         )
-        val secondTop = CardStackLayout.activeTopPadding(
-            viewportHeight = 520,
-            cardHeight = 180,
-            minimumTopPadding = 6,
-            viewportTopOnScreen = secondViewportTop,
-            targetTopOnScreen = targetScreenTop,
-        )
+        assertEquals(6, top)
+    }
 
-        assertEquals(targetScreenTop, firstViewportTop + firstTop)
-        assertEquals(targetScreenTop, secondViewportTop + secondTop)
+    @Test
+    fun peakFractionOneHundredPlacesCardAtBottom() {
+        val top = CardStackLayout.activeTopPadding(
+            viewportHeight = 600,
+            cardHeight = 120,
+            minimumTopPadding = 6,
+            peakFraction = 1f,
+        )
+        assertEquals(480, top)
+    }
+
+    @Test
+    fun peakFractionHalfPlacesCardAtCentre() {
+        val top = CardStackLayout.activeTopPadding(
+            viewportHeight = 600,
+            cardHeight = 120,
+            minimumTopPadding = 6,
+            peakFraction = 0.5f,
+        )
+        assertEquals(240, top)
     }
 
     @Test

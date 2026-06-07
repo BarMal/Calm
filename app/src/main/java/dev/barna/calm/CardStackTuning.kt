@@ -11,8 +11,10 @@ data class CardStackTuning(
     val focusedCardGap: Int = 36,
     val focusedCardScale: Int = 32,
     val magnetStrength: Int = 70,
+    val stackPeakPosition: Int = 50,
 ) {
     val curveFactor: Float = curve / 50f
+    val stackPeakFraction: Float = stackPeakPosition.coerceIn(0, 100) / 100f
     val horizontalCurveFactor: Float = horizontalCurve / 100f
     val arcWidthFactor: Float = arcWidth / 100f
     val rotationFactor: Float = rotation / 100f

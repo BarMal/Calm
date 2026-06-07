@@ -260,7 +260,9 @@ class CalmLauncherRunner(
 
         val root = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(activity.dp(10), activity.statusBarHeightFallback() + activity.dp(28), activity.dp(10), activity.dp(34))
+            clipChildren = false
+            clipToPadding = false
+            setPadding(0, activity.statusBarHeightFallback() + activity.dp(28), 0, activity.dp(34))
         }
         screen.addView(root, matchParentParams())
         root.addView(createHeader())
@@ -278,7 +280,7 @@ class CalmLauncherRunner(
                     page.alpha = 1f - (0.08f * distance)
                     page.scaleX = 1f
                     page.scaleY = 1f
-                    page.translationX = 0f
+                    page.translationX = position * activity.dp(10).toFloat()
                     page.translationY = 0f
                     page.translationZ = 0f
                 }
@@ -841,6 +843,10 @@ class CalmLauncherRunner(
         fun scheduleNextBatch(delayMs: Long) {
             mainHandler.postDelayed({
                 if (stack.parent == null || !stackHost.isAttachedToWindow) return@postDelayed
+                if (currentPager?.scrollState != ViewPager2.SCROLL_STATE_IDLE) {
+                    scheduleNextBatch(APP_STACK_DEFERRED_BATCH_DELAY_MS)
+                    return@postDelayed
+                }
                 if (appendNextBatch()) {
                     scheduleNextBatch(nextDeferredBatchDelay(stack))
                 }
@@ -1285,7 +1291,7 @@ class CalmLauncherRunner(
         }
     }
 
-    private fun createBarePagePanel(horizontalPadding: Int = activity.dp(4)): LinearLayout {
+    private fun createBarePagePanel(horizontalPadding: Int = activity.dp(10)): LinearLayout {
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             clipChildren = false

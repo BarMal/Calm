@@ -74,11 +74,11 @@ class CalmLauncherRunner(
     private val appLibraryStore = AppLibraryRenderStore()
     private val contextActionFactory = LauncherContextActionFactory(
         LauncherContextActionCallbacks(
-            openNotification = ::openNotification,
+            openNotification = { notificationActionController.openNotification(it) },
             openPackage = ::openPackage,
-            dismissNotificationItem = ::dismissNotificationItem,
-            clearChapter = ::clearChapter,
-            performNotificationAction = ::performNotificationAction,
+            dismissNotificationItem = { notificationActionController.dismissNotificationItem(it) },
+            clearChapter = { notificationActionController.clearChapter(it) },
+            performNotificationAction = { notificationActionController.performNotificationAction(it) },
             openCalendarEvent = ::openCalendarEvent,
             requestCalendarAccess = { calendarRepository.requestCalendarAccess() },
             openSettings = ::openSettingsActivity,
@@ -100,6 +100,19 @@ class CalmLauncherRunner(
         ::performCardScrollHaptic,
     )
     private val entryAnimator = LauncherEntryAnimator(activity)
+    private val notificationActionController = NotificationActionController(
+        activity = activity,
+        settings = settings,
+        notificationRepository = notificationRepository,
+        pageRemovalPlanner = pageRemovalPlanner,
+        entryAnimator = entryAnimator,
+        render = { render() },
+        selectPage = ::selectPage,
+        currentPages = { currentUiState?.pages.orEmpty() },
+        currentPager = { currentPager },
+        openAppInfo = ::openAppInfo,
+        openSettings = ::openSettingsActivity,
+    )
     private val settingsPageFactory = SettingsPageFactory(
         activity = activity,
         settings = settings,
@@ -113,7 +126,7 @@ class CalmLauncherRunner(
             toggleWorkNotificationChapterPlacement = ::toggleWorkNotificationChapterPlacement,
             applyTimescapeStackPreset = ::applyTimescapeStackPreset,
             toggleAdvancedStackControls = ::toggleAdvancedStackControls,
-            restoreNotificationSource = ::restoreNotificationSource,
+            restoreNotificationSource = notificationActionController::restoreNotificationSource,
             render = { render() },
             performCardScrollHaptic = ::performCardScrollHaptic,
         ),
@@ -563,14 +576,8 @@ class CalmLauncherRunner(
 
     private fun createPinnedPage(pinnedApps: List<AppEntry>): LinearLayout {
         return createBarePagePanel(activity.dp(20)).apply {
-            addView(animatedChrome(label("CHAPTER / PINNED", 12, CalmTheme.ACCENT, Typeface.BOLD).apply {
-                setPadding(0, 0, 0, activity.dp(18))
-            }))
             addView(animatedChrome(label("Pinned", 30, CalmTheme.INK, Typeface.NORMAL).apply {
-                setPadding(0, activity.dp(8), 0, 0)
-            }))
-            addView(animatedChrome(label("Pinned apps stay one chapter left of Overview.", 15, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
-                setPadding(0, activity.dp(6), 0, activity.dp(24))
+                setPadding(0, activity.dp(8), 0, activity.dp(24))
             }))
             addView(
                 appStack(pinnedApps, stackKey = CardStackStateKey.appEntries("pinned", pinnedApps)),
@@ -593,9 +600,6 @@ class CalmLauncherRunner(
             orientation = LinearLayout.VERTICAL
             clipToPadding = false
             clipChildren = false
-            addView(label("CHAPTER / ${model.title.uppercase(Locale.getDefault())}", 12, CalmTheme.ACCENT, Typeface.BOLD).apply {
-                setPadding(0, 0, 0, activity.dp(18))
-            })
             addView(label(model.title, 30, CalmTheme.INK, Typeface.NORMAL).apply {
                 setPadding(0, activity.dp(8), 0, 0)
             })
@@ -1020,10 +1024,6 @@ class CalmLauncherRunner(
 
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(label("CHAPTER / OVERVIEW", 12, CalmTheme.ACCENT, Typeface.BOLD).apply {
-                    setSingleLine(true)
-                    ellipsize = TextUtils.TruncateAt.END
-                })
                 addView(label("Overview", 30, CalmTheme.INK, Typeface.NORMAL).apply {
                     setSingleLine(true)
                     ellipsize = TextUtils.TruncateAt.END
@@ -1077,12 +1077,11 @@ class CalmLauncherRunner(
     private fun createChapterPage(chapter: AppChapter): LinearLayout {
         val tintCards = activePreferences.useTintedNotificationCards
         val page = if (tintCards) {
-            createBarePagePanel()
+            createBarePagePanel(activity.dp(20))
         } else {
             createPagePanel(notificationRepository.resolveChapterBackground(chapter), chapter.hueColor)
         }
         page.addView(chapterHeader(chapter))
-        page.addView(sectionTitle("Notifications"))
         page.addView(notificationArea(chapter, tintCards), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 2.25f))
         return page
     }
@@ -1102,10 +1101,6 @@ class CalmLauncherRunner(
 
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(label("CHAPTER / ${chapter.label}", 12, CalmTheme.ACCENT, Typeface.BOLD).apply {
-                    setSingleLine(true)
-                    ellipsize = TextUtils.TruncateAt.END
-                })
                 addView(label(chapter.label, 30, CalmTheme.INK, Typeface.NORMAL).apply {
                     setSingleLine(true)
                     ellipsize = TextUtils.TruncateAt.END
@@ -1204,7 +1199,7 @@ class CalmLauncherRunner(
             setPadding(activity.dp(11), activity.dp(11), activity.dp(11), activity.dp(11))
             background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(999))
             if (action != null) {
-                setOnClickListener { performNotificationAction(action) }
+                setOnClickListener { notificationActionController.performNotificationAction(action) }
             }
         }
     }
@@ -1519,7 +1514,7 @@ class CalmLauncherRunner(
                 focusOverlay.show(this, contextActionFactory.notificationActions(item, chapter), data.fullText)
             }
             setOnLongClickListener {
-                showNotificationHideOptions(item, chapter)
+                notificationActionController.showNotificationHideOptions(item, chapter)
                 true
             }
         }
@@ -1645,186 +1640,6 @@ class CalmLauncherRunner(
         activity.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
             data = Uri.parse("package:$packageName")
         })
-    }
-
-    private fun clearChapter(chapter: AppChapter) {
-        CalmNotificationListenerService.clearPackage(chapter.packageName, chapter.notifications.firstOrNull()?.userSerial ?: AppIdentity.LEGACY_USER_SERIAL)
-        Toast.makeText(activity, "Cleared ${chapter.label}", Toast.LENGTH_SHORT).show()
-        render()
-    }
-
-    private fun dismissNotificationItem(item: NotificationCardItem) {
-        CalmNotificationListenerService.dismissNotifications(item.notifications.map { it.cancelKey })
-        Toast.makeText(activity, if (item.isGroup) "Dismissed notification group" else "Dismissed notification", Toast.LENGTH_SHORT).show()
-        render()
-    }
-
-    private fun showNotificationHideOptions(item: NotificationCardItem, chapter: AppChapter) {
-        val options = ArrayList<Pair<String, () -> Unit>>()
-        options.add("App info" to { openAppInfo(chapter.packageName, chapter.userHandle, chapter.componentName) })
-        options.add("Settings" to { openSettingsActivity() })
-        options.add("Hide all notifications from app" to { excludeNotificationSource(chapter) })
-
-        val title = item.primary.title.trim()
-        val body = item.primary.bodyText().trim()
-        if (title.isBlank() && body.isBlank()) {
-            options.add("Hide empty notifications from app" to {
-                addNotificationFilter(NotificationFilter.emptyContent(chapter.identityKey, chapter.packageName), "Hidden empty notifications")
-            })
-        }
-
-        if (title.isNotBlank()) {
-            options.add("Hide all notifications with title\n$title" to {
-                addNotificationFilter(NotificationFilter.title(chapter.identityKey, chapter.packageName, title), "Hidden matching title")
-            })
-            addFlexibleNotificationFilterOptions(
-                options = options,
-                label = "title",
-                text = title,
-                containsFilter = { NotificationFilter.titleContains(chapter.identityKey, chapter.packageName, it) },
-                wildcardFilter = { NotificationFilter.titleWildcard(chapter.identityKey, chapter.packageName, it) },
-            )
-        } else {
-            options.add("Hide all notifications with no title" to {
-                addNotificationFilter(NotificationFilter.title(chapter.identityKey, chapter.packageName, ""), "Hidden notifications with no title")
-            })
-        }
-
-        if (body.isNotBlank()) {
-            options.add("Hide all notifications with body\n${body.take(80)}" to {
-                addNotificationFilter(NotificationFilter.body(chapter.identityKey, chapter.packageName, body), "Hidden matching body")
-            })
-            addFlexibleNotificationFilterOptions(
-                options = options,
-                label = "body",
-                text = body,
-                containsFilter = { NotificationFilter.bodyContains(chapter.identityKey, chapter.packageName, it) },
-                wildcardFilter = { NotificationFilter.bodyWildcard(chapter.identityKey, chapter.packageName, it) },
-            )
-        } else {
-            options.add("Hide all notifications with no body" to {
-                addNotificationFilter(NotificationFilter.body(chapter.identityKey, chapter.packageName, ""), "Hidden notifications with no body")
-            })
-        }
-
-        AlertDialog.Builder(activity)
-            .setTitle("Hide notifications")
-            .setItems(options.map { it.first }.toTypedArray()) { _, which ->
-                options[which].second.invoke()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun addFlexibleNotificationFilterOptions(
-        options: MutableList<Pair<String, () -> Unit>>,
-        label: String,
-        text: String,
-        containsFilter: (String) -> NotificationFilter,
-        wildcardFilter: (String) -> NotificationFilter,
-    ) {
-        val preview = text.take(80)
-        options.add("Hide notifications containing $label\n$preview" to {
-            addNotificationFilter(containsFilter(text), "Hidden notifications containing $label")
-        })
-        val pattern = NotificationFilterPattern.generalizeNumbers(text) ?: return
-        options.add("Hide similar notifications with $label\n${pattern.take(80)}" to {
-            addNotificationFilter(wildcardFilter(pattern), "Hidden similar notifications")
-        })
-    }
-
-    private fun addNotificationFilter(filter: NotificationFilter, message: String) {
-        settings.addNotificationFilter(filter)
-        Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
-        render()
-    }
-
-    private fun performNotificationAction(action: NotificationAction) {
-        val intent = action.intent
-        if (intent == null) {
-            Toast.makeText(activity, "Action is unavailable", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (action.requiresInput) {
-            promptForNotificationActionInput(action)
-            return
-        }
-        try {
-            intent.send()
-        } catch (_: PendingIntent.CanceledException) {
-            Toast.makeText(activity, "Action expired", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun promptForNotificationActionInput(action: NotificationAction) {
-        val input = EditText(activity).apply {
-            setSingleLine(false)
-            minLines = 1
-            maxLines = 4
-            setTextColor(CalmTheme.INK)
-            setHintTextColor(CalmTheme.MUTED_INK)
-            hint = action.remoteInputs.firstOrNull()?.label ?: action.label
-            setPadding(activity.dp(18), activity.dp(12), activity.dp(18), activity.dp(12))
-        }
-        AlertDialog.Builder(activity)
-            .setTitle(action.label)
-            .setView(input)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Send") { _, _ ->
-                sendRemoteInputAction(action, input.text?.toString().orEmpty())
-            }
-            .show()
-    }
-
-    private fun sendRemoteInputAction(action: NotificationAction, text: String) {
-        val intent = action.intent ?: return
-        val fillInIntent = Intent()
-        val results = android.os.Bundle()
-        action.remoteInputs.forEach { remoteInput ->
-            results.putCharSequence(remoteInput.resultKey, text)
-        }
-        RemoteInput.addResultsToIntent(action.remoteInputs.toTypedArray(), fillInIntent, results)
-        try {
-            intent.send(activity, 0, fillInIntent)
-        } catch (_: PendingIntent.CanceledException) {
-            Toast.makeText(activity, "Action expired", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun openNotification(notification: CalmNotificationListenerService.CalmNotification) {
-        val contentIntent: PendingIntent? = notification.contentIntent
-        if (contentIntent != null) {
-            try {
-                contentIntent.send()
-                return
-            } catch (_: PendingIntent.CanceledException) {
-            }
-        }
-        val apps = notificationRepository.loadAppEntries()
-        val app = apps.firstOrNull { it.notificationSourceKey == notification.sourceKey }
-            ?: apps.firstOrNull { it.packageName == notification.packageName }
-        if (app == null || !notificationRepository.openApp(app)) {
-            Toast.makeText(activity, "This notification cannot be opened", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun excludeNotificationSource(chapter: AppChapter) {
-        val nextPageKey = pageRemovalPlanner.selectPageAfterRemoval(currentUiState?.pages.orEmpty(), chapter.identityKey)
-        settings.exclude(chapter)
-        selectPage(nextPageKey)
-        Toast.makeText(activity, "Excluded ${chapter.label}", Toast.LENGTH_SHORT).show()
-        val pager = currentPager
-        if (pager == null) {
-            render()
-            return
-        }
-        entryAnimator.animateCurrentPageRemoval(pager) { render() }
-    }
-
-    private fun restoreNotificationSource(packageName: String) {
-        settings.restore(packageName)
-        Toast.makeText(activity, "Restored notification source", Toast.LENGTH_SHORT).show()
-        render()
     }
 
     private fun toggleNotificationSurface() {

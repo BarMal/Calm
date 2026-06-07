@@ -38,6 +38,7 @@ class AppIconCardDrawable(
     private val clipPath = Path()
     private val leftColor = renderData.leftColor
     private val midColor = renderData.midColor
+    private val nearEdgeColor = renderData.nearEdgeColor
     private val edgeColor = renderData.edgeColor
     private val washEndAlpha = renderData.washEndAlpha
     private val veilMidAlpha = renderData.veilMidAlpha
@@ -91,11 +92,12 @@ class AppIconCardDrawable(
             intArrayOf(
                 Color.argb(6, Color.red(leftColor), Color.green(leftColor), Color.blue(leftColor)),
                 Color.argb(18, Color.red(leftColor), Color.green(leftColor), Color.blue(leftColor)),
-                Color.argb(38, Color.red(midColor), Color.green(midColor), Color.blue(midColor)),
-                Color.argb((washEndAlpha * 0.68f).toInt(), Color.red(edgeColor), Color.green(edgeColor), Color.blue(edgeColor)),
+                Color.argb(36, Color.red(midColor), Color.green(midColor), Color.blue(midColor)),
+                Color.argb((washEndAlpha * 0.58f).toInt(), Color.red(nearEdgeColor), Color.green(nearEdgeColor), Color.blue(nearEdgeColor)),
+                Color.argb((washEndAlpha * 0.82f).toInt(), Color.red(edgeColor), Color.green(edgeColor), Color.blue(edgeColor)),
                 Color.argb(washEndAlpha, Color.red(edgeColor), Color.green(edgeColor), Color.blue(edgeColor)),
             ),
-            floatArrayOf(0f, 0.22f, 0.48f, 0.74f, 1f),
+            floatArrayOf(0f, 0.20f, 0.44f, 0.64f, 0.82f, 1f),
             Shader.TileMode.CLAMP,
         )
 
@@ -135,22 +137,22 @@ class AppIconCardDrawable(
         iconMatrix.setScale(scale, scale)
         iconMatrix.postTranslate(iconLeft, iconTop)
 
-        val fadeStart = iconLeft - (targetSize * 0.72f)
+        val fadeStart = iconLeft - (targetSize * 0.92f)
         val fadeEnd = iconLeft + (targetSize * 0.96f)
         maskPaint.shader = LinearGradient(
             fadeStart, 0f, fadeEnd, 0f,
             intArrayOf(
                 Color.argb(0, 255, 255, 255),
-                Color.argb(18, 255, 255, 255),
-                Color.argb(70, 255, 255, 255),
-                Color.argb(152, 255, 255, 255),
+                Color.argb(12, 255, 255, 255),
+                Color.argb(56, 255, 255, 255),
+                Color.argb(145, 255, 255, 255),
                 Color.WHITE,
             ),
-            floatArrayOf(0f, 0.24f, 0.52f, 0.78f, 1f),
+            floatArrayOf(0f, 0.30f, 0.60f, 0.84f, 1f),
             Shader.TileMode.CLAMP,
         )
 
-        val strength = maxOf(blurStrength.coerceIn(0, 100), 28)
+        val strength = maxOf(blurStrength.coerceIn(0, 100), 38)
         cachedBlurDistance = targetSize * (0.018f + (strength / 100f) * 0.052f)
         cachedBlurAlpha = (imageAlpha * (0.12f + (strength / 100f) * 0.28f)).toInt().coerceIn(18, 180)
 
@@ -203,6 +205,7 @@ class AppIconCardDrawable(
 data class AppIconCardRenderData(
     val leftColor: Int,
     val midColor: Int,
+    val nearEdgeColor: Int,
     val edgeColor: Int,
     val washEndAlpha: Int,
     val veilMidAlpha: Int,
@@ -212,8 +215,9 @@ data class AppIconCardRenderData(
         fun from(icon: Bitmap, imageAlpha: Int): AppIconCardRenderData {
             return AppIconCardRenderData(
                 leftColor = sampleRegionColor(icon, 0f, 0.36f),
-                midColor = sampleRegionColor(icon, 0.32f, 0.72f),
-                edgeColor = sampleRegionColor(icon, 0.64f, 1f),
+                midColor = sampleRegionColor(icon, 0.28f, 0.60f),
+                nearEdgeColor = sampleRegionColor(icon, 0.50f, 0.82f),
+                edgeColor = sampleRegionColor(icon, 0.68f, 1f),
                 washEndAlpha = if (imageAlpha >= 120) 126 else 78,
                 veilMidAlpha = if (imageAlpha >= 120) 14 else 26,
                 veilEndAlpha = if (imageAlpha >= 120) 44 else 92,

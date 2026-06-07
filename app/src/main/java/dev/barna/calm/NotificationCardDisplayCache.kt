@@ -5,7 +5,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executor
 
 class NotificationCardDisplayCache(
-    private val notificationRepository: NotificationChapterRepository,
+    private val assetResolver: NotificationCardAssetResolver,
 ) {
     private val cards = ConcurrentHashMap<String, NotificationCardDisplayData>()
     private val chapterIcons = ConcurrentHashMap<String, Bitmap>()
@@ -45,7 +45,7 @@ class NotificationCardDisplayCache(
 
     fun chapterMaskedIcon(chapter: AppChapter): Bitmap? {
         chapterIcons[chapter.launcherIdentityKey]?.let { return it }
-        val bitmap = notificationRepository.resolveMaskedAppIconBitmap(chapter) ?: return null
+        val bitmap = assetResolver.resolveMaskedAppIconBitmap(chapter) ?: return null
         return chapterIcons.putIfAbsent(chapter.launcherIdentityKey, bitmap) ?: bitmap
     }
 
@@ -65,7 +65,7 @@ class NotificationCardDisplayCache(
         val sideImage = when {
             isMedia -> null
             artwork != null -> artwork.toRectangularCardArtwork()
-            else -> notificationRepository.resolveAppIconBitmap(chapter)
+            else -> assetResolver.resolveAppIconBitmap(chapter)
         }
         return NotificationCardDisplayData(
             text = "${item.title()}\n${item.previewText()}\n${timeFormatter(item.primary.postTime)}",
@@ -122,3 +122,8 @@ data class NotificationCardDisplayData(
     val sideImageAlpha: Int,
     val mediaBackgroundImage: Bitmap?,
 )
+
+interface NotificationCardAssetResolver {
+    fun resolveAppIconBitmap(chapter: AppChapter): Bitmap?
+    fun resolveMaskedAppIconBitmap(chapter: AppChapter): Bitmap?
+}

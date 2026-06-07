@@ -23,7 +23,7 @@ import java.util.concurrent.Executors
 class NotificationChapterRepository(
     private val activity: Context,
     private val settings: LauncherSettings,
-) {
+) : NotificationCardAssetResolver {
     private val launcherApps: LauncherApps? = activity.getSystemService(LauncherApps::class.java)
     private val userManager: UserManager? = activity.getSystemService(UserManager::class.java)
     private val hueCache = ConcurrentHashMap<String, Int>()
@@ -149,7 +149,7 @@ class NotificationChapterRepository(
         return resolveAppBitmap(app.identityKey, app.packageName, app.userHandle)
     }
 
-    fun resolveAppIconBitmap(chapter: AppChapter): Bitmap? {
+    override fun resolveAppIconBitmap(chapter: AppChapter): Bitmap? {
         return resolveAppBitmap(chapter.launcherIdentityKey, chapter.packageName, chapter.userHandle)
     }
 
@@ -157,7 +157,7 @@ class NotificationChapterRepository(
         return resolveAppIcon(chapter.launcherIdentityKey, chapter.packageName, chapter.userHandle, sizePx)
     }
 
-    fun resolveMaskedAppIconBitmap(chapter: AppChapter): Bitmap? {
+    override fun resolveMaskedAppIconBitmap(chapter: AppChapter): Bitmap? {
         return resolveMaskedAppBitmap(chapter.launcherIdentityKey, chapter.packageName, chapter.userHandle)
     }
 

@@ -39,6 +39,12 @@ class SettingsCopyFormatter {
 
     fun visualCurve(progress: Int): String = "$progress% depth"
 
+    fun focusedCardGap(progress: Int): String = "$progress% separation"
+
+    fun focusedCardScale(progress: Int): String = "$progress% focus size"
+
+    fun magnetStrength(progress: Int): String = "$progress% snap"
+
     fun horizontalCurve(value: Int): String {
         return when {
             value < 0 -> "Curves from left ${kotlin.math.abs(value)}%"

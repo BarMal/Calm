@@ -59,4 +59,30 @@ class CardStackTuningTest {
         assertTrue(expanded.outgoingVisibleRange > compact.outgoingVisibleRange)
         assertTrue(expanded.horizontalPathProgress(-1f) < compact.horizontalPathProgress(-1f))
     }
+
+    @Test
+    fun focusDistinctionControlsScaleGapAndMagnetTiming() {
+        val subtle = CardStackTuning(
+            curve = 50,
+            horizontalCurve = 0,
+            arcWidth = 50,
+            aboveFocusCards = 2,
+            rotation = 0,
+            verticalSpacing = 50,
+            visibleCards = 3,
+            focusedCardGap = 10,
+            focusedCardScale = 10,
+            magnetStrength = 20,
+        )
+        val strong = subtle.copy(
+            focusedCardGap = 70,
+            focusedCardScale = 70,
+            magnetStrength = 90,
+        )
+
+        assertTrue(strong.focusedCardGapFactor > subtle.focusedCardGapFactor)
+        assertTrue(strong.focusedCardScaleFactor > subtle.focusedCardScaleFactor)
+        assertTrue(strong.magnetStrengthFactor > subtle.magnetStrengthFactor)
+        assertTrue(strong.magnetDelayMillis < subtle.magnetDelayMillis)
+    }
 }

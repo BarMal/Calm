@@ -34,6 +34,9 @@ class SettingsCopyFormatterTest {
         assertEquals("50% broadness", formatter.cardArcWidth(50))
         assertEquals("55% spread", formatter.verticalSpacing(55))
         assertEquals("42% depth", formatter.visualCurve(42))
+        assertEquals("36% separation", formatter.focusedCardGap(36))
+        assertEquals("32% focus size", formatter.focusedCardScale(32))
+        assertEquals("70% snap", formatter.magnetStrength(70))
     }
 
     @Test

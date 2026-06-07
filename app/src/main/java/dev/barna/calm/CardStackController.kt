@@ -55,7 +55,7 @@ class CardStackController(
             lastHapticIndex = intArrayOf(-1),
             styledRange = intArrayOf(-1, -1),
         )
-        runtimeState.magneticSnap = Runnable { magnetize(scroller, cards, tunedStep, stackKey) }
+        runtimeState.magneticSnap = Runnable { magnetize(scroller, cards, tunedStep, tuning, stackKey) }
         stackRuntimeStates[scroller] = runtimeState
         scroller.setOnScrollChangeListener { _, _, scrollY, _, _ ->
             val suppressedRestore = suppressedRestoreScrolls.remove(scroller)
@@ -65,7 +65,7 @@ class CardStackController(
             style(scroller, cards, tunedStep, tuning, true, runtimeState.lastHapticIndex, runtimeState.styledRange)
             runtimeState.magneticSnap?.let { magneticSnap ->
                 mainHandler.removeCallbacks(magneticSnap)
-                mainHandler.postDelayed(magneticSnap, 90)
+                mainHandler.postDelayed(magneticSnap, tuning.magnetDelayMillis)
             }
         }
         scroller.post {
@@ -226,6 +226,7 @@ class CardStackController(
             card.pivotY = 0f
             card.translationZ = 120f - focusDistance
             card.translationX = horizontalOffset(visualDepth, tuning)
+            card.translationY = focusedCardGap(visualDepth, tuning)
             card.rotation = horizontalRotation(visualDepth, tuning)
             card.scaleX = scale
             card.scaleY = scale
@@ -255,14 +256,20 @@ class CardStackController(
         return clamped
     }
 
-    private fun magnetize(scroller: ScrollView, cards: List<TextView>, cardStep: Int, stackKey: String) {
+    private fun magnetize(
+        scroller: ScrollView,
+        cards: List<TextView>,
+        cardStep: Int,
+        tuning: CardStackTuning,
+        stackKey: String,
+    ) {
         if (cards.isEmpty() || cardStep <= 0) return
         val readingAnchor = cards.first().top
         val scrollY = clampedScroll(scroller, cards, readingAnchor)
         val maxScroll = maxOf(0, cards.last().top - readingAnchor)
         val target = (Math.round(scrollY / cardStep.toFloat()) * cardStep).coerceIn(0, maxScroll)
         val distance = kotlin.math.abs(target - scrollY)
-        if (distance > activity.dp(42) || distance < activity.dp(1)) return
+        if (distance > magnetSnapThreshold(tuning) || distance < activity.dp(1)) return
         scrollMemory.remember(stackKey, target)
         scroller.smoothScrollTo(0, target)
     }
@@ -281,13 +288,19 @@ class CardStackController(
 
     private fun scale(visualDepth: Float, tuning: CardStackTuning): Float {
         val curve = tuning.curveFactor
-        val topScale = 1.02f
+        val topScale = tuning.focusedCardScaleFactor
         val firstDepthScale = CalmColor.lerp(1.0f, 0.93f, curve)
         val tailScale = CalmColor.lerp(0.97f, 0.84f, curve)
         if (visualDepth < 0f) return CalmColor.lerp(topScale, tailScale, CalmColor.clamp01(-visualDepth / tuning.outgoingVisibleRange))
         if (visualDepth <= 1f) return CalmColor.lerp(topScale, firstDepthScale, visualDepth)
         val tailDepth = CalmColor.clamp01((visualDepth - 1f) / maxOf(1f, tuning.visibleCards - 1f))
         return CalmColor.lerp(firstDepthScale, tailScale, tailDepth)
+    }
+
+    private fun focusedCardGap(visualDepth: Float, tuning: CardStackTuning): Float {
+        if (visualDepth <= 0f || tuning.focusedCardGap == 0) return 0f
+        val maxGap = activity.dp(56) * tuning.focusedCardGapFactor
+        return maxGap * CalmColor.clamp01(visualDepth)
     }
 
     private fun alpha(visualDepth: Float, tuning: CardStackTuning): Float {
@@ -317,6 +330,10 @@ class CardStackController(
             tuning.rotationFactor *
             tuning.rotationProgress(visualDepth) *
             tuning.rotationDirection(visualDepth)
+    }
+
+    private fun magnetSnapThreshold(tuning: CardStackTuning): Int {
+        return activity.dp(CalmColor.lerp(32f, 96f, tuning.magnetStrengthFactor).toInt())
     }
 
     private fun textColor(visualDepth: Float): Int {

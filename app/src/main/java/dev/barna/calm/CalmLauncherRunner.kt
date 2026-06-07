@@ -576,14 +576,8 @@ class CalmLauncherRunner(
 
     private fun createPinnedPage(pinnedApps: List<AppEntry>): LinearLayout {
         return createBarePagePanel(activity.dp(20)).apply {
-            addView(animatedChrome(label("CHAPTER / PINNED", 12, CalmTheme.ACCENT, Typeface.BOLD).apply {
-                setPadding(0, 0, 0, activity.dp(18))
-            }))
             addView(animatedChrome(label("Pinned", 30, CalmTheme.INK, Typeface.NORMAL).apply {
-                setPadding(0, activity.dp(8), 0, 0)
-            }))
-            addView(animatedChrome(label("Pinned apps stay one chapter left of Overview.", 15, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
-                setPadding(0, activity.dp(6), 0, activity.dp(24))
+                setPadding(0, activity.dp(8), 0, activity.dp(24))
             }))
             addView(
                 appStack(pinnedApps, stackKey = CardStackStateKey.appEntries("pinned", pinnedApps)),
@@ -606,9 +600,6 @@ class CalmLauncherRunner(
             orientation = LinearLayout.VERTICAL
             clipToPadding = false
             clipChildren = false
-            addView(label("CHAPTER / ${model.title.uppercase(Locale.getDefault())}", 12, CalmTheme.ACCENT, Typeface.BOLD).apply {
-                setPadding(0, 0, 0, activity.dp(18))
-            })
             addView(label(model.title, 30, CalmTheme.INK, Typeface.NORMAL).apply {
                 setPadding(0, activity.dp(8), 0, 0)
             })
@@ -1033,10 +1024,6 @@ class CalmLauncherRunner(
 
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(label("CHAPTER / OVERVIEW", 12, CalmTheme.ACCENT, Typeface.BOLD).apply {
-                    setSingleLine(true)
-                    ellipsize = TextUtils.TruncateAt.END
-                })
                 addView(label("Overview", 30, CalmTheme.INK, Typeface.NORMAL).apply {
                     setSingleLine(true)
                     ellipsize = TextUtils.TruncateAt.END
@@ -1090,12 +1077,11 @@ class CalmLauncherRunner(
     private fun createChapterPage(chapter: AppChapter): LinearLayout {
         val tintCards = activePreferences.useTintedNotificationCards
         val page = if (tintCards) {
-            createBarePagePanel()
+            createBarePagePanel(activity.dp(20))
         } else {
             createPagePanel(notificationRepository.resolveChapterBackground(chapter), chapter.hueColor)
         }
         page.addView(chapterHeader(chapter))
-        page.addView(sectionTitle("Notifications"))
         page.addView(notificationArea(chapter, tintCards), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 2.25f))
         return page
     }
@@ -1115,10 +1101,6 @@ class CalmLauncherRunner(
 
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(label("CHAPTER / ${chapter.label}", 12, CalmTheme.ACCENT, Typeface.BOLD).apply {
-                    setSingleLine(true)
-                    ellipsize = TextUtils.TruncateAt.END
-                })
                 addView(label(chapter.label, 30, CalmTheme.INK, Typeface.NORMAL).apply {
                     setSingleLine(true)
                     ellipsize = TextUtils.TruncateAt.END

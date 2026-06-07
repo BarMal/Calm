@@ -60,12 +60,15 @@ class SettingsPageFactory(
             addView(cardStackHorizontalCurveControl())
             addView(cardStackArcWidthControl())
             addView(aboveFocusCardCountControl())
+            addView(focusedCardGapControl())
+            addView(focusedCardScaleControl())
             addView(cardStackRotationControl())
             addView(fullWidthAction(copyFormatter.advancedStackControls(settings.showAdvancedStackControls()), actions.toggleAdvancedStackControls))
             if (settings.showAdvancedStackControls()) {
                 addView(cardStackCurveControl())
                 addView(cardStackSpacingControl())
                 addView(visibleCardCountControl())
+                addView(magnetStrengthControl())
             }
             addView(sectionTitle("Access"))
             addView(fullWidthAction("Set wallpaper", ::openWallpaperPicker))
@@ -177,6 +180,36 @@ class SettingsPageFactory(
             initialProgress = tuning.rotation,
             valueText = copyFormatter::cardFanRotation,
             onChanged = settings::setCardStackRotation,
+        )
+    }
+
+    private fun focusedCardGapControl(): View {
+        val tuning = settings.cardStackTuning()
+        return sliderCard(
+            title = "Focused card gap",
+            initialProgress = tuning.focusedCardGap,
+            valueText = copyFormatter::focusedCardGap,
+            onChanged = settings::setFocusedCardGap,
+        )
+    }
+
+    private fun focusedCardScaleControl(): View {
+        val tuning = settings.cardStackTuning()
+        return sliderCard(
+            title = "Focused card size",
+            initialProgress = tuning.focusedCardScale,
+            valueText = copyFormatter::focusedCardScale,
+            onChanged = settings::setFocusedCardScale,
+        )
+    }
+
+    private fun magnetStrengthControl(): View {
+        val tuning = settings.cardStackTuning()
+        return sliderCard(
+            title = "Magnet strength",
+            initialProgress = tuning.magnetStrength,
+            valueText = copyFormatter::magnetStrength,
+            onChanged = settings::setMagnetStrength,
         )
     }
 

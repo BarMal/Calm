@@ -228,6 +228,9 @@ class LauncherSettings(private val context: Context) {
             rotation = preferences.getInt(PREF_CARD_STACK_ROTATION, 0).coerceIn(0, 100),
             verticalSpacing = preferences.getInt(PREF_CARD_STACK_SPACING, 50).coerceIn(0, 100),
             visibleCards = preferences.getInt(PREF_CARD_STACK_VISIBLE, 3).coerceIn(1, 5),
+            focusedCardGap = preferences.getInt(PREF_CARD_STACK_FOCUSED_GAP, 36).coerceIn(0, 100),
+            focusedCardScale = preferences.getInt(PREF_CARD_STACK_FOCUSED_SCALE, 32).coerceIn(0, 100),
+            magnetStrength = preferences.getInt(PREF_CARD_STACK_MAGNET_STRENGTH, 70).coerceIn(0, 100),
         )
     }
 
@@ -259,6 +262,18 @@ class LauncherSettings(private val context: Context) {
         preferences.edit().putInt(PREF_CARD_STACK_VISIBLE, count.coerceIn(1, 5)).apply()
     }
 
+    fun setFocusedCardGap(gap: Int) {
+        preferences.edit().putInt(PREF_CARD_STACK_FOCUSED_GAP, gap.coerceIn(0, 100)).apply()
+    }
+
+    fun setFocusedCardScale(scale: Int) {
+        preferences.edit().putInt(PREF_CARD_STACK_FOCUSED_SCALE, scale.coerceIn(0, 100)).apply()
+    }
+
+    fun setMagnetStrength(strength: Int) {
+        preferences.edit().putInt(PREF_CARD_STACK_MAGNET_STRENGTH, strength.coerceIn(0, 100)).apply()
+    }
+
     fun showAdvancedStackControls(): Boolean {
         return preferences.getBoolean(PREF_CARD_STACK_ADVANCED, false)
     }
@@ -278,6 +293,9 @@ class LauncherSettings(private val context: Context) {
             .putInt(PREF_CARD_STACK_CURVE, 76)
             .putInt(PREF_CARD_STACK_SPACING, 42)
             .putInt(PREF_CARD_STACK_VISIBLE, 4)
+            .putInt(PREF_CARD_STACK_FOCUSED_GAP, 54)
+            .putInt(PREF_CARD_STACK_FOCUSED_SCALE, 42)
+            .putInt(PREF_CARD_STACK_MAGNET_STRENGTH, 82)
             .apply()
     }
 
@@ -328,6 +346,9 @@ class LauncherSettings(private val context: Context) {
         private const val PREF_CARD_STACK_ROTATION = "card_stack_rotation"
         private const val PREF_CARD_STACK_SPACING = "card_stack_spacing"
         private const val PREF_CARD_STACK_VISIBLE = "card_stack_visible"
+        private const val PREF_CARD_STACK_FOCUSED_GAP = "card_stack_focused_gap"
+        private const val PREF_CARD_STACK_FOCUSED_SCALE = "card_stack_focused_scale"
+        private const val PREF_CARD_STACK_MAGNET_STRENGTH = "card_stack_magnet_strength"
         private const val PREF_CARD_STACK_ADVANCED = "card_stack_advanced"
     }
 }

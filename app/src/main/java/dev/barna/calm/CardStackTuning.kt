@@ -8,11 +8,18 @@ data class CardStackTuning(
     val rotation: Int,
     val verticalSpacing: Int,
     val visibleCards: Int,
+    val focusedCardGap: Int = 36,
+    val focusedCardScale: Int = 32,
+    val magnetStrength: Int = 70,
 ) {
     val curveFactor: Float = curve / 50f
     val horizontalCurveFactor: Float = horizontalCurve / 100f
     val arcWidthFactor: Float = arcWidth / 100f
     val rotationFactor: Float = rotation / 100f
+    val focusedCardGapFactor: Float = focusedCardGap.coerceIn(0, 100) / 100f
+    val focusedCardScaleFactor: Float = 1f + (focusedCardScale.coerceIn(0, 100) / 100f) * 0.12f
+    val magnetStrengthFactor: Float = magnetStrength.coerceIn(0, 100) / 100f
+    val magnetDelayMillis: Long = CalmColor.lerp(130f, 40f, magnetStrengthFactor).toLong()
     val outgoingVisibleRange: Float = maxOf(0.65f, aboveFocusCards + 0.65f)
 
     fun horizontalPathProgress(visualDepth: Float): Float {

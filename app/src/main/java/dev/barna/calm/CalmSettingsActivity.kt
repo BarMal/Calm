@@ -8,6 +8,8 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
@@ -26,6 +28,8 @@ class CalmSettingsActivity : Activity() {
     private lateinit var calendarRepository: CalendarRepository
     private lateinit var appRepository: NotificationChapterRepository
     private lateinit var drawables: CalmDrawables
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val deferredRender = Runnable { render() }
     private var settingsScrollY = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,6 +49,11 @@ class CalmSettingsActivity : Activity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == CalmTheme.REQUEST_CALENDAR) render()
+    }
+
+    override fun onDestroy() {
+        mainHandler.removeCallbacks(deferredRender)
+        super.onDestroy()
     }
 
     private fun configureWindow() {
@@ -88,12 +97,12 @@ class CalmSettingsActivity : Activity() {
             title = "Tint notification cards",
             summary = "Move app colour from chapter panels onto cards.",
             checked = settings.useTintedNotificationCards(),
-        ) { settings.toggleNotificationSurface(); render() })
+        ) { settings.toggleNotificationSurface(); requestRender() })
         content.addView(switchRow(
             title = "Icons as card backgrounds",
             summary = "Use large faded icons inside cards instead of small right-side icons.",
             checked = settings.useCardIconBackgrounds(),
-        ) { settings.toggleCardIconBackgrounds(); render() })
+        ) { settings.toggleCardIconBackgrounds(); requestRender() })
         content.addView(sliderRow(
             title = "Card rounding",
             progress = settings.cardCornerRadiusDp(),
@@ -116,7 +125,7 @@ class CalmSettingsActivity : Activity() {
             title = "Card haptics",
             summary = "Very light feedback when card stacks settle.",
             checked = settings.cardHapticsEnabled(),
-        ) { settings.toggleCardHaptics(); render() })
+        ) { settings.toggleCardHaptics(); requestRender() })
         content.addView(sliderRow(
             title = "Haptic strength",
             progress = settings.cardHapticStrength() - 1,
@@ -129,12 +138,12 @@ class CalmSettingsActivity : Activity() {
             title = "Split personal and work apps",
             summary = "Show Work apps and Personal apps as separate chapters.",
             checked = settings.splitAppsByProfile(),
-        ) { settings.toggleSplitAppsByProfile(); render() })
+        ) { settings.toggleSplitAppsByProfile(); requestRender() })
         content.addView(switchRow(
             title = "Work notifications on the left",
             summary = "Place work notification chapters before the app chapters.",
             checked = settings.placeWorkNotificationChaptersBeforeApps(),
-        ) { settings.toggleWorkNotificationChaptersBeforeApps(); render() })
+        ) { settings.toggleWorkNotificationChaptersBeforeApps(); requestRender() })
         content.addView(actionRow(
             "Hidden apps",
             hiddenAppsSummary(),
@@ -146,7 +155,7 @@ class CalmSettingsActivity : Activity() {
         content.addView(actionRow("Apply Timescape preset", "Restore the curved stacked-card defaults.") {
             settings.applyTimescapeStackPreset()
             Toast.makeText(this, "Timescape preset applied", Toast.LENGTH_SHORT).show()
-            render()
+            requestRender()
         })
         val tuning = settings.cardStackTuning()
         content.addView(signedSliderRow(
@@ -161,18 +170,18 @@ class CalmSettingsActivity : Activity() {
             },
         ) { settings.setCardStackHorizontalCurve(it) })
         content.addView(sliderRow("Arc width", tuning.arcWidth, 100, { "${it}% broadness" }) { settings.setCardStackArcWidth(it) })
-        content.addView(stepperRow("Cards above focus", tuning.aboveFocusCards, 0, 4) { settings.setAboveFocusCardCount(it); render() })
+        content.addView(stepperRow("Cards above focus", tuning.aboveFocusCards, 0, 4) { settings.setAboveFocusCardCount(it); requestRender() })
         content.addView(sliderRow("Card fan rotation", tuning.rotation, 100, { if (it == 0) "Cards stay flat" else "${it}% tilt" }) { settings.setCardStackRotation(it) })
         content.addView(switchRow(
             title = "Advanced stack controls",
             summary = "Show depth, spacing, and visible-count controls.",
             checked = settings.showAdvancedStackControls(),
-        ) { settings.toggleAdvancedStackControls(); render() })
+        ) { settings.toggleAdvancedStackControls(); requestRender() })
         if (settings.showAdvancedStackControls()) {
             val advancedTuning = settings.cardStackTuning()
             content.addView(sliderRow("Visual curve", advancedTuning.curve, 100, { "${it}% depth" }) { settings.setCardStackCurve(it) })
             content.addView(sliderRow("Vertical spacing", advancedTuning.verticalSpacing, 100, { "${it}% spread" }) { settings.setCardStackSpacing(it) })
-            content.addView(stepperRow("Visible cards", advancedTuning.visibleCards, 1, 5) { settings.setVisibleCardCount(it); render() })
+            content.addView(stepperRow("Visible cards", advancedTuning.visibleCards, 1, 5) { settings.setVisibleCardCount(it); requestRender() })
         }
 
         content.addView(section("Access"))
@@ -257,9 +266,14 @@ class CalmSettingsActivity : Activity() {
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Done") { _, _ ->
                 settings.setHiddenAppKeys(apps.filterIndexed { index, _ -> selected[index] }.map { it.identityKey }.toSet())
-                render()
+                requestRender()
             }
             .show()
+    }
+
+    private fun requestRender() {
+        mainHandler.removeCallbacks(deferredRender)
+        mainHandler.postDelayed(deferredRender, SETTINGS_RENDER_DELAY_MS)
     }
 
     private fun hiddenAppLabel(app: AppEntry): String {
@@ -374,5 +388,9 @@ class CalmSettingsActivity : Activity() {
         val componentName = ComponentName(this, CalmNotificationListenerService::class.java)
         return enabledListeners != null &&
             enabledListeners.lowercase(Locale.ROOT).contains(componentName.flattenToString().lowercase(Locale.ROOT))
+    }
+
+    private companion object {
+        const val SETTINGS_RENDER_DELAY_MS = 80L
     }
 }

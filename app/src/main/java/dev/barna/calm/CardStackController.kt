@@ -53,10 +53,11 @@ class CardStackController(
         }
 
         val lastHapticIndex = intArrayOf(-1)
+        val styledRange = intArrayOf(-1, -1)
         val magneticSnap = Runnable { magnetize(scroller, cards, tunedStep, stackKey) }
         scroller.setOnScrollChangeListener { _, _, scrollY, _, _ ->
             rememberScroll(stackKey, scrollY)
-            style(scroller, cards, tunedStep, tuning, true, lastHapticIndex)
+            style(scroller, cards, tunedStep, tuning, true, lastHapticIndex, styledRange)
             mainHandler.removeCallbacks(magneticSnap)
             mainHandler.postDelayed(magneticSnap, 90)
         }
@@ -83,7 +84,7 @@ class CardStackController(
                 stack.minimumHeight = scroller.height + maxScroll
                 val restored = rememberedScrollPositions[stackKey]?.coerceIn(0, maxScroll) ?: 0
                 if (restored != scroller.scrollY) scroller.scrollTo(0, restored)
-                style(scroller, cards, tunedStep, tuning, false, lastHapticIndex)
+                style(scroller, cards, tunedStep, tuning, false, lastHapticIndex, styledRange)
             }
         }
         return scroller
@@ -119,18 +120,30 @@ class CardStackController(
         tuning: CardStackTuning,
         allowHaptic: Boolean,
         lastHapticIndex: IntArray,
+        styledRange: IntArray,
     ) {
         if (cards.isEmpty()) return
         val readingAnchor = cards.first().top
         val scrollY = clampedScroll(scroller, cards, readingAnchor)
-        var activeIndex = 0
         val threshold = scrollY + readingAnchor
-        cards.forEachIndexed { index, card ->
-            if (card.top <= threshold) activeIndex = index
-        }
+        val activeIndex = ((threshold - readingAnchor) / cardStep.toFloat())
+            .toInt()
+            .coerceIn(0, cards.lastIndex)
+        val visibleStart = (activeIndex - tuning.outgoingVisibleRange.toInt() - 2).coerceAtLeast(0)
+        val visibleEnd = (activeIndex + tuning.visibleCards + 2).coerceAtMost(cards.lastIndex)
 
-        cards.forEach { card ->
-            card.animate().cancel()
+        if (styledRange[0] >= 0 && styledRange[1] >= styledRange[0]) {
+            for (index in styledRange[0]..styledRange[1]) {
+                if (index !in visibleStart..visibleEnd) {
+                    hideInactive(cards[index])
+                }
+            }
+        }
+        styledRange[0] = visibleStart
+        styledRange[1] = visibleEnd
+
+        for (index in visibleStart..visibleEnd) {
+            val card = cards[index]
             val visualDepth = (card.top - threshold) / cardStep.toFloat()
             val focusDistance = kotlin.math.abs(visualDepth)
             val scale = scale(visualDepth, tuning)
@@ -151,6 +164,11 @@ class CardStackController(
             lastHapticIndex[0] = activeIndex
             haptics(scroller)
         }
+    }
+
+    private fun hideInactive(card: TextView) {
+        card.alpha = 0f
+        card.isEnabled = false
     }
 
     private fun clampedScroll(scroller: ScrollView, cards: List<TextView>, readingAnchor: Int): Int {

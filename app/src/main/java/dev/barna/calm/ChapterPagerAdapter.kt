@@ -22,10 +22,15 @@ class ChapterPagerAdapter(
 
     override fun onBindViewHolder(holder: PageHolder, position: Int) {
         val page = pages[position]
-        val view = pageViews.getOrPut(page.key) { pageFactory(page) }
+        val view = preload(position) ?: return
         (view.parent as? ViewGroup)?.removeView(view)
         holder.container.removeAllViews()
         holder.container.addView(view, matchParentParams())
+    }
+
+    fun preload(position: Int): View? {
+        val page = pages.getOrNull(position) ?: return null
+        return pageViews.getOrPut(page.key) { pageFactory(page) }
     }
 
     override fun onViewRecycled(holder: PageHolder) {

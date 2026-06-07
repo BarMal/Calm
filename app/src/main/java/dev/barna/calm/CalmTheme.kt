@@ -9,7 +9,6 @@ object CalmTheme {
     const val WORK_APP_LIBRARY_KEY = "dev.barna.calm.APPS.WORK"
     const val PINNED_KEY = "dev.barna.calm.PINNED"
     const val SETTINGS_KEY = "dev.barna.calm.SETTINGS"
-    const val REQUEST_CALENDAR = 1001
 
     val INK: Int = Color.rgb(236, 232, 222)
     val MUTED_INK: Int = Color.rgb(166, 161, 151)

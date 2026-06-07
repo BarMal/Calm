@@ -1,12 +1,10 @@
 package dev.barna.calm
 
-import android.app.Activity
 import android.app.AlertDialog
+import android.Manifest
 import android.content.ComponentName
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -14,16 +12,17 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import java.util.Locale
 
-class CalmSettingsActivity : Activity() {
+class CalmSettingsActivity : ComponentActivity() {
     private lateinit var settings: LauncherSettings
     private lateinit var calendarRepository: CalendarRepository
     private lateinit var appRepository: NotificationChapterRepository
@@ -31,24 +30,20 @@ class CalmSettingsActivity : Activity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val deferredRender = Runnable { render() }
     private var settingsScrollY = 0
+    private val calendarPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        render()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         settings = LauncherSettings(this)
-        calendarRepository = CalendarRepository(this)
+        calendarRepository = CalendarRepository(this) {
+            calendarPermissionLauncher.launch(Manifest.permission.READ_CALENDAR)
+        }
         appRepository = NotificationChapterRepository(this, settings)
         drawables = CalmDrawables(this)
         configureWindow()
         render()
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray,
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == CalmTheme.REQUEST_CALENDAR) render()
     }
 
     override fun onDestroy() {
@@ -57,12 +52,7 @@ class CalmSettingsActivity : Activity() {
     }
 
     private fun configureWindow() {
-        window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
-        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        window.statusBarColor = Color.TRANSPARENT
-        window.navigationBarColor = Color.TRANSPARENT
-        window.decorView.setBackgroundColor(Color.TRANSPARENT)
-        window.decorView.systemUiVisibility = 0
+        CalmSystemBars.applyTransparentWallpaper(this)
     }
 
     private fun render() {

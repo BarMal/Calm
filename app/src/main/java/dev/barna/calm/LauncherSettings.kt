@@ -63,6 +63,21 @@ class LauncherSettings(private val context: Context) {
         preferences.edit().putInt(PREF_APP_HUE_PREFIX + packageName, hueColor).apply()
     }
 
+    fun cachedLaunchableAppsSnapshot(): AppLibrarySnapshot? {
+        return preferences.getString(PREF_LAUNCHABLE_APPS_SNAPSHOT, null)
+            ?.let(AppLibrarySnapshotCodec::decode)
+    }
+
+    fun cacheLaunchableAppsSnapshot(snapshot: AppLibrarySnapshot) {
+        preferences.edit()
+            .putString(PREF_LAUNCHABLE_APPS_SNAPSHOT, AppLibrarySnapshotCodec.encode(snapshot))
+            .apply()
+    }
+
+    fun clearLaunchableAppsSnapshot() {
+        preferences.edit().remove(PREF_LAUNCHABLE_APPS_SNAPSHOT).apply()
+    }
+
     fun excludedSources(labelResolver: (String) -> String): List<ExcludedSource> {
         return excludedPackages()
             .map { sourceKey -> ExcludedSource(sourceKey, labelResolver(sourceKey)) }
@@ -294,6 +309,7 @@ class LauncherSettings(private val context: Context) {
         private const val PREF_PINNED_PACKAGES = "pinned_packages"
         private const val PREF_HIDDEN_APP_KEYS = "hidden_app_keys"
         private const val PREF_APP_HUE_PREFIX = "app_hue_"
+        private const val PREF_LAUNCHABLE_APPS_SNAPSHOT = "launchable_apps_snapshot"
         private const val PREF_EXCLUDED_LABEL_PREFIX = "excluded_label_"
         private const val PREF_TINT_NOTIFICATION_CARDS = "tint_notification_cards"
         private const val PREF_CARD_ICON_BACKGROUNDS = "card_icon_backgrounds"

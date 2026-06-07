@@ -18,6 +18,7 @@ import java.text.Collator
 import java.util.Collections
 import java.util.LinkedHashMap
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
 class NotificationChapterRepository(
@@ -32,7 +33,10 @@ class NotificationChapterRepository(
     private val iconDiskCacheDir = File(activity.cacheDir, "calm_icons").apply { mkdirs() }
     private val pendingHueKeys = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
     private val hueExecutor = Executors.newSingleThreadExecutor()
-    private var launchableAppsCache: List<AppEntry>? = null
+    private val launchableAppsCache = AppLibrarySnapshotCache(
+        store = SettingsAppLibrarySnapshotStore(settings),
+        loader = ::loadFreshLaunchableApps,
+    )
     private var onHueResolved: Runnable? = null
 
     fun setOnHueResolved(listener: Runnable) {
@@ -92,10 +96,17 @@ class NotificationChapterRepository(
             }
     }
 
-    @Synchronized
     fun loadLaunchableApps(): List<AppEntry> {
-        launchableAppsCache?.let { return it }
-        val apps = loadProfileLaunchableApps().ifEmpty { loadPackageManagerLaunchableApps() }
+        return launchableAppsCache.load()
+    }
+
+    fun refreshLaunchableApps(executor: Executor, onChanged: () -> Unit) {
+        if (!launchableAppsCache.shouldRefreshPersistedSnapshot()) return
+        launchableAppsCache.refreshAsync(executor, onChanged)
+    }
+
+    private fun loadFreshLaunchableApps(): List<AppEntry> {
+        return loadProfileLaunchableApps().ifEmpty { loadPackageManagerLaunchableApps() }
             .sortedWith { left, right ->
                 val labelCompare = Collator.getInstance().compare(left.label, right.label)
                 if (labelCompare != 0) {
@@ -104,8 +115,6 @@ class NotificationChapterRepository(
                     Collator.getInstance().compare(left.profileLabel, right.profileLabel)
                 }
             }
-        launchableAppsCache = apps
-        return apps
     }
 
     fun loadAppEntries(): List<AppEntry> {
@@ -347,14 +356,12 @@ class NotificationChapterRepository(
         }
     }
 
-    @Synchronized
     fun invalidateLaunchableApps() {
-        launchableAppsCache = null
+        launchableAppsCache.invalidate()
     }
 
-    @Synchronized
     fun invalidateAppCaches() {
-        launchableAppsCache = null
+        launchableAppsCache.invalidate()
         hueCache.clear()
         iconCache.clear()
         maskedIconCache.clear()
@@ -425,5 +432,21 @@ class NotificationChapterRepository(
     private fun String.sha256(): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(toByteArray(Charsets.UTF_8))
         return digest.joinToString("") { byte -> "%02x".format(byte) }
+    }
+}
+
+private class SettingsAppLibrarySnapshotStore(
+    private val settings: LauncherSettings,
+) : AppLibrarySnapshotStore {
+    override fun load(): AppLibrarySnapshot? {
+        return settings.cachedLaunchableAppsSnapshot()
+    }
+
+    override fun save(snapshot: AppLibrarySnapshot) {
+        settings.cacheLaunchableAppsSnapshot(snapshot)
+    }
+
+    override fun clear() {
+        settings.clearLaunchableAppsSnapshot()
     }
 }

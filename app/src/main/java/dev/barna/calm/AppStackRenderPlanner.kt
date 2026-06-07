@@ -1,12 +1,16 @@
 package dev.barna.calm
 
 class AppStackRenderPlanner {
-    fun plan(apps: List<AppEntry>, initialCardCount: Int): AppStackRenderPlan {
-        val boundedInitialCount = initialCardCount.coerceAtLeast(1)
+    fun plan(apps: List<AppEntry>, tuning: CardStackTuning): AppStackRenderPlan {
+        val boundedInitialCount = initialCardCount(tuning)
         return AppStackRenderPlan(
             initialApps = apps.take(boundedInitialCount),
             deferredApps = apps.drop(boundedInitialCount),
         )
+    }
+
+    fun initialCardCount(tuning: CardStackTuning): Int {
+        return tuning.visibleCards.coerceAtLeast(1)
     }
 
     fun batches(apps: List<AppEntry>, batchSize: Int): List<List<AppEntry>> {

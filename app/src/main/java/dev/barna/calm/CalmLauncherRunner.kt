@@ -744,7 +744,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         if (model.apps.isEmpty()) {
             stackHost.addView(appSearchEmptyStack(model.emptyMessage), matchParentParams())
         } else {
-            val plan = appStackRenderPlanner.plan(model.apps, APP_STACK_INITIAL_CARD_COUNT)
+            val plan = appStackRenderPlanner.plan(model.apps, activePreferences.cardStackTuning)
             val cards = plan.initialApps.map { app -> appCardFromCache(app, cardCache) }.toMutableList()
             val stack = appStack(cards)
             stackHost.addView(stack, matchParentParams())
@@ -1722,7 +1722,6 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         const val PAGE_PREWARM_INITIAL_DELAY_MS = 140L
         const val PAGE_PREWARM_STEP_DELAY_MS = 32L
         const val APP_SEARCH_REFRESH_DELAY_MS = 90L
-        const val APP_STACK_INITIAL_CARD_COUNT = 16
         const val APP_STACK_DEFERRED_BATCH_SIZE = 16
         const val APP_STACK_DEFERRED_INITIAL_DELAY_MS = 48L
         const val APP_STACK_DEFERRED_BATCH_DELAY_MS = 32L

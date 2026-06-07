@@ -1,24 +1,30 @@
 package dev.barna.calm
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
 class AppLibraryRenderStore(
     initialApps: List<AppEntry> = emptyList(),
 ) {
-    private var currentState = AppLibraryRenderState.from(initialApps)
+    private val currentState = MutableStateFlow(AppLibraryRenderState.from(initialApps))
     private val reducer = AppLibraryRenderReducer()
+    val stateFlow: StateFlow<AppLibraryRenderState> = currentState.asStateFlow()
 
-    @Synchronized
-    fun state(): AppLibraryRenderState = currentState
+    fun state(): AppLibraryRenderState = currentState.value
 
     @Synchronized
     fun replace(apps: List<AppEntry>, loading: Boolean = false): AppLibraryRenderState {
-        currentState = AppLibraryRenderState.from(apps, loading)
-        return currentState
+        val nextState = AppLibraryRenderState.from(apps, loading)
+        currentState.value = nextState
+        return nextState
     }
 
     @Synchronized
     fun dispatch(event: AppLibraryRenderEvent): AppLibraryRenderState {
-        currentState = reducer.reduce(currentState, event)
-        return currentState
+        val nextState = reducer.reduce(currentState.value, event)
+        currentState.value = nextState
+        return nextState
     }
 }
 

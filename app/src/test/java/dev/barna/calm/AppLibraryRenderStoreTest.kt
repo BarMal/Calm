@@ -15,6 +15,7 @@ class AppLibraryRenderStoreTest {
 
         assertTrue(state.loading)
         assertEquals(listOf(mail), state.apps)
+        assertEquals(state, store.stateFlow.value)
     }
 
     @Test

@@ -51,7 +51,10 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
-class CalmLauncherRunner(private val activity: MainActivity) {
+class CalmLauncherRunner(
+    private val activity: MainActivity,
+    private val launcherStateViewModel: LauncherStateViewModel,
+) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val settings = LauncherSettings(activity)
     private val notificationRepository = NotificationChapterRepository(activity, settings)
@@ -141,7 +144,8 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     private var chapterCarouselRow: LinearLayout? = null
     private var currentPager: ViewPager2? = null
     private var currentScreen: View? = null
-    private var currentUiState: LauncherRenderModel? = null
+    private val currentUiState: LauncherRenderModel?
+        get() = launcherStateViewModel.uiState.value.renderModel
     private var activePreferences: LauncherUiPreferences = settings.uiPreferences()
     private var appCardSettingsSnapshot: LauncherUiPreferences = activePreferences
     private var settingsChangeToken = settings.launcherChangeToken()
@@ -178,7 +182,13 @@ class CalmLauncherRunner(private val activity: MainActivity) {
             notificationCardDisplayCache.clear()
             requestRender()
         })
-        render(buildUiState(), animate = true)
+        val existingState = currentUiState
+        if (existingState != null) {
+            render(existingState, animate = false)
+            refreshStateAsync()
+        } else {
+            render(buildUiState(), animate = true)
+        }
         refreshLaunchableAppsInBackground()
     }
 
@@ -232,7 +242,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         mainHandler.removeCallbacks(deferredRender)
         focusOverlay.dismiss(false)
         appSearchPages.clear()
-        currentUiState = state
+        launcherStateViewModel.publish(state)
         if (appCardSettingsSnapshot != state.preferences) {
             appCardDisplayCache.clear()
             notificationCardDisplayCache.clear()
@@ -393,6 +403,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     }
 
     private fun refreshStateAsync() {
+        launcherStateViewModel.markLoading()
         val generation = stateGeneration.incrementAndGet()
         val notifications = stateExecutor.submit<List<AppChapter>> {
             notificationRepository.buildNotificationChapters()

@@ -1,14 +1,16 @@
 package dev.barna.calm
 
-import android.app.Activity
 import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.viewModels
 
-class MainActivity : Activity() {
+class MainActivity : ComponentActivity() {
     private lateinit var runner: CalmLauncherRunner
+    private val launcherStateViewModel: LauncherStateViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        runner = CalmLauncherRunner(this)
+        runner = CalmLauncherRunner(this, launcherStateViewModel)
         runner.onCreate()
     }
 
@@ -29,7 +31,7 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
-        permissions: Array<out String>,
+        permissions: Array<String>,
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)

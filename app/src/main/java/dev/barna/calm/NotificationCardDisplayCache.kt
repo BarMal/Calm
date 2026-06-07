@@ -49,6 +49,10 @@ class NotificationCardDisplayCache(
         return chapterIcons.putIfAbsent(chapter.launcherIdentityKey, bitmap) ?: bitmap
     }
 
+    fun cachedChapterMaskedIcon(chapter: AppChapter): Bitmap? {
+        return chapterIcons[chapter.launcherIdentityKey]
+    }
+
     fun clear() {
         cards.clear()
         chapterIcons.clear()

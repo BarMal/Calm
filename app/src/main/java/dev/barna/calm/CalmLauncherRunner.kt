@@ -372,7 +372,7 @@ class CalmLauncherRunner(
     ) {
         val generation = ++pagePrewarmGeneration
         if (pageCount <= 1) return
-        val positions = pagePrewarmPlanner.positions(pageCount, initialPage)
+        val positions = pagePrewarmPlanner.positions(pageCount, initialPage, PAGE_PREWARM_MAX_PAGES)
         scheduleNextPagePrewarm(pager, adapter, positions, generation, 0, PAGE_PREWARM_INITIAL_DELAY_MS)
     }
 
@@ -1342,7 +1342,7 @@ class CalmLauncherRunner(
             setCompoundDrawables(null, null, null, null)
             page.chapter?.let { chapter ->
                 compoundDrawablePadding = activity.dp(6)
-                notificationCardDisplayCache.chapterMaskedIcon(chapter)?.let { icon ->
+                notificationCardDisplayCache.cachedChapterMaskedIcon(chapter)?.let { icon ->
                     setCompoundDrawables(icon.toSizedDrawable(activity.dp(if (selected) 20 else 16)), null, null, null)
                 }
             }
@@ -1861,8 +1861,9 @@ class CalmLauncherRunner(
     }
 
     private companion object {
-        const val PAGE_PREWARM_INITIAL_DELAY_MS = 140L
-        const val PAGE_PREWARM_STEP_DELAY_MS = 32L
+        const val PAGE_PREWARM_INITIAL_DELAY_MS = 260L
+        const val PAGE_PREWARM_STEP_DELAY_MS = 120L
+        const val PAGE_PREWARM_MAX_PAGES = 3
         const val APP_SEARCH_REFRESH_DELAY_MS = 90L
         const val APP_STACK_DEFERRED_BATCH_SIZE = 16
         const val APP_STACK_DEFERRED_INITIAL_DELAY_MS = 48L

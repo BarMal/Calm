@@ -13,10 +13,23 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
         for (index in 0 until recycler.childCount) {
             val child = recycler.getChildAt(index)
             if (recycler.getChildAdapterPosition(child) == pager.currentItem) {
-                child.postDelayed({ animatePageEntry(child) }, 35L)
+                child.postDelayed({ animatePageEntryWhenReady(child, 0) }, 35L)
                 return
             }
         }
+    }
+
+    private fun animatePageEntryWhenReady(page: View, attempt: Int) {
+        if (!page.isAttachedToWindow) return
+        val chromeViews = ArrayList<View>()
+        val cardStacks = ArrayList<View>()
+        collectAnimatedViews(page, chromeViews, cardStacks)
+        val waitingStacks = cardStacks.filter(::isCardStackWaitingForFirstStyle)
+        if (waitingStacks.isNotEmpty() && attempt < MAX_ENTRY_READY_RETRIES) {
+            page.postDelayed({ animatePageEntryWhenReady(page, attempt + 1) }, ENTRY_READY_RETRY_DELAY_MS)
+            return
+        }
+        animatePageEntry(chromeViews, cardStacks - waitingStacks.toSet())
     }
 
     fun animateCurrentPageRemoval(pager: ViewPager2, afterRemoval: () -> Unit) {
@@ -39,6 +52,10 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
         val chromeViews = ArrayList<View>()
         val cardStacks = ArrayList<View>()
         collectAnimatedViews(page, chromeViews, cardStacks)
+        animatePageEntry(chromeViews, cardStacks)
+    }
+
+    private fun animatePageEntry(chromeViews: List<View>, cardStacks: List<View>) {
         chromeViews.forEachIndexed { index, view -> animateChromeIntoView(view, index) }
         cardStacks.forEach { stack -> animateCardStackIntoView(stack) }
     }
@@ -82,6 +99,18 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
         }
     }
 
+    private fun isCardStackWaitingForFirstStyle(stackView: View): Boolean {
+        val content = (stackView as? ViewGroup)?.getChildAt(0) as? ViewGroup ?: return false
+        var cardCount = 0
+        for (index in 0 until content.childCount) {
+            val card = content.getChildAt(index)
+            if (card.tag != CalmAnimationTags.CARD) continue
+            cardCount++
+            if (card.alpha > 0f) return false
+        }
+        return cardCount > 0
+    }
+
     private fun animateCardIntoView(card: View, index: Int) {
         val targetAlpha = card.alpha
         val targetY = card.translationY
@@ -115,5 +144,7 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
 
     private companion object {
         const val MAX_ENTRY_ANIMATED_CARDS = 8
+        const val MAX_ENTRY_READY_RETRIES = 6
+        const val ENTRY_READY_RETRY_DELAY_MS = 32L
     }
 }

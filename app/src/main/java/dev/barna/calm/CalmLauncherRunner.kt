@@ -72,7 +72,6 @@ class CalmLauncherRunner(
     private val appLibraryPageModelFactory = AppLibraryPageModelFactory()
     private val appStackRenderPlanner = AppStackRenderPlanner()
     private val appLibraryStore = AppLibraryRenderStore()
-    private val appLibraryEventPlanner = AppLibraryEventPlanner()
     private val contextActionFactory = LauncherContextActionFactory(
         LauncherContextActionCallbacks(
             openNotification = ::openNotification,
@@ -437,43 +436,20 @@ class CalmLauncherRunner(
     }
 
     private fun refreshLaunchableAppsInBackground() {
-        val previousApps = appLibraryStore.state().apps
         val scheduled = notificationRepository.refreshLaunchableApps(stateExecutor) { result ->
             mainHandler.post {
                 if (result.changed) {
                     appCardDisplayCache.clear()
                     notificationCardDisplayCache.clear()
                 }
-                scheduleAppLibraryEvents(
-                    appLibraryEventPlanner.plan(
-                        currentApps = previousApps,
-                        nextApps = result.apps.filterNot(settings::isAppHidden),
-                        batchSize = APP_LIBRARY_EVENT_BATCH_SIZE,
-                    ),
-                )
+                appLibraryEventGeneration++
+                val state = appLibraryStore.replace(result.apps.filterNot(settings::isAppHidden))
+                refreshVisibleAppLibraryPages(state)
             }
         }
         if (scheduled) {
             applyAppLibraryEvent(AppLibraryRenderEvent.LoadingStarted)
         }
-    }
-
-    private fun scheduleAppLibraryEvents(events: List<AppLibraryRenderEvent>) {
-        val generation = ++appLibraryEventGeneration
-        scheduleNextAppLibraryEvent(events, generation, 0)
-    }
-
-    private fun scheduleNextAppLibraryEvent(
-        events: List<AppLibraryRenderEvent>,
-        generation: Int,
-        index: Int,
-    ) {
-        if (index >= events.size) return
-        mainHandler.postDelayed({
-            if (generation != appLibraryEventGeneration) return@postDelayed
-            applyAppLibraryEvent(events[index])
-            scheduleNextAppLibraryEvent(events, generation, index + 1)
-        }, if (index == 0) 0L else APP_LIBRARY_EVENT_STEP_DELAY_MS)
     }
 
     private fun applyAppLibraryEvent(event: AppLibraryRenderEvent) {
@@ -494,8 +470,8 @@ class CalmLauncherRunner(
     }
 
     private fun buildUiState(): LauncherRenderModel {
-        val notificationChapters = notificationRepository.buildNotificationChapters()
-        val appEntries = loadAppEntries()
+        val appEntries = loadCachedAppEntries()
+        val notificationChapters = notificationRepository.buildNotificationChapters(appEntries)
         val pinnedKeys = settings.pinnedPackages()
         val hasCalendarPermission = calendarRepository.hasCalendarPermission()
         return renderModelFactory.create(
@@ -847,20 +823,31 @@ class CalmLauncherRunner(
         cardCache: MutableMap<String, TextView>?,
         model: AppLibraryPageModel,
     ) {
-        val batches = appStackRenderPlanner.batches(deferredApps, APP_STACK_DEFERRED_BATCH_SIZE)
-        if (batches.isEmpty()) {
-            appQuickScrollController.attach(stackHost, stack, model, activePreferences.cardStackTuning)
-            return
+        var nextDeferredIndex = 0
+        fun appendNextBatch(): Boolean {
+            if (nextDeferredIndex >= deferredApps.size) return false
+            val end = (nextDeferredIndex + APP_STACK_DEFERRED_BATCH_SIZE).coerceAtMost(deferredApps.size)
+            val batch = deferredApps.subList(nextDeferredIndex, end)
+            nextDeferredIndex = end
+            val newCards = batch.map { app -> appCardFromCache(app, cardCache) }
+            cardStackController.appendCards(stack, renderedCards, newCards, cardHeight(), cardStep(), activePreferences.cardStackTuning)
+            return true
         }
-        batches.forEachIndexed { index, batch ->
+        fun ensureRendered(cardIndex: Int) {
+            while (renderedCards.size <= cardIndex && appendNextBatch()) {
+            }
+        }
+        fun scheduleNextBatch(delayMs: Long) {
             mainHandler.postDelayed({
                 if (stack.parent == null || !stackHost.isAttachedToWindow) return@postDelayed
-                val newCards = batch.map { app -> appCardFromCache(app, cardCache) }
-                cardStackController.appendCards(stack, renderedCards, newCards, cardHeight(), cardStep(), activePreferences.cardStackTuning)
-                if (index == batches.lastIndex) {
-                    appQuickScrollController.attach(stackHost, stack, model, activePreferences.cardStackTuning)
+                if (appendNextBatch()) {
+                    scheduleNextBatch(APP_STACK_DEFERRED_BATCH_DELAY_MS)
                 }
-            }, APP_STACK_DEFERRED_INITIAL_DELAY_MS + (index * APP_STACK_DEFERRED_BATCH_DELAY_MS))
+            }, delayMs)
+        }
+        appQuickScrollController.attach(stackHost, stack, model, activePreferences.cardStackTuning, ::ensureRendered)
+        if (deferredApps.isNotEmpty()) {
+            scheduleNextBatch(APP_STACK_DEFERRED_INITIAL_DELAY_MS)
         }
     }
 
@@ -945,7 +932,7 @@ class CalmLauncherRunner(
     }
 
     private fun appCard(app: AppEntry): TextView {
-        val data = appCardDisplayCache.getOrCreate(app, currentUiState?.pinnedKeys ?: settings.pinnedPackages())
+        val data = appCardDisplayCache.getCachedOrCreateLightweight(app, currentUiState?.pinnedKeys ?: settings.pinnedPackages())
         return stackCard(data.text, data.hueColor, true, data.icon).apply {
             maxLines = 4
             setOnClickListener { openAppEntry(app) }
@@ -1007,6 +994,14 @@ class CalmLauncherRunner(
 
     private fun loadAppEntries(): List<AppEntry> {
         val apps = notificationRepository.loadAppEntries()
+            .filterNot(settings::isAppHidden)
+        appLibraryEventGeneration++
+        appLibraryStore.replace(apps)
+        return apps
+    }
+
+    private fun loadCachedAppEntries(): List<AppEntry> {
+        val apps = notificationRepository.loadCachedAppEntries()
             .filterNot(settings::isAppHidden)
         appLibraryEventGeneration++
         appLibraryStore.replace(apps)
@@ -1812,8 +1807,6 @@ class CalmLauncherRunner(
         const val PAGE_PREWARM_INITIAL_DELAY_MS = 140L
         const val PAGE_PREWARM_STEP_DELAY_MS = 32L
         const val APP_SEARCH_REFRESH_DELAY_MS = 90L
-        const val APP_LIBRARY_EVENT_BATCH_SIZE = 24
-        const val APP_LIBRARY_EVENT_STEP_DELAY_MS = 24L
         const val APP_STACK_DEFERRED_BATCH_SIZE = 16
         const val APP_STACK_DEFERRED_INITIAL_DELAY_MS = 48L
         const val APP_STACK_DEFERRED_BATCH_DELAY_MS = 32L

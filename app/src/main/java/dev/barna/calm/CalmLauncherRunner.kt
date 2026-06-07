@@ -19,7 +19,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
-import android.os.VibratorManager
 import android.provider.CalendarContract
 import android.provider.Settings
 import android.text.Editable
@@ -30,7 +29,6 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
-import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
@@ -54,11 +52,12 @@ import java.util.concurrent.atomic.AtomicInteger
 class CalmLauncherRunner(
     private val activity: MainActivity,
     private val launcherStateViewModel: LauncherStateViewModel,
+    requestCalendarPermission: () -> Unit,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val settings = LauncherSettings(activity)
     private val notificationRepository = NotificationChapterRepository(activity, settings)
-    private val calendarRepository = CalendarRepository(activity)
+    private val calendarRepository = CalendarRepository(activity, requestCalendarPermission)
     private val drawables = CalmDrawables(activity)
     private val cardSpec = CalmCardSpec()
     private val pinnedAppResolver = PinnedAppResolver()
@@ -221,19 +220,12 @@ class CalmLauncherRunner(
         unregisterPackageChangeReceiver()
     }
 
-    fun onRequestPermissionsResult(requestCode: Int) {
-        if (requestCode == CalmTheme.REQUEST_CALENDAR) {
-            refreshStateAsync()
-        }
+    fun onCalendarPermissionResult() {
+        refreshStateAsync()
     }
 
     private fun configureWindow() {
-        activity.window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
-        activity.window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        activity.window.statusBarColor = Color.TRANSPARENT
-        activity.window.navigationBarColor = Color.TRANSPARENT
-        activity.window.decorView.setBackgroundColor(Color.TRANSPARENT)
-        activity.window.decorView.systemUiVisibility = 0
+        CalmSystemBars.applyTransparentWallpaper(activity)
     }
 
     private fun render() {
@@ -1859,11 +1851,7 @@ class CalmLauncherRunner(
     }
 
     private fun vibrator(): Vibrator? {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            (activity.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
-        } else {
-            activity.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-        }
+        return CalmVibrator.defaultVibrator(activity)
     }
 
     private fun registerPackageChangeReceiver() {

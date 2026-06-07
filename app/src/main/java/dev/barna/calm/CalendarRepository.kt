@@ -9,13 +9,16 @@ import android.text.format.DateFormat
 import java.util.Calendar
 import java.util.Date
 
-class CalendarRepository(private val activity: Activity) {
+class CalendarRepository(
+    private val activity: Activity,
+    private val requestCalendarPermission: () -> Unit,
+) {
     fun hasCalendarPermission(): Boolean {
         return activity.checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
     }
 
     fun requestCalendarAccess() {
-        activity.requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), CalmTheme.REQUEST_CALENDAR)
+        requestCalendarPermission()
     }
 
     fun loadUpcomingEvents(): List<CalendarEvent> {

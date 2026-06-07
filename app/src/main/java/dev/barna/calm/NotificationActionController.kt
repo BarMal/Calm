@@ -3,6 +3,7 @@ package dev.barna.calm
 import android.app.AlertDialog
 import android.app.PendingIntent
 import android.app.RemoteInput
+import android.content.ComponentName
 import android.content.Intent
 import android.os.UserHandle
 import android.widget.EditText
@@ -19,7 +20,7 @@ class NotificationActionController(
     private val selectPage: (String) -> Unit,
     private val currentPages: () -> List<ChapterPage>,
     private val currentPager: () -> ViewPager2?,
-    private val openAppInfo: (packageName: String, userHandle: UserHandle?, componentName: String?) -> Unit,
+    private val openAppInfo: (packageName: String, userHandle: UserHandle?, componentName: ComponentName?) -> Unit,
     private val openSettings: () -> Unit,
 ) {
     fun openNotification(notification: CalmNotificationListenerService.CalmNotification) {

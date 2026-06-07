@@ -67,6 +67,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     private val appCardDisplayCache = AppCardDisplayCache(notificationRepository, appCardModelFactory)
     private val notificationCardDisplayCache = NotificationCardDisplayCache(notificationRepository)
     private val appLibraryPageModelFactory = AppLibraryPageModelFactory()
+    private val appStackRenderPlanner = AppStackRenderPlanner()
     private val contextActionFactory = LauncherContextActionFactory(
         LauncherContextActionCallbacks(
             openNotification = ::openNotification,
@@ -743,19 +744,54 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         if (model.apps.isEmpty()) {
             stackHost.addView(appSearchEmptyStack(model.emptyMessage), matchParentParams())
         } else {
-            val stack = appStack(model.apps, cardCache)
+            val plan = appStackRenderPlanner.plan(model.apps, activePreferences.cardStackTuning)
+            val cards = plan.initialApps.map { app -> appCardFromCache(app, cardCache) }.toMutableList()
+            val stack = appStack(cards)
             stackHost.addView(stack, matchParentParams())
+            appendDeferredAppCards(stackHost, stack, cards, plan.deferredApps, cardCache, model)
+        }
+    }
+
+    private fun appendDeferredAppCards(
+        stackHost: FrameLayout,
+        stack: ScrollView,
+        renderedCards: MutableList<TextView>,
+        deferredApps: List<AppEntry>,
+        cardCache: MutableMap<String, TextView>?,
+        model: AppLibraryPageModel,
+    ) {
+        val batches = appStackRenderPlanner.batches(deferredApps, APP_STACK_DEFERRED_BATCH_SIZE)
+        if (batches.isEmpty()) {
             appQuickScrollController.attach(stackHost, stack, model, activePreferences.cardStackTuning)
+            return
+        }
+        batches.forEachIndexed { index, batch ->
+            mainHandler.postDelayed({
+                if (stack.parent == null || !stackHost.isAttachedToWindow) return@postDelayed
+                val newCards = batch.map { app -> appCardFromCache(app, cardCache) }
+                cardStackController.appendCards(stack, renderedCards, newCards, cardHeight(), cardStep(), activePreferences.cardStackTuning)
+                if (index == batches.lastIndex) {
+                    appQuickScrollController.attach(stackHost, stack, model, activePreferences.cardStackTuning)
+                }
+            }, APP_STACK_DEFERRED_INITIAL_DELAY_MS + (index * APP_STACK_DEFERRED_BATCH_DELAY_MS))
         }
     }
 
     private fun appStack(apps: List<AppEntry>, cardCache: MutableMap<String, TextView>? = null): ScrollView {
+        return appStack(apps.map { app -> appCardFromCache(app, cardCache) }.toMutableList())
+    }
+
+    private fun appStack(cards: MutableList<TextView>): ScrollView {
         return cardStackController.cardStack(
-            apps.map { app -> cardCache?.getOrPut(app.identityKey) { appCard(app) } ?: appCard(app) },
+            cards,
             cardHeight(),
             cardStep(),
             activePreferences.cardStackTuning,
         )
+    }
+
+    private fun appCardFromCache(app: AppEntry, cardCache: MutableMap<String, TextView>? = null): TextView {
+        return cardCache?.getOrPut(app.identityKey) { appCard(app) } ?: appCard(app)
     }
 
     private fun appSearchEmptyStack(message: String): View {
@@ -1686,5 +1722,8 @@ class CalmLauncherRunner(private val activity: MainActivity) {
         const val PAGE_PREWARM_INITIAL_DELAY_MS = 140L
         const val PAGE_PREWARM_STEP_DELAY_MS = 32L
         const val APP_SEARCH_REFRESH_DELAY_MS = 90L
+        const val APP_STACK_DEFERRED_BATCH_SIZE = 16
+        const val APP_STACK_DEFERRED_INITIAL_DELAY_MS = 48L
+        const val APP_STACK_DEFERRED_BATCH_DELAY_MS = 32L
     }
 }

@@ -37,20 +37,7 @@ class CardStackController(
         stack.setPadding(0, minimumTopPadding, 0, minimumBottomPadding)
         scroller.addView(stack, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
-        val stackOverlap = cardHeight - tunedStep
-        cards.forEachIndexed { index, card ->
-            card.tag = CalmAnimationTags.CARD
-            card.alpha = 0f
-            card.translationX = 0f
-            card.translationY = 0f
-            card.translationZ = 0f
-            card.rotation = 0f
-            card.scaleX = 1f
-            card.scaleY = 1f
-            val params = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, cardHeight)
-            params.topMargin = if (index == 0) 0 else -stackOverlap
-            stack.addView(card, params)
-        }
+        appendCardsToStack(stack, 0, cards, cardHeight, tunedStep)
 
         val lastHapticIndex = intArrayOf(-1)
         val styledRange = intArrayOf(-1, -1)
@@ -90,6 +77,22 @@ class CardStackController(
         return scroller
     }
 
+    fun appendCards(
+        scroller: ScrollView,
+        cards: MutableList<TextView>,
+        newCards: List<TextView>,
+        cardHeight: Int,
+        cardStep: Int,
+        tuning: CardStackTuning,
+    ) {
+        if (newCards.isEmpty()) return
+        val stack = scroller.getChildAt(0) as? LinearLayout ?: return
+        val startIndex = cards.size
+        cards.addAll(newCards)
+        appendCardsToStack(stack, startIndex, newCards, cardHeight, tunedCardStep(cardStep, tuning))
+        updateStackHeight(scroller, stack, cards)
+    }
+
     fun scrollToCard(scroller: ScrollView, cardIndex: Int, smooth: Boolean) {
         val stack = scroller.getChildAt(0) as? LinearLayout ?: return
         if (stack.childCount == 0) return
@@ -111,6 +114,38 @@ class CardStackController(
         val maxStep = activity.dp(88)
         val fromBase = (baseStep * (0.72f + (tuning.verticalSpacing / 100f) * 0.72f)).toInt()
         return fromBase.coerceIn(minStep, maxStep)
+    }
+
+    private fun appendCardsToStack(
+        stack: LinearLayout,
+        startIndex: Int,
+        newCards: List<TextView>,
+        cardHeight: Int,
+        tunedStep: Int,
+    ) {
+        val stackOverlap = cardHeight - tunedStep
+        newCards.forEachIndexed { offset, card ->
+            val index = startIndex + offset
+            card.tag = CalmAnimationTags.CARD
+            card.alpha = 0f
+            card.translationX = 0f
+            card.translationY = 0f
+            card.translationZ = 0f
+            card.rotation = 0f
+            card.scaleX = 1f
+            card.scaleY = 1f
+            val params = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, cardHeight)
+            params.topMargin = if (index == 0) 0 else -stackOverlap
+            stack.addView(card, params)
+        }
+    }
+
+    private fun updateStackHeight(scroller: ScrollView, stack: LinearLayout, cards: List<TextView>) {
+        stack.post {
+            val firstCardTop = cards.firstOrNull()?.top ?: 0
+            val maxScroll = maxOf(0, (cards.lastOrNull()?.top ?: firstCardTop) - firstCardTop)
+            stack.minimumHeight = scroller.height + maxScroll
+        }
     }
 
     private fun style(

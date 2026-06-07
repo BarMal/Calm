@@ -62,7 +62,9 @@ class FocusOverlayController(
             setOnClickListener { }
         }
         focusedCardClone = focusedCard
-        overlay.addView(focusedCard, startBounds.layoutParams())
+        focusedCard.x = startBounds.left.toFloat()
+        focusedCard.y = startBounds.top.toFloat()
+        overlay.addView(focusedCard, FrameLayout.LayoutParams(startBounds.width, startBounds.height))
 
         val menu = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -357,13 +359,6 @@ class FocusOverlayController(
         return FrameLayout.LayoutParams(targetBounds.width, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             leftMargin = targetBounds.left
             topMargin = targetBounds.top + targetBounds.height + activity.dp(14)
-        }
-    }
-
-    private fun CardBounds.layoutParams(): FrameLayout.LayoutParams {
-        return FrameLayout.LayoutParams(width, height).apply {
-            leftMargin = left
-            topMargin = top
         }
     }
 

@@ -69,15 +69,11 @@ class CardStackController(
             }
         }
         scroller.post {
-            val viewportLocation = IntArray(2)
-            scroller.getLocationOnScreen(viewportLocation)
-            val targetTopOnScreen = (activity.window.decorView.height - cardHeight) / 2
             val stackTopPadding = CardStackLayout.activeTopPadding(
                 viewportHeight = scroller.height,
                 cardHeight = cardHeight,
                 minimumTopPadding = minimumTopPadding,
-                viewportTopOnScreen = viewportLocation[1],
-                targetTopOnScreen = targetTopOnScreen,
+                peakFraction = tuning.stackPeakFraction,
             )
             val trailingPadding = CardStackLayout.trailingPadding(
                 viewportHeight = scroller.height,

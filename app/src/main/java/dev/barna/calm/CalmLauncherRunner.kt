@@ -1137,7 +1137,6 @@ class CalmLauncherRunner(
         val mediaControls = MediaNotificationControls.from(chapter.notifications)
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            clipChildren = false
             clipToPadding = false
             addView(stackToolbar(groupingIconButton(chapter)), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(32)))
             addView(notificationStack(chapter, tintCards), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))

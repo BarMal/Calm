@@ -140,6 +140,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
     private var currentUiState: LauncherRenderModel? = null
     private var activePreferences: LauncherUiPreferences = settings.uiPreferences()
     private var appCardSettingsSnapshot: LauncherUiPreferences = activePreferences
+    private var settingsChangeToken = settings.launcherChangeToken()
     private var packageChangeReceiverRegistered = false
     private val appSearchQueries = EnumMap<AppLibraryScope, String>(AppLibraryScope::class.java)
     private val appSearchPages = ArrayList<AppSearchPageState>()
@@ -172,7 +173,12 @@ class CalmLauncherRunner(private val activity: MainActivity) {
 
     fun onResume() {
         CalmNotificationListenerService.addListener(notificationRefresh)
-        if (resumeRefreshPolicy.shouldRefreshImmediately(currentScreen != null, currentUiState != null)) {
+        if (resumeRefreshPolicy.shouldRefreshImmediately(
+                hasCurrentScreen = currentScreen != null,
+                hasCurrentState = currentUiState != null,
+                launcherSettingsChanged = settingsChangeToken != settings.launcherChangeToken(),
+            )
+        ) {
             render(buildUiState(), animate = true)
         }
     }
@@ -222,6 +228,7 @@ class CalmLauncherRunner(private val activity: MainActivity) {
             stateExecutor,
         )
         activePreferences = state.preferences
+        settingsChangeToken = settings.launcherChangeToken()
         val pages = state.pages
         val initialPage = resolveInitialPage(pages)
 

@@ -9,13 +9,18 @@ class ResumeRefreshPolicyTest {
 
     @Test
     fun refreshesWhenNoUiHasBeenRendered() {
-        assertTrue(policy.shouldRefreshImmediately(hasCurrentScreen = false, hasCurrentState = false))
-        assertTrue(policy.shouldRefreshImmediately(hasCurrentScreen = true, hasCurrentState = false))
-        assertTrue(policy.shouldRefreshImmediately(hasCurrentScreen = false, hasCurrentState = true))
+        assertTrue(policy.shouldRefreshImmediately(hasCurrentScreen = false, hasCurrentState = false, launcherSettingsChanged = false))
+        assertTrue(policy.shouldRefreshImmediately(hasCurrentScreen = true, hasCurrentState = false, launcherSettingsChanged = false))
+        assertTrue(policy.shouldRefreshImmediately(hasCurrentScreen = false, hasCurrentState = true, launcherSettingsChanged = false))
     }
 
     @Test
     fun preservesExistingUiOnResume() {
-        assertFalse(policy.shouldRefreshImmediately(hasCurrentScreen = true, hasCurrentState = true))
+        assertFalse(policy.shouldRefreshImmediately(hasCurrentScreen = true, hasCurrentState = true, launcherSettingsChanged = false))
+    }
+
+    @Test
+    fun refreshesExistingUiWhenLauncherSettingsChanged() {
+        assertTrue(policy.shouldRefreshImmediately(hasCurrentScreen = true, hasCurrentState = true, launcherSettingsChanged = true))
     }
 }

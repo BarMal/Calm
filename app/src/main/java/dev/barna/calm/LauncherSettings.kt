@@ -115,6 +115,17 @@ class LauncherSettings(private val context: Context) {
         )
     }
 
+    fun launcherChangeToken(): Int {
+        return listOf(
+            uiPreferences(),
+            excludedPackages(),
+            notificationFilters().toSet(),
+            pinnedPackages(),
+            hiddenAppKeys(),
+            splitNotificationPackages(),
+        ).hashCode()
+    }
+
     fun useCardIconBackgrounds(): Boolean {
         return preferences.getBoolean(PREF_CARD_ICON_BACKGROUNDS, true)
     }

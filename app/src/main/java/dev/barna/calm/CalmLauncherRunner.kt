@@ -91,6 +91,7 @@ class CalmLauncherRunner(
     )
     private val cardStackController = CardStackController(activity, mainHandler, ::performCardScrollHaptic)
     private val pageRemovalPlanner = ChapterPageRemovalPlanner()
+    private val pageSelectionResolver = ChapterPageSelectionResolver()
     private val pagePrewarmPlanner = ChapterPagePrewarmPlanner()
     private val appQuickScrollController = AppQuickScrollController(
         activity,
@@ -139,7 +140,7 @@ class CalmLauncherRunner(
         }
     }
 
-    private var selectedPackageName = CalmTheme.OVERVIEW_KEY
+    private var selectedPackageName = launcherStateViewModel.uiState.value.selectedPageKey ?: CalmTheme.OVERVIEW_KEY
     private var chapterCarousel: HorizontalScrollView? = null
     private var chapterCarouselRow: LinearLayout? = null
     private var currentPager: ViewPager2? = null
@@ -305,7 +306,7 @@ class CalmLauncherRunner(
             }
 
             override fun onPageSelected(position: Int) {
-                selectedPackageName = pages[position].key
+                selectPage(pages[position].key)
                 if (suppressedPageEntryKey != selectedPackageName) {
                     suppressedPageEntryKey = null
                 }
@@ -348,11 +349,16 @@ class CalmLauncherRunner(
     }
 
     private fun resolveInitialPage(pages: List<ChapterPage>): Int {
-        pages.forEachIndexed { index, page ->
-            if (page.key == selectedPackageName) return index
+        val selection = pageSelectionResolver.resolve(pages, selectedPackageName)
+        if (selection.key != selectedPackageName) {
+            selectPage(selection.key)
         }
-        selectedPackageName = CalmTheme.OVERVIEW_KEY
-        return 0
+        return selection.index
+    }
+
+    private fun selectPage(pageKey: String) {
+        selectedPackageName = pageKey
+        launcherStateViewModel.selectPage(pageKey)
     }
 
     private fun createPage(page: ChapterPage, state: LauncherRenderModel): View {
@@ -569,7 +575,10 @@ class CalmLauncherRunner(
             addView(animatedChrome(label("Pinned apps stay one chapter left of Overview.", 15, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
                 setPadding(0, activity.dp(6), 0, activity.dp(24))
             }))
-            addView(appStack(pinnedApps), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+            addView(
+                appStack(pinnedApps, stackKey = CardStackStateKey.appEntries("pinned", pinnedApps)),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+            )
         }
     }
 
@@ -805,11 +814,11 @@ class CalmLauncherRunner(
         }
         stackHost.removeAllViews()
         if (model.apps.isEmpty()) {
-            stackHost.addView(appSearchEmptyStack(model.emptyMessage), matchParentParams())
+            stackHost.addView(appSearchEmptyStack(model.emptyMessage, appLibraryStackKey(model)), matchParentParams())
         } else {
             val plan = appStackRenderPlanner.plan(model.apps, activePreferences.cardStackTuning)
             val cards = plan.initialApps.map { app -> appCardFromCache(app, cardCache) }.toMutableList()
-            val stack = appStack(cards)
+            val stack = appStack(cards, appLibraryStackKey(model))
             stackHost.addView(stack, matchParentParams())
             appendDeferredAppCards(stackHost, stack, cards, plan.deferredApps, cardCache, model)
         }
@@ -851,16 +860,21 @@ class CalmLauncherRunner(
         }
     }
 
-    private fun appStack(apps: List<AppEntry>, cardCache: MutableMap<String, TextView>? = null): ScrollView {
-        return appStack(apps.map { app -> appCardFromCache(app, cardCache) }.toMutableList())
+    private fun appStack(
+        apps: List<AppEntry>,
+        cardCache: MutableMap<String, TextView>? = null,
+        stackKey: String = CardStackStateKey.appEntries("apps", apps),
+    ): ScrollView {
+        return appStack(apps.map { app -> appCardFromCache(app, cardCache) }.toMutableList(), stackKey)
     }
 
-    private fun appStack(cards: MutableList<TextView>): ScrollView {
+    private fun appStack(cards: MutableList<TextView>, stackKey: String): ScrollView {
         return cardStackController.cardStack(
             cards,
             cardHeight(),
             cardStep(),
             activePreferences.cardStackTuning,
+            stackKey,
         )
     }
 
@@ -868,7 +882,7 @@ class CalmLauncherRunner(
         return cardCache?.getOrPut(app.identityKey) { appCard(app) } ?: appCard(app)
     }
 
-    private fun appSearchEmptyStack(message: String): View {
+    private fun appSearchEmptyStack(message: String, stackKey: String): View {
         val card = stackCard(
             "Search\n$message",
             CalmTheme.ACCENT,
@@ -885,7 +899,12 @@ class CalmLauncherRunner(
             cardHeight(),
             cardStep(),
             activePreferences.cardStackTuning,
+            stackKey,
         )
+    }
+
+    private fun appLibraryStackKey(model: AppLibraryPageModel): String {
+        return CardStackStateKey.appLibrary(model.key, model.scope, model.query)
     }
 
     private fun cardHeight(): Int = activity.dp(cardSpec.heightDp)
@@ -1208,6 +1227,7 @@ class CalmLauncherRunner(
             cardHeight(),
             cardStep(),
             activePreferences.cardStackTuning,
+            CardStackStateKey.notifications(chapter),
         )
     }
 
@@ -1238,7 +1258,13 @@ class CalmLauncherRunner(
                 ),
             )
         }
-        return cardStackController.cardStack(cards, cardHeight(), cardStep(), activePreferences.cardStackTuning)
+        return cardStackController.cardStack(
+            cards,
+            cardHeight(),
+            cardStep(),
+            activePreferences.cardStackTuning,
+            CardStackStateKey.OVERVIEW_CALENDAR,
+        )
     }
 
     private fun createPagePanel(backgroundImage: android.graphics.Bitmap?, hueColor: Int): LinearLayout {
@@ -1356,6 +1382,7 @@ class CalmLauncherRunner(
         val pager = currentPager ?: return
         val current = pager.currentItem
         if (index == current) return
+        currentUiState?.pages?.getOrNull(index)?.key?.let(::selectPage)
         val smooth = kotlin.math.abs(index - current) == 1
         if (!smooth) {
             suppressedPageEntryKey = currentUiState?.pages?.getOrNull(index)?.key
@@ -1558,7 +1585,7 @@ class CalmLauncherRunner(
 
     private fun pinApp(app: AppEntry) {
         settings.pinPackage(app.identityKey)
-        selectedPackageName = CalmTheme.PINNED_KEY
+        selectPage(CalmTheme.PINNED_KEY)
         Toast.makeText(activity, "Pinned ${app.label}", Toast.LENGTH_SHORT).show()
         render()
     }
@@ -1567,7 +1594,7 @@ class CalmLauncherRunner(
         settings.unpinPackage(app.identityKey)
         settings.unpinPackage(app.packageName)
         if (loadPinnedApps().isEmpty()) {
-            selectedPackageName = CalmTheme.APP_LIBRARY_KEY
+            selectPage(CalmTheme.APP_LIBRARY_KEY)
         }
         Toast.makeText(activity, "Unpinned ${app.label}", Toast.LENGTH_SHORT).show()
         render()
@@ -1745,7 +1772,7 @@ class CalmLauncherRunner(
     private fun excludeNotificationSource(chapter: AppChapter) {
         val nextPageKey = pageRemovalPlanner.selectPageAfterRemoval(currentUiState?.pages.orEmpty(), chapter.identityKey)
         settings.exclude(chapter)
-        selectedPackageName = nextPageKey
+        selectPage(nextPageKey)
         Toast.makeText(activity, "Excluded ${chapter.label}", Toast.LENGTH_SHORT).show()
         val pager = currentPager
         if (pager == null) {
@@ -1773,7 +1800,7 @@ class CalmLauncherRunner(
             selectedPackageName == CalmTheme.PERSONAL_APP_LIBRARY_KEY ||
             selectedPackageName == CalmTheme.WORK_APP_LIBRARY_KEY
         ) {
-            selectedPackageName = if (nextValue) CalmTheme.PERSONAL_APP_LIBRARY_KEY else CalmTheme.APP_LIBRARY_KEY
+            selectPage(if (nextValue) CalmTheme.PERSONAL_APP_LIBRARY_KEY else CalmTheme.APP_LIBRARY_KEY)
         }
         Toast.makeText(activity, if (nextValue) "Apps split by profile" else "Apps combined", Toast.LENGTH_SHORT).show()
         render()

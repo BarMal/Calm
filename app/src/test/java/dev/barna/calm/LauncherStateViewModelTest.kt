@@ -41,6 +41,20 @@ class LauncherStateViewModelTest {
         assertEquals(2, viewModel.uiState.value.generation)
     }
 
+    @Test
+    fun selectedPageSurvivesPublishedRenderModels() {
+        val viewModel = LauncherStateViewModel()
+        val first = renderModel()
+        val second = renderModel()
+
+        viewModel.selectPage("notifications:mail")
+        viewModel.publish(first)
+        viewModel.publish(second)
+
+        assertEquals("notifications:mail", viewModel.uiState.value.selectedPageKey)
+        assertSame(second, viewModel.uiState.value.renderModel)
+    }
+
     private fun renderModel(): LauncherRenderModel {
         val preferences = LauncherUiPreferences(
             useTintedNotificationCards = true,

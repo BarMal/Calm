@@ -6,6 +6,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import java.util.WeakHashMap
 
 class CardStackController(
     private val activity: MainActivity,
@@ -13,9 +14,15 @@ class CardStackController(
     private val haptics: (android.view.View) -> Unit,
 ) {
     private val rememberedScrollPositions = LinkedHashMap<String, Int>()
+    private val activeStackKeys = WeakHashMap<ScrollView, String>()
 
-    fun cardStack(cards: List<TextView>, cardHeight: Int, cardStep: Int, tuning: CardStackTuning): ScrollView {
-        val stackKey = stackKey(cards)
+    fun cardStack(
+        cards: List<TextView>,
+        cardHeight: Int,
+        cardStep: Int,
+        tuning: CardStackTuning,
+        stackKey: String = stackKey(cards),
+    ): ScrollView {
         val scroller = ScrollView(activity).apply {
             tag = CalmAnimationTags.CARD_STACK
             isFillViewport = true
@@ -26,6 +33,7 @@ class CardStackController(
             clipToPadding = false
             clipChildren = false
         }
+        activeStackKeys[scroller] = stackKey
         val stack = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             clipToPadding = false
@@ -101,7 +109,7 @@ class CardStackController(
         val lastCard = stack.getChildAt(stack.childCount - 1) ?: return
         val cards = (0 until stack.childCount).mapNotNull { index -> stack.getChildAt(index) as? TextView }
         val target = (targetCard.top - firstCard.top).coerceIn(0, maxOf(0, lastCard.top - firstCard.top))
-        rememberScroll(stackKey(cards), target)
+        rememberScroll(activeStackKeys[scroller] ?: stackKey(cards), target)
         if (smooth) {
             scroller.smoothScrollTo(0, target)
         } else {

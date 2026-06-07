@@ -100,8 +100,8 @@ class AppLibrarySnapshotCacheTest {
         }
         var changedCallbacks = 0
 
-        cache.refreshAsync(executor) { changedCallbacks++ }
-        cache.refreshAsync(executor) { changedCallbacks++ }
+        cache.refreshAsync(executor) { result -> if (result.changed) changedCallbacks++ }
+        cache.refreshAsync(executor) { result -> if (result.changed) changedCallbacks++ }
 
         assertEquals(1, executor.tasks.size)
         executor.runNext()

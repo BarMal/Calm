@@ -42,6 +42,13 @@ class AppLibraryFilterTest {
         assertEquals("No work apps are available.", filter.emptyMessage(AppLibraryScope.WORK, ""))
     }
 
+    @Test
+    fun loadingMessagesMatchScope() {
+        assertEquals("Loading apps...", filter.loadingMessage(AppLibraryScope.ALL))
+        assertEquals("Loading personal apps...", filter.loadingMessage(AppLibraryScope.PERSONAL))
+        assertEquals("Loading work apps...", filter.loadingMessage(AppLibraryScope.WORK))
+    }
+
     private fun app(
         packageName: String,
         label: String,

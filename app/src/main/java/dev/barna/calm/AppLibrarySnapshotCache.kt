@@ -46,17 +46,15 @@ class AppLibrarySnapshotCache(
         )
     }
 
-    fun refreshAsync(executor: Executor, onChanged: () -> Unit) {
+    fun refreshAsync(executor: Executor, onRefreshed: (AppLibraryRefreshResult) -> Unit) {
         if (!refreshPending.compareAndSet(false, true)) return
         executor.execute {
-            val changed = try {
-                refresh().changed
+            val result = try {
+                refresh()
             } finally {
                 refreshPending.set(false)
             }
-            if (changed) {
-                onChanged()
-            }
+            onRefreshed(result)
         }
     }
 

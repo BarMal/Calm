@@ -850,13 +850,21 @@ class CalmLauncherRunner(
             mainHandler.postDelayed({
                 if (stack.parent == null || !stackHost.isAttachedToWindow) return@postDelayed
                 if (appendNextBatch()) {
-                    scheduleNextBatch(APP_STACK_DEFERRED_BATCH_DELAY_MS)
+                    scheduleNextBatch(nextDeferredBatchDelay(stack))
                 }
             }, delayMs)
         }
         appQuickScrollController.attach(stackHost, stack, model, activePreferences.cardStackTuning, ::ensureRendered)
         if (deferredApps.isNotEmpty()) {
             scheduleNextBatch(APP_STACK_DEFERRED_INITIAL_DELAY_MS)
+        }
+    }
+
+    private fun nextDeferredBatchDelay(stack: ScrollView): Long {
+        return if (cardStackController.hasPendingRestore(stack)) {
+            APP_STACK_PENDING_RESTORE_BATCH_DELAY_MS
+        } else {
+            APP_STACK_DEFERRED_BATCH_DELAY_MS
         }
     }
 
@@ -1894,6 +1902,7 @@ class CalmLauncherRunner(
         const val APP_SEARCH_REFRESH_DELAY_MS = 90L
         const val APP_STACK_DEFERRED_BATCH_SIZE = 16
         const val APP_STACK_DEFERRED_INITIAL_DELAY_MS = 48L
+        const val APP_STACK_PENDING_RESTORE_BATCH_DELAY_MS = 0L
         const val APP_STACK_DEFERRED_BATCH_DELAY_MS = 32L
     }
 }

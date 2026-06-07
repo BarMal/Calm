@@ -13,8 +13,10 @@ class CardStackController(
     private val mainHandler: Handler,
     private val haptics: (android.view.View) -> Unit,
 ) {
-    private val rememberedScrollPositions = LinkedHashMap<String, Int>()
+    private val scrollMemory = CardStackScrollMemory(MAX_REMEMBERED_STACKS)
     private val activeStackKeys = WeakHashMap<ScrollView, String>()
+    private val stackRuntimeStates = WeakHashMap<ScrollView, CardStackRuntimeState>()
+    private val suppressedRestoreScrolls = WeakHashMap<ScrollView, Int>()
 
     fun cardStack(
         cards: List<TextView>,
@@ -47,14 +49,24 @@ class CardStackController(
 
         appendCardsToStack(stack, 0, cards, cardHeight, tunedStep)
 
-        val lastHapticIndex = intArrayOf(-1)
-        val styledRange = intArrayOf(-1, -1)
-        val magneticSnap = Runnable { magnetize(scroller, cards, tunedStep, stackKey) }
+        val runtimeState = CardStackRuntimeState(
+            tunedStep = tunedStep,
+            tuning = tuning,
+            lastHapticIndex = intArrayOf(-1),
+            styledRange = intArrayOf(-1, -1),
+        )
+        runtimeState.magneticSnap = Runnable { magnetize(scroller, cards, tunedStep, stackKey) }
+        stackRuntimeStates[scroller] = runtimeState
         scroller.setOnScrollChangeListener { _, _, scrollY, _, _ ->
-            rememberScroll(stackKey, scrollY)
-            style(scroller, cards, tunedStep, tuning, true, lastHapticIndex, styledRange)
-            mainHandler.removeCallbacks(magneticSnap)
-            mainHandler.postDelayed(magneticSnap, 90)
+            val suppressedRestore = suppressedRestoreScrolls.remove(scroller)
+            if (suppressedRestore == null || suppressedRestore != scrollY) {
+                scrollMemory.remember(stackKey, scrollY)
+            }
+            style(scroller, cards, tunedStep, tuning, true, runtimeState.lastHapticIndex, runtimeState.styledRange)
+            runtimeState.magneticSnap?.let { magneticSnap ->
+                mainHandler.removeCallbacks(magneticSnap)
+                mainHandler.postDelayed(magneticSnap, 90)
+            }
         }
         scroller.post {
             val viewportLocation = IntArray(2)
@@ -77,9 +89,10 @@ class CardStackController(
             stack.post {
                 val maxScroll = maxOf(0, (cards.lastOrNull()?.top ?: stackTopPadding) - stackTopPadding)
                 stack.minimumHeight = scroller.height + maxScroll
-                val restored = rememberedScrollPositions[stackKey]?.coerceIn(0, maxScroll) ?: 0
-                if (restored != scroller.scrollY) scroller.scrollTo(0, restored)
-                style(scroller, cards, tunedStep, tuning, false, lastHapticIndex, styledRange)
+                val restore = scrollMemory.initialRestore(stackKey, maxScroll)
+                if (restore.pendingTarget != null) suppressedRestoreScrolls[scroller] = restore.scrollY
+                if (restore.scrollY != scroller.scrollY) scroller.scrollTo(0, restore.scrollY)
+                style(scroller, cards, tunedStep, tuning, false, runtimeState.lastHapticIndex, runtimeState.styledRange)
             }
         }
         return scroller
@@ -109,12 +122,23 @@ class CardStackController(
         val lastCard = stack.getChildAt(stack.childCount - 1) ?: return
         val cards = (0 until stack.childCount).mapNotNull { index -> stack.getChildAt(index) as? TextView }
         val target = (targetCard.top - firstCard.top).coerceIn(0, maxOf(0, lastCard.top - firstCard.top))
-        rememberScroll(activeStackKeys[scroller] ?: stackKey(cards), target)
+        scrollMemory.remember(activeStackKeys[scroller] ?: stackKey(cards), target)
         if (smooth) {
             scroller.smoothScrollTo(0, target)
         } else {
             scroller.scrollTo(0, target)
         }
+    }
+
+    fun stopScroll(scroller: ScrollView) {
+        stackRuntimeStates[scroller]?.magneticSnap?.let(mainHandler::removeCallbacks)
+        scroller.fling(0)
+        scroller.smoothScrollTo(0, scroller.scrollY)
+    }
+
+    fun hasPendingRestore(scroller: ScrollView): Boolean {
+        val stackKey = activeStackKeys[scroller] ?: return false
+        return scrollMemory.pendingRestoreTarget(stackKey) != null
     }
 
     private fun tunedCardStep(baseStep: Int, tuning: CardStackTuning): Int {
@@ -153,6 +177,15 @@ class CardStackController(
             val firstCardTop = cards.firstOrNull()?.top ?: 0
             val maxScroll = maxOf(0, (cards.lastOrNull()?.top ?: firstCardTop) - firstCardTop)
             stack.minimumHeight = scroller.height + maxScroll
+            val stackKey = activeStackKeys[scroller]
+            val restored = stackKey?.let { key -> scrollMemory.restoreAfterBoundsExpanded(key, maxScroll) }
+            if (restored != null) {
+                suppressedRestoreScrolls[scroller] = restored
+                if (restored != scroller.scrollY) scroller.scrollTo(0, restored)
+            }
+            stackRuntimeStates[scroller]?.let { state ->
+                style(scroller, cards, state.tunedStep, state.tuning, false, state.lastHapticIndex, state.styledRange)
+            }
         }
     }
 
@@ -230,16 +263,8 @@ class CardStackController(
         val target = (Math.round(scrollY / cardStep.toFloat()) * cardStep).coerceIn(0, maxScroll)
         val distance = kotlin.math.abs(target - scrollY)
         if (distance > activity.dp(42) || distance < activity.dp(1)) return
-        rememberScroll(stackKey, target)
+        scrollMemory.remember(stackKey, target)
         scroller.smoothScrollTo(0, target)
-    }
-
-    private fun rememberScroll(stackKey: String, scrollY: Int) {
-        rememberedScrollPositions[stackKey] = scrollY.coerceAtLeast(0)
-        if (rememberedScrollPositions.size > MAX_REMEMBERED_STACKS) {
-            val first = rememberedScrollPositions.keys.firstOrNull()
-            if (first != null) rememberedScrollPositions.remove(first)
-        }
     }
 
     private fun stackKey(cards: List<TextView>): String {
@@ -302,4 +327,13 @@ class CardStackController(
     private companion object {
         const val MAX_REMEMBERED_STACKS = 48
     }
+}
+
+private class CardStackRuntimeState(
+    val tunedStep: Int,
+    val tuning: CardStackTuning,
+    val lastHapticIndex: IntArray,
+    val styledRange: IntArray,
+) {
+    var magneticSnap: Runnable? = null
 }

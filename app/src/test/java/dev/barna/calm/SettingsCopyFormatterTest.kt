@@ -46,4 +46,13 @@ class SettingsCopyFormatterTest {
         assertEquals("Flat centre path", formatter.horizontalCurve(0))
         assertEquals("Very light / 3 of 5", formatter.hapticStrength(3))
     }
+
+    @Test
+    fun formatsCardVibrancy() {
+        assertEquals("Clear", formatter.cardVibrancy(0))
+        assertEquals("Maximum vibrancy", formatter.cardVibrancy(100))
+        assertEquals("50% vibrancy", formatter.cardVibrancy(50))
+        assertEquals("1% vibrancy", formatter.cardVibrancy(1))
+        assertEquals("99% vibrancy", formatter.cardVibrancy(99))
+    }
 }

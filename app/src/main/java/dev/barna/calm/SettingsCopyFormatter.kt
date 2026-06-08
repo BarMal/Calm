@@ -55,6 +55,14 @@ class SettingsCopyFormatter {
 
     fun hapticStrength(strength: Int): String = "Very light / $strength of 5"
 
+    fun cardVibrancy(progress: Int): String {
+        return when {
+            progress == 0 -> "Clear"
+            progress == 100 -> "Maximum vibrancy"
+            else -> "$progress% vibrancy"
+        }
+    }
+
     fun stackPeakPosition(position: Int): String {
         return when {
             position < 20 -> "Peak at top"

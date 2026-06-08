@@ -111,4 +111,28 @@ class CardStackLayoutTest {
         assertTrue(trailing >= 32)
         assertEquals(242, trailing)
     }
+
+    @Test
+    fun zeroViewportHeightFallsBackToMinimumTopPadding() {
+        val top = CardStackLayout.activeTopPadding(
+            viewportHeight = 0,
+            cardHeight = 180,
+            minimumTopPadding = 6,
+        )
+
+        assertEquals(6, top)
+    }
+
+    @Test
+    fun cachedTopPaddingIsReturnedOnNextCallWithSameKey() {
+        val cache = CardStackLayoutCache(maxSize = 4)
+        val computedPadding = CardStackLayout.activeTopPadding(
+            viewportHeight = 600,
+            cardHeight = 180,
+            minimumTopPadding = 6,
+        )
+        cache.remember("apps:personal", computedPadding)
+
+        assertEquals(computedPadding, cache.rememberedTopPadding("apps:personal"))
+    }
 }

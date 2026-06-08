@@ -15,6 +15,7 @@ class CardStackController(
     private val haptics: (android.view.View) -> Unit,
 ) {
     private val scrollMemory = CardStackScrollMemory(MAX_REMEMBERED_STACKS)
+    private val layoutCache = CardStackLayoutCache(MAX_REMEMBERED_STACKS)
     private val activeStackKeys = WeakHashMap<ScrollView, String>()
     private val stackRuntimeStates = WeakHashMap<ScrollView, CardStackRuntimeState>()
     private val suppressedRestoreScrolls = WeakHashMap<ScrollView, Int>()
@@ -45,7 +46,8 @@ class CardStackController(
         val tunedStep = tunedCardStep(cardStep, tuning)
         val minimumTopPadding = context.dp(6)
         val minimumBottomPadding = context.dp(32)
-        stack.setPadding(0, minimumTopPadding, 0, minimumBottomPadding)
+        val initialTopPadding = layoutCache.rememberedTopPadding(stackKey) ?: minimumTopPadding
+        stack.setPadding(0, initialTopPadding, 0, minimumBottomPadding)
         scroller.addView(stack, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         appendCardsToStack(stack, 0, cards, cardHeight, tunedStep)
@@ -82,15 +84,19 @@ class CardStackController(
                 cardHeight = cardHeight,
                 minimumBottomPadding = minimumBottomPadding,
             )
+            layoutCache.remember(stackKey, stackTopPadding)
             stack.setPadding(0, stackTopPadding, 0, trailingPadding)
-            stack.post {
-                val maxScroll = maxOf(0, (cards.lastOrNull()?.top ?: stackTopPadding) - stackTopPadding)
-                stack.minimumHeight = scroller.height + maxScroll
-                val restore = scrollMemory.initialRestore(stackKey, maxScroll)
-                if (restore.pendingTarget != null) suppressedRestoreScrolls[scroller] = restore.scrollY
-                if (restore.scrollY != scroller.scrollY) scroller.scrollTo(0, restore.scrollY)
-                style(scroller, cards, tunedStep, tuning, false, runtimeState.lastHapticIndex, runtimeState.styledRange)
-            }
+            stack.addOnLayoutChangeListener(object : android.view.View.OnLayoutChangeListener {
+                override fun onLayoutChange(v: android.view.View, left: Int, top: Int, right: Int, bottom: Int, oldLeft: Int, oldTop: Int, oldRight: Int, oldBottom: Int) {
+                    v.removeOnLayoutChangeListener(this)
+                    val maxScroll = maxOf(0, (cards.lastOrNull()?.top ?: stackTopPadding) - stackTopPadding)
+                    stack.minimumHeight = scroller.height + maxScroll
+                    val restore = scrollMemory.initialRestore(stackKey, maxScroll)
+                    if (restore.pendingTarget != null) suppressedRestoreScrolls[scroller] = restore.scrollY
+                    if (restore.scrollY != scroller.scrollY) scroller.scrollTo(0, restore.scrollY)
+                    style(scroller, cards, tunedStep, tuning, false, runtimeState.lastHapticIndex, runtimeState.styledRange)
+                }
+            })
         }
         scroller.post {
             if (scroller.height > 0) {

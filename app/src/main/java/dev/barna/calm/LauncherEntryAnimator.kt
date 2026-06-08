@@ -162,7 +162,12 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
 
     private fun animateCardIntoView(card: View, index: Int) {
         val targetAlpha = CardEntryAnimationLogic.entryTargetAlpha(card.alpha)
-        val targetY = card.translationY
+        val targetY = CardEntryAnimationLogic.entryTargetTranslationY(
+            alpha = card.alpha,
+            translationZ = card.translationZ,
+            currentTranslationY = card.translationY,
+            exitTranslateOffset = activity.dp(CARD_EXIT_TRANSLATE_DP).toFloat(),
+        )
         card.animate().cancel()
         card.alpha = 0f
         card.translationY = targetY + activity.dp(132 + (index * 18))

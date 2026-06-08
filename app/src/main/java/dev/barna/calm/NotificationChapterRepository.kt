@@ -96,11 +96,22 @@ class NotificationChapterRepository(
     }
 
     fun loadLaunchableApps(): List<AppEntry> {
-        return launchableAppsCache.load()
+        return launchableAppsCache.load().map(::withRestoredUserHandle)
     }
 
     fun loadCachedLaunchableApps(): List<AppEntry> {
-        return launchableAppsCache.loadCachedOrEmpty()
+        return launchableAppsCache.loadCachedOrEmpty().map(::withRestoredUserHandle)
+    }
+
+    // AppLibrarySnapshotCodec does not serialise UserHandle (not a serialisable Android type).
+    // Reconstruct it from the user serial embedded in the identityKey so that work-profile apps
+    // can be launched via LauncherApps.startMainActivity even when loaded from the cache.
+    private fun withRestoredUserHandle(app: AppEntry): AppEntry {
+        if (app.userHandle != null) return app
+        val userSerial = AppIdentity.decode(app.identityKey).userSerial
+        if (userSerial == AppIdentity.LEGACY_USER_SERIAL) return app
+        val user = runCatching { userManager?.getUserForSerialNumber(userSerial) }.getOrNull() ?: return app
+        return app.copy(userHandle = user)
     }
 
     fun refreshLaunchableApps(
@@ -215,18 +226,16 @@ class NotificationChapterRepository(
     private fun loadProfileLaunchableApps(): List<AppEntry> {
         val launcher = launcherApps ?: return emptyList()
         val users = runCatching { userManager?.userProfiles.orEmpty() }.getOrDefault(emptyList())
-        val currentUserSerial = profileSerial(Process.myUserHandle())
         return users.flatMap { user ->
             runCatching { launcher.getActivityList(null, user) }
                 .getOrDefault(emptyList())
-                .map { info -> appEntry(info, user, currentUserSerial) }
+                .map { info -> appEntry(info, user) }
         }
     }
 
     private fun appEntry(
         info: LauncherActivityInfo,
         user: UserHandle,
-        currentUserSerial: Long,
     ): AppEntry {
         val userSerial = profileSerial(user)
         val componentName = info.componentName
@@ -237,7 +246,7 @@ class NotificationChapterRepository(
         )
         val label = info.label?.toString()?.takeIf { it.isNotBlank() }
             ?: friendlyPackageName(componentName.packageName)
-        val isWorkProfile = currentUserSerial != AppIdentity.LEGACY_USER_SERIAL && userSerial != currentUserSerial
+        val isWorkProfile = user != Process.myUserHandle()
         val profileLabel = if (isWorkProfile) "Work" else "Personal"
         return AppEntry(
             packageName = componentName.packageName,

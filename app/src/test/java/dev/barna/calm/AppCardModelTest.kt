@@ -19,12 +19,12 @@ class AppCardModelTest {
     }
 
     @Test
-    fun workAppTextKeepsProfileLine() {
+    fun workAppTextHasBriefcasePrefix() {
         val app = app("calendar.pkg", "Calendar", isWorkProfile = true)
 
         val model = factory.create(app, emptySet())
 
-        assertEquals("Calendar\nWork", model.text)
+        assertEquals("💼 Calendar", model.text)
         assertFalse(model.isPinned)
     }
 

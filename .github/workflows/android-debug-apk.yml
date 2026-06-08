@@ -166,18 +166,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git tag -f apks-latest "$GITHUB_SHA"
-          git push -f origin apks-latest
-
           if gh release view debug-latest >/dev/null 2>&1; then
             gh release delete debug-latest --yes --cleanup-tag
           fi
 
           if gh release view apks-latest >/dev/null 2>&1; then
-            gh release delete apks-latest --yes
+            gh release delete apks-latest --yes --cleanup-tag
           fi
 
           gh release create apks-latest release-assets/*.apk \

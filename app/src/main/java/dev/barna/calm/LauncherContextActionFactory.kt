@@ -13,6 +13,7 @@ data class LauncherContextActionCallbacks(
     val pinApp: (AppEntry) -> Unit,
     val unpinApp: (AppEntry) -> Unit,
     val openAppInfo: (AppEntry) -> Unit,
+    val hideApp: (AppEntry) -> Unit,
     val appShortcuts: (AppChapter) -> List<AppShortcutEntry>,
     val launchShortcut: (AppShortcutEntry) -> Unit,
 )
@@ -82,6 +83,7 @@ class LauncherContextActionFactory(
                 }
             }),
             ContextAction("Info", Runnable { callbacks.openAppInfo(app) }),
+            ContextAction("Hide", Runnable { callbacks.hideApp(app) }, ContextActionCloseBehavior.REMOVE_CARD),
         )
     }
 }

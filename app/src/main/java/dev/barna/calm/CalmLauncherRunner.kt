@@ -10,7 +10,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
-import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
@@ -21,19 +20,15 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.CalendarContract
 import android.provider.Settings
-import android.text.Editable
 import android.text.TextUtils
-import android.text.TextWatcher
 import android.text.format.DateFormat
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextClock
@@ -43,7 +38,6 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.CompositePageTransformer
 import androidx.viewpager2.widget.ViewPager2
 import java.util.Date
-import java.util.EnumMap
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
@@ -69,9 +63,19 @@ class CalmLauncherRunner(
     private val notificationCardDisplayCache = NotificationCardDisplayCache(notificationRepository)
     private val carouselController = ChapterCarouselController(activity, notificationCardDisplayCache, ::navigateToChapterPage)
     private val cardRenderAssetCache = CardRenderAssetCache()
+    private val cardRenderer = CardRenderer(activity, drawables, cardSpec, cardRenderAssetCache) { activePreferences }
     private val appLibraryPageModelFactory = AppLibraryPageModelFactory()
     private val appStackRenderPlanner = AppStackRenderPlanner()
     private val appLibraryStore = AppLibraryRenderStore()
+    private val appSearchState = AppSearchState(appLibraryPageModelFactory)
+    private val appSearchController = AppSearchController(
+        activity = activity,
+        mainHandler = mainHandler,
+        drawables = drawables,
+        appLibraryStore = appLibraryStore,
+        appSearchState = appSearchState,
+        refreshAppStack = ::refreshAppStack,
+    )
     private val contextActionFactory = LauncherContextActionFactory(
         LauncherContextActionCallbacks(
             openNotification = { notificationActionController.openNotification(it) },
@@ -86,6 +90,7 @@ class CalmLauncherRunner(
             pinApp = ::pinApp,
             unpinApp = ::unpinApp,
             openAppInfo = { app -> openAppInfo(app.packageName, app.userHandle, app.componentName) },
+            hideApp = ::hideApp,
             appShortcuts = { chapter -> notificationRepository.getAppShortcuts(chapter) },
             launchShortcut = { shortcut ->
                 if (!notificationRepository.launchShortcut(shortcut)) {
@@ -125,6 +130,7 @@ class CalmLauncherRunner(
         drawables = drawables,
         calendarRepository = calendarRepository,
         notificationRepository = notificationRepository,
+        cardStackController = cardStackController,
         actions = SettingsPageActions(
             toggleNotificationSurface = ::toggleNotificationSurface,
             toggleCardHaptics = ::toggleCardHaptics,
@@ -144,6 +150,23 @@ class CalmLauncherRunner(
         ::label,
         { currentScreen },
         { activePreferences.focusBlurRadius },
+    )
+    private val chapterPageBuilder = ChapterPageBuilder(
+        activity = activity,
+        drawables = drawables,
+        settings = settings,
+        notificationCardDisplayCache = notificationCardDisplayCache,
+        notificationRepository = notificationRepository,
+        cardStackController = cardStackController,
+        cardRenderer = cardRenderer,
+        notificationActionController = notificationActionController,
+        contextActionFactory = contextActionFactory,
+        focusOverlay = focusOverlay,
+        activePreferences = { activePreferences },
+        createPagePanel = ::createPagePanel,
+        createBarePagePanel = ::createBarePagePanel,
+        openPackage = ::openPackage,
+        toggleNotificationGrouping = ::toggleNotificationGrouping,
     )
     private val stateExecutor = Executors.newFixedThreadPool(4)
     private val stateGeneration = AtomicInteger(0)
@@ -170,25 +193,6 @@ class CalmLauncherRunner(
     private var pagePrewarmGeneration = 0
     private var appLibraryEventGeneration = 0
     private var suppressedPageEntryKey: String? = null
-    private val appSearchQueries = EnumMap<AppLibraryScope, String>(AppLibraryScope::class.java)
-    private val appSearchPages = ArrayList<AppSearchPageState>()
-    private val sideIconCache = HashMap<Int, android.graphics.Bitmap?>()
-
-    private data class AppSearchPageState(
-        val key: String,
-        val scope: AppLibraryScope,
-        val pageModel: ChapterPage,
-        val page: View,
-        val header: View,
-        val stackHost: FrameLayout,
-        val search: EditText,
-        val cardCache: MutableMap<String, TextView>,
-    )
-
-    private data class AppSearchControl(
-        val root: View,
-        val search: EditText,
-    )
 
     fun onCreate() {
         configureWindow()
@@ -251,7 +255,7 @@ class CalmLauncherRunner(
     private fun render(state: LauncherRenderModel, animate: Boolean) {
         mainHandler.removeCallbacks(deferredRender)
         focusOverlay.dismiss(false)
-        appSearchPages.clear()
+        appSearchController.clear()
         launcherStateViewModel.publish(state)
         if (appCardSettingsSnapshot != state.preferences) {
             appCardSettingsSnapshot = state.preferences
@@ -329,7 +333,7 @@ class CalmLauncherRunner(
                 if (suppressedPageEntryKey != selectedPackageName) {
                     suppressedPageEntryKey = null
                 }
-                resetInactiveAppSearchPages(selectedPackageName)
+                appSearchController.resetInactiveExcept(selectedPackageName)
             }
 
             override fun onPageScrollStateChanged(state: Int) {
@@ -340,7 +344,7 @@ class CalmLauncherRunner(
                     ViewPager2.SCROLL_STATE_IDLE -> {
                         val currentPage = pages[pager.currentItem]
                         carouselController.update(pages, pager.currentItem)
-                        resetInactiveAppSearchPages(currentPage.key)
+                        appSearchController.resetInactiveExcept(currentPage.key)
                         if (!userSwipeInProgress && suppressedPageEntryKey != currentPage.key && lastAnimatedPageKey != currentPage.key) {
                             lastAnimatedPageKey = currentPage.key
                             pager.post { entryAnimator.animateCurrentPage(pager) }
@@ -483,15 +487,7 @@ class CalmLauncherRunner(
     }
 
     private fun refreshVisibleAppLibraryPages(state: AppLibraryRenderState) {
-        appSearchPages.forEach { pageState ->
-            val model = appLibraryPageModelFactory.create(
-                page = pageState.pageModel,
-                appEntries = state.apps,
-                query = appSearchQuery(pageState.scope),
-                loading = state.loading,
-            )
-            refreshAppStack(pageState.stackHost, model, pageState.cardCache)
-        }
+        appSearchController.refreshVisible(state)
     }
 
     private fun buildUiState(): LauncherRenderModel {
@@ -561,7 +557,7 @@ class CalmLauncherRunner(
         val model = appLibraryPageModelFactory.create(
             page = pageModel,
             appEntries = appEntries,
-            query = appSearchQuery(scope),
+            query = appSearchController.queryFor(scope),
             loading = appLibraryStore.state().loading,
         )
         val page = createBarePagePanel(activity.dp(20))
@@ -580,199 +576,16 @@ class CalmLauncherRunner(
             }
         }
         page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-
         val stackHost = FrameLayout(activity).apply {
             clipChildren = false
             clipToPadding = false
         }
         page.addView(stackHost, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-
-        val cardCache = LinkedHashMap<String, TextView>()
-        val searchControl = appSearchBox(page, header, stackHost, pageModel, cardCache)
-        page.addView(animatedChrome(searchControl.root), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        val searchBox = appSearchController.registerPage(pageModel, page, header, stackHost, model)
+        page.addView(animatedChrome(searchBox), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = activity.dp(12)
         })
-        val search = searchControl.search
-        appSearchPages.add(AppSearchPageState(pageModel.key, scope, pageModel, page, header, stackHost, search, cardCache))
-        installAppSearchKeyboardAnimator(page, header, search)
-        refreshAppStack(stackHost, model, cardCache)
         return page
-    }
-
-    private fun appSearchBox(
-        page: LinearLayout,
-        header: LinearLayout,
-        stackHost: FrameLayout,
-        pageModel: ChapterPage,
-        cardCache: MutableMap<String, TextView>,
-    ): AppSearchControl {
-        val scope = pageModel.appScope ?: AppLibraryScope.ALL
-        val initialQuery = appSearchQuery(scope)
-        val root = FrameLayout(activity).apply {
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(16))
-            clipToPadding = false
-            clipChildren = false
-        }
-        val clearButton = ImageButton(activity).apply {
-            background = ColorDrawable(Color.TRANSPARENT)
-            setImageResource(R.drawable.ic_clear_search)
-            setColorFilter(CalmTheme.MUTED_INK)
-            contentDescription = "Clear search"
-            visibility = if (initialQuery.isBlank()) View.GONE else View.VISIBLE
-        }
-        val search = EditText(activity).apply {
-            setText(initialQuery)
-            hint = "Search apps"
-            setSingleLine(true)
-            setTextColor(CalmTheme.INK)
-            setHintTextColor(CalmTheme.MUTED_INK)
-            textSize = 16f
-            typeface = Typeface.DEFAULT
-            background = ColorDrawable(Color.TRANSPARENT)
-            setPadding(activity.dp(16), activity.dp(12), activity.dp(50), activity.dp(12))
-            setSelectAllOnFocus(false)
-            setOnFocusChangeListener { view, hasFocus ->
-                animateAppSearchHeader(header, hasFocus)
-                if (!hasFocus) {
-                    animateAppSearchPage(page, 0)
-                }
-                if (hasFocus) {
-                    view.post {
-                        (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
-                            ?.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
-                    }
-                }
-            }
-            addTextChangedListener(object : TextWatcher {
-                var pendingSearchRefresh: Runnable? = null
-
-                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                    val query = s?.toString().orEmpty()
-                    if (query == appSearchQuery(scope)) return
-                    setAppSearchQuery(scope, query)
-                    clearButton.visibility = if (query.isBlank()) View.GONE else View.VISIBLE
-                    pendingSearchRefresh?.let(mainHandler::removeCallbacks)
-                    pendingSearchRefresh = Runnable {
-                        refreshAppStack(
-                            stackHost,
-                            appLibraryPageModelFactory.create(
-                                page = pageModel,
-                                appEntries = appLibraryStore.state().apps,
-                                query = query,
-                                loading = appLibraryStore.state().loading,
-                            ),
-                            cardCache,
-                        )
-                    }.also { refresh ->
-                        mainHandler.postDelayed(refresh, APP_SEARCH_REFRESH_DELAY_MS)
-                    }
-                }
-                override fun afterTextChanged(s: Editable?) = Unit
-            })
-        }
-        clearButton.setOnClickListener {
-            search.setText("")
-            search.clearFocus()
-            hideKeyboard(search)
-            animateAppSearchHeader(header, false)
-            animateAppSearchPage(page, 0)
-        }
-        root.addView(search, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        root.addView(clearButton, FrameLayout.LayoutParams(activity.dp(44), activity.dp(44), Gravity.END or Gravity.CENTER_VERTICAL).apply {
-            rightMargin = activity.dp(2)
-        })
-        return AppSearchControl(root, search)
-    }
-
-    private fun appSearchQuery(scope: AppLibraryScope): String = appSearchQueries[scope].orEmpty()
-
-    private fun setAppSearchQuery(scope: AppLibraryScope, query: String) {
-        if (query.isBlank()) {
-            appSearchQueries.remove(scope)
-        } else {
-            appSearchQueries[scope] = query
-        }
-    }
-
-    private fun installAppSearchKeyboardAnimator(page: LinearLayout, header: LinearLayout, search: EditText) {
-        page.viewTreeObserver.addOnGlobalLayoutListener {
-            if (!search.hasFocus()) return@addOnGlobalLayoutListener
-            val keyboardHeight = keyboardHeight()
-            val visible = keyboardHeight > activity.dp(120)
-            animateAppSearchHeader(header, visible)
-            animateAppSearchPage(page, if (visible) keyboardHeight else 0)
-            if (!visible && search.text.isNullOrBlank()) {
-                search.clearFocus()
-            }
-        }
-    }
-
-    private fun keyboardHeight(): Int {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            activity.window.decorView.rootWindowInsets?.let { insets ->
-                if (insets.isVisible(WindowInsets.Type.ime())) {
-                    return insets.getInsets(WindowInsets.Type.ime()).bottom
-                }
-            }
-        }
-        val visibleFrame = Rect()
-        val root = activity.window.decorView
-        root.getWindowVisibleDisplayFrame(visibleFrame)
-        return maxOf(0, root.height - visibleFrame.bottom)
-    }
-
-    private fun animateAppSearchHeader(header: View, collapsed: Boolean) {
-        header.animate()
-            .alpha(if (collapsed) 0f else 1f)
-            .translationY(if (collapsed) -activity.dp(18).toFloat() else 0f)
-            .setDuration(180L)
-            .start()
-    }
-
-    private fun animateAppSearchPage(page: View, keyboardHeight: Int) {
-        val target = if (keyboardHeight > 0) {
-            -(keyboardHeight - activity.dp(34)).coerceAtLeast(0).toFloat()
-        } else {
-            0f
-        }
-        if (kotlin.math.abs(page.translationY - target) < 1f) return
-        page.animate()
-            .translationY(target)
-            .setDuration(220L)
-            .start()
-    }
-
-    private fun resetInactiveAppSearchPages(activeKey: String) {
-        appSearchPages
-            .filter { it.key != activeKey }
-            .forEach(::resetAppSearchPage)
-    }
-
-    private fun resetAllAppSearchPages() {
-        appSearchPages.forEach(::resetAppSearchPage)
-    }
-
-    private fun resetAppSearchPage(state: AppSearchPageState) {
-        if (state.search.hasFocus()) {
-            state.search.clearFocus()
-            hideKeyboard(state.search)
-        }
-        if (state.search.text?.isNotBlank() == true) {
-            state.search.setText("")
-        } else {
-            setAppSearchQuery(state.scope, "")
-        }
-        state.header.animate().cancel()
-        state.page.animate().cancel()
-        state.header.alpha = 1f
-        state.header.translationY = 0f
-        state.page.translationY = 0f
-    }
-
-    private fun hideKeyboard(view: View) {
-        (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
-            ?.hideSoftInputFromWindow(view.windowToken, 0)
     }
 
     private fun refreshAppStack(
@@ -810,7 +623,7 @@ class CalmLauncherRunner(
             val batch = deferredApps.subList(nextDeferredIndex, end)
             nextDeferredIndex = end
             val newCards = batch.map { app -> appCardFromCache(app, cardCache) }
-            cardStackController.appendCards(stack, renderedCards, newCards, cardHeight(), cardStep(), activePreferences.cardStackTuning)
+            cardStackController.appendCards(stack, renderedCards, newCards, cardRenderer.cardHeight(), cardRenderer.cardStep(), activePreferences.cardStackTuning)
             return true
         }
         fun ensureRendered(cardIndex: Int) {
@@ -858,8 +671,8 @@ class CalmLauncherRunner(
     private fun appStack(cards: MutableList<TextView>, stackKey: String): ScrollView {
         return cardStackController.cardStack(
             cards,
-            cardHeight(),
-            cardStep(),
+            cardRenderer.cardHeight(),
+            cardRenderer.cardStep(),
             activePreferences.cardStackTuning,
             stackKey,
         )
@@ -870,11 +683,11 @@ class CalmLauncherRunner(
     }
 
     private fun appSearchEmptyStack(message: String, stackKey: String): View {
-        val card = stackCard(
+        val card = cardRenderer.stackCard(
             "Search\n$message",
             CalmTheme.ACCENT,
             true,
-            cardSideIcon(R.drawable.ic_search_card),
+            cardRenderer.cardSideIcon(R.drawable.ic_search_card),
             sideImageRenderKey = "res:${R.drawable.ic_search_card}",
         ).apply {
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
@@ -883,8 +696,8 @@ class CalmLauncherRunner(
         }
         return cardStackController.cardStack(
             listOf(card),
-            cardHeight(),
-            cardStep(),
+            cardRenderer.cardHeight(),
+            cardRenderer.cardStep(),
             activePreferences.cardStackTuning,
             stackKey,
         )
@@ -894,76 +707,9 @@ class CalmLauncherRunner(
         return CardStackStateKey.appLibrary(model.key, model.scope, model.query)
     }
 
-    private fun cardHeight(): Int = activity.dp(cardSpec.heightDp)
-
-    private fun cardStep(): Int = activity.dp(cardSpec.stepDp)
-
-    private fun cardCornerRadius(): Int = activity.dp(activePreferences.cardCornerRadiusDp)
-
-    private fun stackCard(
-        text: String,
-        hueColor: Int,
-        tinted: Boolean,
-        sideImage: android.graphics.Bitmap? = null,
-        sideImageAlpha: Int = 64,
-        sideImageRenderKey: String? = null,
-    ): TextView {
-        return label(text, cardSpec.titleSp, CalmTheme.INK, Typeface.NORMAL).apply {
-            val showImageAsBackground = sideImage != null && activePreferences.useCardIconBackgrounds
-            val iconRenderData = if (showImageAsBackground) {
-                cardRenderAssetCache.iconRenderData(
-                    imageKey = sideImageRenderKey ?: "bitmap-${sideImage.generationId}",
-                    image = sideImage,
-                    style = CardRenderStyleKey(
-                        radiusPx = cardCornerRadius(),
-                        hueColor = hueColor,
-                        tintCards = tinted,
-                        imageAlpha = sideImageAlpha,
-                        imageBlur = activePreferences.cardIconBlur,
-                        useIconBackgrounds = activePreferences.useCardIconBackgrounds,
-                    ),
-                )
-            } else {
-                null
-            }
-            setLineSpacing(activity.dp(2).toFloat(), 1.0f)
-            setPadding(
-                activity.dp(cardSpec.horizontalPaddingDp),
-                activity.dp(cardSpec.verticalPaddingDp),
-                activity.dp(if (showImageAsBackground) 116 else cardSpec.horizontalPaddingDp),
-                activity.dp(cardSpec.verticalPaddingDp),
-            )
-            gravity = Gravity.CENTER_VERTICAL or Gravity.START
-            maxLines = 4
-            ellipsize = TextUtils.TruncateAt.END
-            background = drawables.cardWithSideImage(
-                cardCornerRadius(),
-                hueColor,
-                tinted,
-                sideImage.takeIf { showImageAsBackground },
-                sideImageAlpha,
-                activePreferences.cardIconBlur,
-                iconRenderData,
-            )
-            if (sideImage != null && !showImageAsBackground) {
-                compoundDrawablePadding = activity.dp(14)
-                setCompoundDrawables(null, null, sideImage.toCardIconDrawable(), null)
-            }
-            elevation = activity.dp(2).toFloat()
-        }
-    }
-
-    private fun android.graphics.Bitmap.toCardIconDrawable(): android.graphics.drawable.BitmapDrawable {
-        return android.graphics.drawable.BitmapDrawable(activity.resources, this).apply {
-            val size = activity.dp(cardSpec.iconSizeDp)
-            setBounds(0, 0, size, size)
-            alpha = 214
-        }
-    }
-
     private fun appCard(app: AppEntry): TextView {
         val data = appCardDisplayCache.getCachedOrCreateLightweight(app, currentUiState?.pinnedKeys ?: settings.pinnedPackages())
-        return stackCard(data.text, data.hueColor, true, data.icon, sideImageRenderKey = data.iconRenderKey).apply {
+        return cardRenderer.stackCard(data.text, data.hueColor, true, data.icon, sideImageRenderKey = data.iconRenderKey).apply {
             maxLines = 4
             setOnClickListener { openAppEntry(app) }
             setOnLongClickListener {
@@ -1048,195 +794,15 @@ class CalmLauncherRunner(
 
     private fun createSettingsPage(): View = settingsPageFactory.create()
 
-    private fun createChapterPage(chapter: AppChapter): LinearLayout {
-        val tintCards = activePreferences.useTintedNotificationCards
-        val page = if (tintCards) {
-            createBarePagePanel(activity.dp(20))
-        } else {
-            createPagePanel(notificationRepository.resolveChapterBackground(chapter), chapter.hueColor)
-        }
-        page.addView(chapterHeader(chapter))
-        page.addView(notificationArea(chapter, tintCards), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 2.25f))
-        return page
-    }
+    private fun createChapterPage(chapter: AppChapter): LinearLayout = chapterPageBuilder.buildPage(chapter)
 
-    private fun chapterHeader(chapter: AppChapter): View {
-        return LinearLayout(activity).apply {
-            tag = CalmAnimationTags.CHROME
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            clipToPadding = false
-            clipChildren = false
-            setPadding(0, 0, 0, activity.dp(24))
-
-            addView(chapterLaunchButton(chapter), LinearLayout.LayoutParams(activity.dp(58), activity.dp(58)).apply {
-                rightMargin = activity.dp(14)
-            })
-
-            addView(LinearLayout(activity).apply {
-                orientation = LinearLayout.VERTICAL
-                addView(label(chapter.label, 30, CalmTheme.INK, Typeface.NORMAL).apply {
-                    setSingleLine(true)
-                    ellipsize = TextUtils.TruncateAt.END
-                    setPadding(0, activity.dp(8), 0, 0)
-                })
-                addView(label(notificationSummary(chapter), 15, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
-                    setPadding(0, activity.dp(6), 0, 0)
-                })
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        }
-    }
-
-    private fun chapterLaunchButton(chapter: AppChapter): ImageButton {
-        return ImageButton(activity).apply {
-            scaleType = ImageView.ScaleType.CENTER_INSIDE
-            background = drawables.notificationCard(activity.dp(18), chapter.hueColor, true)
-            contentDescription = "Open ${chapter.label}"
-            tooltipText = "Open ${chapter.label}"
-            setPadding(activity.dp(10), activity.dp(10), activity.dp(10), activity.dp(10))
-            notificationCardDisplayCache.chapterMaskedIcon(chapter)?.let { icon ->
-                setImageDrawable(icon.toSizedDrawable(activity, activity.dp(42)))
-            }
-            alpha = if (chapter.launchable) 0.96f else 0.36f
-            isEnabled = chapter.launchable
-            if (chapter.launchable) {
-                setOnClickListener { openPackage(chapter) }
-            }
-        }
-    }
-
-    private fun notificationArea(chapter: AppChapter, tintCards: Boolean): View {
-        val mediaControls = MediaNotificationControls.from(chapter.notifications)
-        return LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            clipToPadding = false
-            clipChildren = false
-            addView(stackToolbar(groupingIconButton(chapter)), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(32)))
-            addView(fadedStackHost(notificationStack(chapter, tintCards)), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-            if (mediaControls.hasAnyAction) {
-                addView(mediaControlsRow(mediaControls), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    topMargin = activity.dp(12)
-                })
-            }
-        }
-    }
-
-    private fun fadedStackHost(stack: View): FrameLayout {
-        val topFade = android.graphics.drawable.GradientDrawable(
-            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(CalmTheme.GLASS, Color.TRANSPARENT),
-        )
-        val bottomFade = android.graphics.drawable.GradientDrawable(
-            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.TRANSPARENT, CalmTheme.GLASS),
-        )
-        return FrameLayout(activity).apply {
-            clipChildren = false
-            clipToPadding = false
-            addView(stack, matchParentParams())
-            addView(View(activity).apply {
-                background = topFade
-                isClickable = false
-                isFocusable = false
-            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(56)).apply {
-                gravity = Gravity.TOP
-            })
-            addView(View(activity).apply {
-                background = bottomFade
-                isClickable = false
-                isFocusable = false
-            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(72)).apply {
-                gravity = Gravity.BOTTOM
-            })
-        }
-    }
-
-    private fun mediaControlsRow(controls: MediaNotificationControls): View {
-        return LinearLayout(activity).apply {
-            tag = CalmAnimationTags.CHROME
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            clipToPadding = false
-            clipChildren = false
-            addView(mediaControlButton(R.drawable.ic_media_previous, "Previous", controls.previous), LinearLayout.LayoutParams(0, activity.dp(46), 1f).apply {
-                rightMargin = activity.dp(8)
-            })
-            addView(mediaControlButton(playPauseIcon(controls), controls.playPauseLabel, controls.playPause), LinearLayout.LayoutParams(0, activity.dp(46), 1.35f).apply {
-                leftMargin = activity.dp(4)
-                rightMargin = activity.dp(4)
-            })
-            addView(mediaControlButton(R.drawable.ic_media_next, "Next", controls.next), LinearLayout.LayoutParams(0, activity.dp(46), 1f).apply {
-                leftMargin = activity.dp(8)
-            })
-        }
-    }
-
-    private fun stackToolbar(action: View? = null): View {
+    private fun stackToolbarSpacer(): View {
         return LinearLayout(activity).apply {
             tag = CalmAnimationTags.CHROME
             gravity = Gravity.END
             clipChildren = false
             clipToPadding = false
-            action?.let {
-                addView(it, LinearLayout.LayoutParams(activity.dp(38), activity.dp(30)))
-            }
         }
-    }
-
-    private fun stackToolbarSpacer(): View {
-        return stackToolbar()
-    }
-
-    private fun playPauseIcon(controls: MediaNotificationControls): Int {
-        val label = controls.playPauseLabel.lowercase(Locale.ROOT)
-        return if (label.contains("pause")) R.drawable.ic_media_pause else R.drawable.ic_media_play
-    }
-
-    private fun mediaControlButton(iconRes: Int, description: String, action: NotificationAction?): ImageButton {
-        return ImageButton(activity).apply {
-            setImageResource(iconRes)
-            setColorFilter(if (action == null) CalmTheme.MUTED_INK else CalmTheme.INK)
-            scaleType = ImageView.ScaleType.CENTER
-            alpha = if (action == null) 0.34f else 0.92f
-            isEnabled = action != null
-            contentDescription = description
-            tooltipText = description
-            setPadding(activity.dp(11), activity.dp(11), activity.dp(11), activity.dp(11))
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(999))
-            if (action != null) {
-                setOnClickListener { notificationActionController.performNotificationAction(action) }
-            }
-        }
-    }
-
-    private fun groupingIconButton(chapter: AppChapter): ImageButton {
-        val grouped = settings.groupNotifications(chapter.identityKey)
-        val description = if (grouped) "Notifications grouped by conversation" else "Notifications split"
-        return ImageButton(activity).apply {
-            setImageResource(if (grouped) R.drawable.ic_grouped_notifications else R.drawable.ic_split_notifications)
-            setColorFilter(CalmTheme.INK)
-            scaleType = ImageView.ScaleType.CENTER
-            contentDescription = description
-            tooltipText = description
-            alpha = 0.84f
-            background = null
-            setPadding(activity.dp(7), activity.dp(4), activity.dp(7), activity.dp(4))
-            setOnClickListener { toggleNotificationGrouping(chapter) }
-        }
-    }
-
-    private fun notificationStack(chapter: AppChapter, tintCards: Boolean): View {
-        val cards = NotificationCardGrouper.cards(
-            chapter.notifications,
-            settings.groupNotifications(chapter.identityKey),
-        )
-        return cardStackController.cardStack(
-            cards.map { notificationCard(it, chapter, tintCards) },
-            cardHeight(),
-            cardStep(),
-            activePreferences.cardStackTuning,
-            CardStackStateKey.notifications(chapter),
-        )
     }
 
     private fun overviewCalendarStack(state: LauncherRenderModel): View {
@@ -1244,11 +810,11 @@ class CalmLauncherRunner(
         if (state.hasCalendarPermission) {
             if (state.calendarEvents.isEmpty()) {
                 cards.add(
-                    stackCard(
+                    cardRenderer.stackCard(
                         "Upcoming calendar\nNo upcoming calendar events found.",
                         CalmTheme.ACCENT,
                         true,
-                        cardSideIcon(R.drawable.ic_calendar_card),
+                        cardRenderer.cardSideIcon(R.drawable.ic_calendar_card),
                         sideImageRenderKey = "res:${R.drawable.ic_calendar_card}",
                     ),
                 )
@@ -1257,19 +823,19 @@ class CalmLauncherRunner(
             }
         } else {
             cards.add(
-                stackCard(
+                cardRenderer.stackCard(
                     "Calendar access\nCalendar access is needed before Calm can index upcoming events.\nManage it in Settings.",
                     CalmTheme.ACCENT,
                     true,
-                    cardSideIcon(R.drawable.ic_calendar_card),
+                    cardRenderer.cardSideIcon(R.drawable.ic_calendar_card),
                     sideImageRenderKey = "res:${R.drawable.ic_calendar_card}",
                 ),
             )
         }
         return cardStackController.cardStack(
             cards,
-            cardHeight(),
-            cardStep(),
+            cardRenderer.cardHeight(),
+            cardRenderer.cardStep(),
             activePreferences.cardStackTuning,
             CardStackStateKey.OVERVIEW_CALENDAR,
         )
@@ -1326,7 +892,7 @@ class CalmLauncherRunner(
         if (!smooth) {
             currentUiState?.pages?.let { pages ->
                 carouselController.update(pages, index)
-                resetInactiveAppSearchPages(pages[index].key)
+                appSearchController.resetInactiveExcept(pages[index].key)
             }
         }
     }
@@ -1359,11 +925,11 @@ class CalmLauncherRunner(
         val title = event.title.takeUnless { it.isBlank() } ?: "Untitled event"
         val location = event.location.takeUnless { it.isBlank() }?.let { "\n$it" }.orEmpty()
         val today = calendarRepository.isToday(event.begin)
-        return stackCard(
+        return cardRenderer.stackCard(
             "${if (today) "Today" else "Upcoming"}\n$title\n${calendarRepository.formatEventTime(event)}$location",
             if (today) CalmTheme.ACCENT else Color.rgb(122, 146, 178),
             true,
-            cardSideIcon(R.drawable.ic_calendar_card),
+            cardRenderer.cardSideIcon(R.drawable.ic_calendar_card),
             sideImageRenderKey = "res:${R.drawable.ic_calendar_card}",
         ).apply {
             setOnClickListener { openCalendarEvent(event) }
@@ -1375,49 +941,6 @@ class CalmLauncherRunner(
                 true
             }
         }
-    }
-
-    private fun notificationCard(
-        item: NotificationCardItem,
-        chapter: AppChapter,
-        tintCards: Boolean,
-    ): TextView {
-        val data = notificationCardDisplayCache.getOrCreate(item, chapter, ::formatNotificationTime)
-        return stackCard(
-            data.text,
-            chapter.hueColor,
-            tintCards,
-            data.sideImage,
-            data.sideImageAlpha,
-            data.sideImageRenderKey,
-        ).apply {
-            if (data.mediaBackgroundImage != null) {
-                background = drawables.notificationCardWithImage(
-                    cardCornerRadius(),
-                    data.mediaBackgroundImage,
-                    chapter.hueColor,
-                    tintCards,
-                )
-            }
-            maxLines = 4
-            setOnClickListener {
-                focusOverlay.show(this, contextActionFactory.notificationActions(item, chapter), data.fullText)
-            }
-            setOnLongClickListener {
-                notificationActionController.showNotificationHideOptions(item, chapter)
-                true
-            }
-        }
-    }
-
-    private fun cardSideIcon(drawableRes: Int): android.graphics.Bitmap? {
-        return sideIconCache.getOrPut(drawableRes) {
-            activity.getDrawable(drawableRes)?.toBitmap()
-        }
-    }
-
-    private fun formatNotificationTime(postTime: Long): String {
-        return DateFormat.getTimeFormat(activity).format(Date(postTime))
     }
 
     private fun emptyNote(text: String): TextView {
@@ -1453,9 +976,8 @@ class CalmLauncherRunner(
         }
     }
 
-    private fun notificationSummary(chapter: AppChapter): String {
-        val count = chapter.notifications.size
-        return if (count == 1) "1 active note" else "$count active notes"
+    private fun formatNotificationTime(postTime: Long): String {
+        return DateFormat.getTimeFormat(activity).format(Date(postTime))
     }
 
     private fun openSettingsActivity() {
@@ -1464,7 +986,7 @@ class CalmLauncherRunner(
 
     private fun openAppEntry(app: AppEntry) {
         if (notificationRepository.openApp(app)) {
-            resetAllAppSearchPages()
+            appSearchController.resetAll()
         } else {
             Toast.makeText(activity, "This app cannot be opened directly", Toast.LENGTH_SHORT).show()
         }
@@ -1484,6 +1006,12 @@ class CalmLauncherRunner(
             selectPage(CalmTheme.APP_LIBRARY_KEY)
         }
         Toast.makeText(activity, "Unpinned ${app.label}", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun hideApp(app: AppEntry) {
+        settings.setHiddenAppKeys(settings.hiddenAppKeys() + app.identityKey)
+        Toast.makeText(activity, "Hidden ${app.label}", Toast.LENGTH_SHORT).show()
         render()
     }
 
@@ -1615,9 +1143,8 @@ class CalmLauncherRunner(
         appCardDisplayCache.clear()
         notificationCardDisplayCache.clear()
         cardRenderAssetCache.clear()
-        sideIconCache.clear()
-        appSearchQueries.clear()
-        appSearchPages.clear()
+        cardRenderer.clearIconCache()
+        appSearchController.clear()
         refreshStateAsync()
     }
 
@@ -1625,7 +1152,6 @@ class CalmLauncherRunner(
         const val PAGE_PREWARM_INITIAL_DELAY_MS = 260L
         const val PAGE_PREWARM_STEP_DELAY_MS = 120L
         const val PAGE_PREWARM_MAX_PAGES = 3
-        const val APP_SEARCH_REFRESH_DELAY_MS = 90L
         const val APP_STACK_DEFERRED_BATCH_SIZE = 16
         const val APP_STACK_DEFERRED_INITIAL_DELAY_MS = 48L
         const val APP_STACK_PENDING_RESTORE_BATCH_DELAY_MS = 0L

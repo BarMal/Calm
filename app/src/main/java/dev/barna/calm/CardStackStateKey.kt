@@ -2,6 +2,7 @@ package dev.barna.calm
 
 object CardStackStateKey {
     const val OVERVIEW_CALENDAR = "overview:calendar"
+    const val OVERVIEW_NOTIFICATIONS = "overview:notifications"
 
     fun appLibrary(pageKey: String, scope: AppLibraryScope, query: String): String {
         return listOf("app-library", pageKey, scope.name, query).joinToString(":")

@@ -318,6 +318,8 @@ class CalmLauncherRunner(
         }
         var userSwipeInProgress = false
         var previousPageIndex = initialPage
+        var currentNavigationDirection = 0
+        var animationTriggeredForCurrentSwipe = false
         pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageScrolled(position: Int, positionOffset: Float, positionOffsetPixels: Int) {
                 carouselController.scrollToPosition(position, positionOffset)
@@ -325,6 +327,11 @@ class CalmLauncherRunner(
 
             override fun onPageSelected(position: Int) {
                 val prev = previousPageIndex
+                currentNavigationDirection = when {
+                    position > prev -> 1
+                    position < prev -> -1
+                    else -> 0
+                }
                 previousPageIndex = position
                 if (userSwipeInProgress && prev != position) {
                     entryAnimator.animatePageExit(pager, prev)
@@ -341,17 +348,28 @@ class CalmLauncherRunner(
                     ViewPager2.SCROLL_STATE_DRAGGING -> {
                         userSwipeInProgress = true
                     }
+                    ViewPager2.SCROLL_STATE_SETTLING -> {
+                        if (userSwipeInProgress) {
+                            val currentPage = pages[pager.currentItem]
+                            if (pageEntryAnimationPolicy.shouldAnimate(userSwipeInProgress, currentPage.key, suppressedPageEntryKey)) {
+                                animationTriggeredForCurrentSwipe = true
+                                val direction = currentNavigationDirection
+                                pager.post { entryAnimator.animateCurrentPage(pager, direction) }
+                            }
+                        }
+                    }
                     ViewPager2.SCROLL_STATE_IDLE -> {
                         val currentPage = pages[pager.currentItem]
                         carouselController.update(pages, pager.currentItem)
                         appSearchController.resetInactiveExcept(currentPage.key)
-                        if (pageEntryAnimationPolicy.shouldAnimate(userSwipeInProgress, currentPage.key, suppressedPageEntryKey)) {
-                            pager.post { entryAnimator.animateCurrentPage(pager) }
+                        if (!animationTriggeredForCurrentSwipe && pageEntryAnimationPolicy.shouldAnimate(userSwipeInProgress, currentPage.key, suppressedPageEntryKey)) {
+                            pager.post { entryAnimator.animateCurrentPage(pager, currentNavigationDirection) }
                         }
                         if (suppressedPageEntryKey == currentPage.key) {
                             suppressedPageEntryKey = null
                         }
                         userSwipeInProgress = false
+                        animationTriggeredForCurrentSwipe = false
                     }
                 }
             }
@@ -842,6 +860,7 @@ class CalmLauncherRunner(
 
     private fun createPagePanel(backgroundImage: android.graphics.Bitmap?, hueColor: Int): LinearLayout {
         return LinearLayout(activity).apply {
+            tag = CalmAnimationTags.PAGE_PANEL
             background = drawables.glass(CalmTheme.GLASS, activity.dp(22))
             orientation = LinearLayout.VERTICAL
             clipChildren = false

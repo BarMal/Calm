@@ -71,4 +71,46 @@ class CardEntryAnimationLogicTest {
     fun entryTargetAlphaPreservesFullAlpha() {
         assertEquals(1f, CardEntryAnimationLogic.entryTargetAlpha(1f))
     }
+
+    // entryTargetTranslationY
+
+    @Test
+    fun exitAnimatedCardTranslationYIsRestoredByUndoingExitOffset() {
+        // Exit animation shifts translationY by -exitOffset (card moves up 80dp).
+        // Entry must undo this to land at the true styled position.
+        val exitOffset = 80f
+        val styledY = 0f
+        val exitAnimatedY = styledY - exitOffset  // -80f
+        val result = CardEntryAnimationLogic.entryTargetTranslationY(
+            alpha = 0f,
+            translationZ = 115f,
+            currentTranslationY = exitAnimatedY,
+            exitTranslateOffset = exitOffset,
+        )
+        assertEquals(styledY, result, 0.001f)
+    }
+
+    @Test
+    fun freshCardTranslationYIsPreservedDirectly() {
+        // Fresh card (never styled): alpha=0, translationZ=0; translationY is already correct.
+        val result = CardEntryAnimationLogic.entryTargetTranslationY(
+            alpha = 0f,
+            translationZ = 0f,
+            currentTranslationY = 0f,
+            exitTranslateOffset = 80f,
+        )
+        assertEquals(0f, result, 0.001f)
+    }
+
+    @Test
+    fun visibleStyledCardTranslationYIsPreservedDirectly() {
+        // Visible card: translationY is the correct styled position, no adjustment needed.
+        val result = CardEntryAnimationLogic.entryTargetTranslationY(
+            alpha = 1f,
+            translationZ = 115f,
+            currentTranslationY = 0f,
+            exitTranslateOffset = 80f,
+        )
+        assertEquals(0f, result, 0.001f)
+    }
 }

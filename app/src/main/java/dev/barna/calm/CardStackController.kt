@@ -1,5 +1,6 @@
 package dev.barna.calm
 
+import android.content.Context
 import android.os.Handler
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -9,7 +10,7 @@ import android.widget.TextView
 import java.util.WeakHashMap
 
 class CardStackController(
-    private val activity: MainActivity,
+    private val context: Context,
     private val mainHandler: Handler,
     private val haptics: (android.view.View) -> Unit,
 ) {
@@ -25,7 +26,7 @@ class CardStackController(
         tuning: CardStackTuning,
         stackKey: String = stackKey(cards),
     ): ScrollView {
-        val scroller = ScrollView(activity).apply {
+        val scroller = ScrollView(context).apply {
             tag = CalmAnimationTags.CARD_STACK
             isFillViewport = true
             overScrollMode = android.view.View.OVER_SCROLL_NEVER
@@ -36,14 +37,14 @@ class CardStackController(
             clipChildren = false
         }
         activeStackKeys[scroller] = stackKey
-        val stack = LinearLayout(activity).apply {
+        val stack = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             clipToPadding = false
             clipChildren = false
         }
         val tunedStep = tunedCardStep(cardStep, tuning)
-        val minimumTopPadding = activity.dp(6)
-        val minimumBottomPadding = activity.dp(32)
+        val minimumTopPadding = context.dp(6)
+        val minimumBottomPadding = context.dp(32)
         stack.setPadding(0, minimumTopPadding, 0, minimumBottomPadding)
         scroller.addView(stack, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
@@ -68,7 +69,7 @@ class CardStackController(
                 mainHandler.postDelayed(magneticSnap, tuning.magnetDelayMillis)
             }
         }
-        scroller.post {
+        val applyLayout: () -> Unit = {
             val stackTopPadding = CardStackLayout.activeTopPadding(
                 viewportHeight = scroller.height,
                 cardHeight = cardHeight,
@@ -89,6 +90,20 @@ class CardStackController(
                 if (restore.pendingTarget != null) suppressedRestoreScrolls[scroller] = restore.scrollY
                 if (restore.scrollY != scroller.scrollY) scroller.scrollTo(0, restore.scrollY)
                 style(scroller, cards, tunedStep, tuning, false, runtimeState.lastHapticIndex, runtimeState.styledRange)
+            }
+        }
+        scroller.post {
+            if (scroller.height > 0) {
+                applyLayout()
+            } else {
+                scroller.addOnLayoutChangeListener(object : android.view.View.OnLayoutChangeListener {
+                    override fun onLayoutChange(v: android.view.View, left: Int, top: Int, right: Int, bottom: Int, oldLeft: Int, oldTop: Int, oldRight: Int, oldBottom: Int) {
+                        if (v.height > 0) {
+                            v.removeOnLayoutChangeListener(this)
+                            applyLayout()
+                        }
+                    }
+                })
             }
         }
         return scroller
@@ -138,8 +153,8 @@ class CardStackController(
     }
 
     private fun tunedCardStep(baseStep: Int, tuning: CardStackTuning): Int {
-        val minStep = activity.dp(34)
-        val maxStep = activity.dp(88)
+        val minStep = context.dp(34)
+        val maxStep = context.dp(88)
         val fromBase = (baseStep * (0.72f + (tuning.verticalSpacing / 100f) * 0.72f)).toInt()
         return fromBase.coerceIn(minStep, maxStep)
     }
@@ -267,7 +282,7 @@ class CardStackController(
         val maxScroll = maxOf(0, cards.last().top - readingAnchor)
         val target = (Math.round(scrollY / cardStep.toFloat()) * cardStep).coerceIn(0, maxScroll)
         val distance = kotlin.math.abs(target - scrollY)
-        if (distance > magnetSnapThreshold(tuning) || distance < activity.dp(1)) return
+        if (distance > magnetSnapThreshold(tuning) || distance < context.dp(1)) return
         scrollMemory.remember(stackKey, target)
         scroller.smoothScrollTo(0, target)
     }
@@ -297,7 +312,7 @@ class CardStackController(
 
     private fun focusedCardGap(visualDepth: Float, tuning: CardStackTuning): Float {
         if (visualDepth <= 0f || tuning.focusedCardGap == 0) return 0f
-        val maxGap = activity.dp(56) * tuning.focusedCardGapFactor
+        val maxGap = context.dp(56) * tuning.focusedCardGapFactor
         return maxGap * CalmColor.clamp01(visualDepth)
     }
 
@@ -318,7 +333,7 @@ class CardStackController(
 
     private fun horizontalOffset(visualDepth: Float, tuning: CardStackTuning): Float {
         if (tuning.horizontalCurve == 0) return 0f
-        return activity.dp(132) * tuning.horizontalCurveFactor * tuning.horizontalPathProgress(visualDepth)
+        return context.dp(132) * tuning.horizontalCurveFactor * tuning.horizontalPathProgress(visualDepth)
     }
 
     private fun horizontalRotation(visualDepth: Float, tuning: CardStackTuning): Float {
@@ -331,7 +346,7 @@ class CardStackController(
     }
 
     private fun magnetSnapThreshold(tuning: CardStackTuning): Int {
-        return activity.dp(CalmColor.lerp(32f, 96f, tuning.magnetStrengthFactor).toInt())
+        return context.dp(CalmColor.lerp(32f, 96f, tuning.magnetStrengthFactor).toInt())
     }
 
     private fun textColor(visualDepth: Float): Int {

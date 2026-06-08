@@ -1,6 +1,7 @@
 package dev.barna.calm
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -64,6 +65,38 @@ class CardStackLayoutTest {
             peakFraction = 0.5f,
         )
         assertEquals(240, top)
+    }
+
+    @Test
+    fun zeroViewportHeightYieldsMinimumPaddingIndicatingUnmeasuredViewport() {
+        // Root cause of #104/#105: scroller.height == 0 in scroller.post{} for pre-warmed pages
+        // → activeTopPadding collapses to minimumTopPadding (the settings-preview-sized value).
+        // The fix defers applyLayout until the viewport is actually measured.
+        val top = CardStackLayout.activeTopPadding(
+            viewportHeight = 0,
+            cardHeight = 180,
+            minimumTopPadding = 6,
+            peakFraction = 0.4f,
+        )
+        assertEquals(6, top)
+    }
+
+    @Test
+    fun measuredViewportYieldsViewportProportionalPadding() {
+        val unmeasured = CardStackLayout.activeTopPadding(
+            viewportHeight = 0,
+            cardHeight = 180,
+            minimumTopPadding = 6,
+            peakFraction = 0.4f,
+        )
+        val measured = CardStackLayout.activeTopPadding(
+            viewportHeight = 600,
+            cardHeight = 180,
+            minimumTopPadding = 6,
+            peakFraction = 0.4f,
+        )
+        assertNotEquals(unmeasured, measured)
+        assertTrue(measured > unmeasured)
     }
 
     @Test

@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.drawable.AdaptiveIconDrawable
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.view.WindowInsets
@@ -138,6 +139,12 @@ private fun Bitmap.averageVisibleColor(): Int {
     }
     if (count == 0L) return Color.rgb(40, 36, 44)
     return Color.rgb((red / count).toInt(), (green / count).toInt(), (blue / count).toInt())
+}
+
+fun Bitmap.toSizedDrawable(context: Context, size: Int): BitmapDrawable {
+    return BitmapDrawable(context.resources, this).apply {
+        setBounds(0, 0, size, size)
+    }
 }
 
 fun roman(value: Int): String {

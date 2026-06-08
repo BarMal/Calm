@@ -88,6 +88,8 @@ class LauncherContextActionFactoryTest {
             pinApp = { events.add("pin:${it.packageName}") },
             unpinApp = { events.add("unpin:${it.packageName}") },
             openAppInfo = { events.add("info:${it.packageName}") },
+            appShortcuts = { emptyList() },
+            launchShortcut = { },
         )
     }
 

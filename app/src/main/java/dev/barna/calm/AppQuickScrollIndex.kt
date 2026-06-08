@@ -2,13 +2,19 @@ package dev.barna.calm
 
 class AppQuickScrollIndex {
     fun create(apps: List<AppEntry>): AppQuickScrollModel {
-        val targets = LinkedHashMap<String, Int>()
+        val activeLetters = LinkedHashMap<String, Int>()
         apps.forEachIndexed { index, app ->
-            targets.putIfAbsent(letter(app.label), index)
+            activeLetters.putIfAbsent(letter(app.label), index)
         }
-        return AppQuickScrollModel(
-            targets.map { (label, cardIndex) -> AppQuickScrollTarget(label, cardIndex) },
-        )
+        val allLetters = ('A'..'Z').map { it.toString() } + listOf("#")
+        val targets = allLetters.map { l ->
+            AppQuickScrollTarget(
+                label = l,
+                cardIndex = activeLetters[l] ?: 0,
+                active = activeLetters.containsKey(l),
+            )
+        }
+        return AppQuickScrollModel(targets)
     }
 
     fun targetAt(
@@ -20,7 +26,17 @@ class AppQuickScrollIndex {
         val index = ((y.coerceIn(0f, (railHeight - 1).toFloat()) / railHeight) * model.targets.size)
             .toInt()
             .coerceIn(0, model.targets.lastIndex)
-        return model.targets[index]
+        val hit = model.targets[index]
+        if (hit.active) return hit
+        // Inactive: find nearest preceding active target (keeps scroll at last active letter),
+        // falling forward only if there's no preceding active.
+        for (i in index downTo 0) {
+            if (model.targets[i].active) return model.targets[i]
+        }
+        for (i in index + 1..model.targets.lastIndex) {
+            if (model.targets[i].active) return model.targets[i]
+        }
+        return null
     }
 
     private fun letter(label: String): String {
@@ -36,4 +52,5 @@ data class AppQuickScrollModel(
 data class AppQuickScrollTarget(
     val label: String,
     val cardIndex: Int,
+    val active: Boolean = true,
 )

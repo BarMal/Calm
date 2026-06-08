@@ -27,7 +27,7 @@ class AppQuickScrollController(
         ensureCardRendered: (Int) -> Unit = {},
     ) {
         val quickScroll = index.create(model.apps)
-        if (quickScroll.targets.size < 2) return
+        if (quickScroll.targets.count { it.active } < 2) return
 
         val popup = popup()
         val rail = rail(quickScroll, stack, popup, tuning, ensureCardRendered)
@@ -78,9 +78,10 @@ class AppQuickScrollController(
             val lastIndex = quickScroll.targets.lastIndex.coerceAtLeast(1)
             quickScroll.targets.forEachIndexed { targetIndex, target ->
                 val visualDepth = (targetIndex / lastIndex.toFloat()) * maxOf(1, tuning.visibleCards - 1)
-                addView(label(target.label, 11, CalmTheme.INK, Typeface.BOLD).apply {
+                val textColor = if (target.active) CalmTheme.INK else CalmTheme.MUTED_INK
+                addView(label(target.label, 11, textColor, if (target.active) Typeface.BOLD else Typeface.NORMAL).apply {
                     gravity = Gravity.CENTER
-                    contentDescription = "Jump to ${target.label}"
+                    contentDescription = if (target.active) "Jump to ${target.label}" else null
                     translationX = -activity.dp(20) * tuning.horizontalCurveFactor * tuning.horizontalPathProgress(visualDepth)
                     rotation = -6f * tuning.rotationFactor * tuning.rotationProgress(visualDepth)
                     isClickable = false
@@ -99,6 +100,7 @@ class AppQuickScrollController(
                     MotionEvent.ACTION_CANCEL -> {
                         view.parent?.requestDisallowInterceptTouchEvent(false)
                         activate(index.targetAt(quickScroll, view.height, event.y), smooth = false)
+                        lastTarget[0] = null  // reset so a subsequent tap on the same letter re-fires
                         mainHandler.removeCallbacks(dismissPopup)
                         mainHandler.postDelayed(dismissPopup, POPUP_DISMISS_DELAY_MS)
                         true

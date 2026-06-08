@@ -10,7 +10,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
-import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
@@ -21,19 +20,15 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.CalendarContract
 import android.provider.Settings
-import android.text.Editable
 import android.text.TextUtils
-import android.text.TextWatcher
 import android.text.format.DateFormat
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextClock
@@ -43,7 +38,6 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.CompositePageTransformer
 import androidx.viewpager2.widget.ViewPager2
 import java.util.Date
-import java.util.EnumMap
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
@@ -72,6 +66,14 @@ class CalmLauncherRunner(
     private val appLibraryPageModelFactory = AppLibraryPageModelFactory()
     private val appStackRenderPlanner = AppStackRenderPlanner()
     private val appLibraryStore = AppLibraryRenderStore()
+    private val appSearchController = AppSearchController(
+        activity = activity,
+        mainHandler = mainHandler,
+        drawables = drawables,
+        appLibraryStore = appLibraryStore,
+        appLibraryPageModelFactory = appLibraryPageModelFactory,
+        refreshAppStack = ::refreshAppStack,
+    )
     private val contextActionFactory = LauncherContextActionFactory(
         LauncherContextActionCallbacks(
             openNotification = { notificationActionController.openNotification(it) },
@@ -172,25 +174,7 @@ class CalmLauncherRunner(
     private var pagePrewarmGeneration = 0
     private var appLibraryEventGeneration = 0
     private var suppressedPageEntryKey: String? = null
-    private val appSearchQueries = EnumMap<AppLibraryScope, String>(AppLibraryScope::class.java)
-    private val appSearchPages = ArrayList<AppSearchPageState>()
     private val sideIconCache = HashMap<Int, android.graphics.Bitmap?>()
-
-    private data class AppSearchPageState(
-        val key: String,
-        val scope: AppLibraryScope,
-        val pageModel: ChapterPage,
-        val page: View,
-        val header: View,
-        val stackHost: FrameLayout,
-        val search: EditText,
-        val cardCache: MutableMap<String, TextView>,
-    )
-
-    private data class AppSearchControl(
-        val root: View,
-        val search: EditText,
-    )
 
     fun onCreate() {
         configureWindow()
@@ -253,7 +237,7 @@ class CalmLauncherRunner(
     private fun render(state: LauncherRenderModel, animate: Boolean) {
         mainHandler.removeCallbacks(deferredRender)
         focusOverlay.dismiss(false)
-        appSearchPages.clear()
+        appSearchController.clear()
         launcherStateViewModel.publish(state)
         if (appCardSettingsSnapshot != state.preferences) {
             appCardSettingsSnapshot = state.preferences
@@ -331,7 +315,7 @@ class CalmLauncherRunner(
                 if (suppressedPageEntryKey != selectedPackageName) {
                     suppressedPageEntryKey = null
                 }
-                resetInactiveAppSearchPages(selectedPackageName)
+                appSearchController.resetInactiveExcept(selectedPackageName)
             }
 
             override fun onPageScrollStateChanged(state: Int) {
@@ -342,7 +326,7 @@ class CalmLauncherRunner(
                     ViewPager2.SCROLL_STATE_IDLE -> {
                         val currentPage = pages[pager.currentItem]
                         carouselController.update(pages, pager.currentItem)
-                        resetInactiveAppSearchPages(currentPage.key)
+                        appSearchController.resetInactiveExcept(currentPage.key)
                         if (!userSwipeInProgress && suppressedPageEntryKey != currentPage.key && lastAnimatedPageKey != currentPage.key) {
                             lastAnimatedPageKey = currentPage.key
                             pager.post { entryAnimator.animateCurrentPage(pager) }
@@ -485,15 +469,7 @@ class CalmLauncherRunner(
     }
 
     private fun refreshVisibleAppLibraryPages(state: AppLibraryRenderState) {
-        appSearchPages.forEach { pageState ->
-            val model = appLibraryPageModelFactory.create(
-                page = pageState.pageModel,
-                appEntries = state.apps,
-                query = appSearchQuery(pageState.scope),
-                loading = state.loading,
-            )
-            refreshAppStack(pageState.stackHost, model, pageState.cardCache)
-        }
+        appSearchController.refreshVisible(state)
     }
 
     private fun buildUiState(): LauncherRenderModel {
@@ -563,7 +539,7 @@ class CalmLauncherRunner(
         val model = appLibraryPageModelFactory.create(
             page = pageModel,
             appEntries = appEntries,
-            query = appSearchQuery(scope),
+            query = appSearchController.queryFor(scope),
             loading = appLibraryStore.state().loading,
         )
         val page = createBarePagePanel(activity.dp(20))
@@ -582,199 +558,16 @@ class CalmLauncherRunner(
             }
         }
         page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-
         val stackHost = FrameLayout(activity).apply {
             clipChildren = false
             clipToPadding = false
         }
         page.addView(stackHost, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-
-        val cardCache = LinkedHashMap<String, TextView>()
-        val searchControl = appSearchBox(page, header, stackHost, pageModel, cardCache)
-        page.addView(animatedChrome(searchControl.root), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        val searchBox = appSearchController.registerPage(pageModel, page, header, stackHost)
+        page.addView(animatedChrome(searchBox), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = activity.dp(12)
         })
-        val search = searchControl.search
-        appSearchPages.add(AppSearchPageState(pageModel.key, scope, pageModel, page, header, stackHost, search, cardCache))
-        installAppSearchKeyboardAnimator(page, header, search)
-        refreshAppStack(stackHost, model, cardCache)
         return page
-    }
-
-    private fun appSearchBox(
-        page: LinearLayout,
-        header: LinearLayout,
-        stackHost: FrameLayout,
-        pageModel: ChapterPage,
-        cardCache: MutableMap<String, TextView>,
-    ): AppSearchControl {
-        val scope = pageModel.appScope ?: AppLibraryScope.ALL
-        val initialQuery = appSearchQuery(scope)
-        val root = FrameLayout(activity).apply {
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(16))
-            clipToPadding = false
-            clipChildren = false
-        }
-        val clearButton = ImageButton(activity).apply {
-            background = ColorDrawable(Color.TRANSPARENT)
-            setImageResource(R.drawable.ic_clear_search)
-            setColorFilter(CalmTheme.MUTED_INK)
-            contentDescription = "Clear search"
-            visibility = if (initialQuery.isBlank()) View.GONE else View.VISIBLE
-        }
-        val search = EditText(activity).apply {
-            setText(initialQuery)
-            hint = "Search apps"
-            setSingleLine(true)
-            setTextColor(CalmTheme.INK)
-            setHintTextColor(CalmTheme.MUTED_INK)
-            textSize = 16f
-            typeface = Typeface.DEFAULT
-            background = ColorDrawable(Color.TRANSPARENT)
-            setPadding(activity.dp(16), activity.dp(12), activity.dp(50), activity.dp(12))
-            setSelectAllOnFocus(false)
-            setOnFocusChangeListener { view, hasFocus ->
-                animateAppSearchHeader(header, hasFocus)
-                if (!hasFocus) {
-                    animateAppSearchPage(page, 0)
-                }
-                if (hasFocus) {
-                    view.post {
-                        (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
-                            ?.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
-                    }
-                }
-            }
-            addTextChangedListener(object : TextWatcher {
-                var pendingSearchRefresh: Runnable? = null
-
-                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                    val query = s?.toString().orEmpty()
-                    if (query == appSearchQuery(scope)) return
-                    setAppSearchQuery(scope, query)
-                    clearButton.visibility = if (query.isBlank()) View.GONE else View.VISIBLE
-                    pendingSearchRefresh?.let(mainHandler::removeCallbacks)
-                    pendingSearchRefresh = Runnable {
-                        refreshAppStack(
-                            stackHost,
-                            appLibraryPageModelFactory.create(
-                                page = pageModel,
-                                appEntries = appLibraryStore.state().apps,
-                                query = query,
-                                loading = appLibraryStore.state().loading,
-                            ),
-                            cardCache,
-                        )
-                    }.also { refresh ->
-                        mainHandler.postDelayed(refresh, APP_SEARCH_REFRESH_DELAY_MS)
-                    }
-                }
-                override fun afterTextChanged(s: Editable?) = Unit
-            })
-        }
-        clearButton.setOnClickListener {
-            search.setText("")
-            search.clearFocus()
-            hideKeyboard(search)
-            animateAppSearchHeader(header, false)
-            animateAppSearchPage(page, 0)
-        }
-        root.addView(search, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        root.addView(clearButton, FrameLayout.LayoutParams(activity.dp(44), activity.dp(44), Gravity.END or Gravity.CENTER_VERTICAL).apply {
-            rightMargin = activity.dp(2)
-        })
-        return AppSearchControl(root, search)
-    }
-
-    private fun appSearchQuery(scope: AppLibraryScope): String = appSearchQueries[scope].orEmpty()
-
-    private fun setAppSearchQuery(scope: AppLibraryScope, query: String) {
-        if (query.isBlank()) {
-            appSearchQueries.remove(scope)
-        } else {
-            appSearchQueries[scope] = query
-        }
-    }
-
-    private fun installAppSearchKeyboardAnimator(page: LinearLayout, header: LinearLayout, search: EditText) {
-        page.viewTreeObserver.addOnGlobalLayoutListener {
-            if (!search.hasFocus()) return@addOnGlobalLayoutListener
-            val keyboardHeight = keyboardHeight()
-            val visible = keyboardHeight > activity.dp(120)
-            animateAppSearchHeader(header, visible)
-            animateAppSearchPage(page, if (visible) keyboardHeight else 0)
-            if (!visible && search.text.isNullOrBlank()) {
-                search.clearFocus()
-            }
-        }
-    }
-
-    private fun keyboardHeight(): Int {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            activity.window.decorView.rootWindowInsets?.let { insets ->
-                if (insets.isVisible(WindowInsets.Type.ime())) {
-                    return insets.getInsets(WindowInsets.Type.ime()).bottom
-                }
-            }
-        }
-        val visibleFrame = Rect()
-        val root = activity.window.decorView
-        root.getWindowVisibleDisplayFrame(visibleFrame)
-        return maxOf(0, root.height - visibleFrame.bottom)
-    }
-
-    private fun animateAppSearchHeader(header: View, collapsed: Boolean) {
-        header.animate()
-            .alpha(if (collapsed) 0f else 1f)
-            .translationY(if (collapsed) -activity.dp(18).toFloat() else 0f)
-            .setDuration(180L)
-            .start()
-    }
-
-    private fun animateAppSearchPage(page: View, keyboardHeight: Int) {
-        val target = if (keyboardHeight > 0) {
-            -(keyboardHeight - activity.dp(34)).coerceAtLeast(0).toFloat()
-        } else {
-            0f
-        }
-        if (kotlin.math.abs(page.translationY - target) < 1f) return
-        page.animate()
-            .translationY(target)
-            .setDuration(220L)
-            .start()
-    }
-
-    private fun resetInactiveAppSearchPages(activeKey: String) {
-        appSearchPages
-            .filter { it.key != activeKey }
-            .forEach(::resetAppSearchPage)
-    }
-
-    private fun resetAllAppSearchPages() {
-        appSearchPages.forEach(::resetAppSearchPage)
-    }
-
-    private fun resetAppSearchPage(state: AppSearchPageState) {
-        if (state.search.hasFocus()) {
-            state.search.clearFocus()
-            hideKeyboard(state.search)
-        }
-        if (state.search.text?.isNotBlank() == true) {
-            state.search.setText("")
-        } else {
-            setAppSearchQuery(state.scope, "")
-        }
-        state.header.animate().cancel()
-        state.page.animate().cancel()
-        state.header.alpha = 1f
-        state.header.translationY = 0f
-        state.page.translationY = 0f
-    }
-
-    private fun hideKeyboard(view: View) {
-        (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
-            ?.hideSoftInputFromWindow(view.windowToken, 0)
     }
 
     private fun refreshAppStack(
@@ -1328,7 +1121,7 @@ class CalmLauncherRunner(
         if (!smooth) {
             currentUiState?.pages?.let { pages ->
                 carouselController.update(pages, index)
-                resetInactiveAppSearchPages(pages[index].key)
+                appSearchController.resetInactiveExcept(pages[index].key)
             }
         }
     }
@@ -1466,7 +1259,7 @@ class CalmLauncherRunner(
 
     private fun openAppEntry(app: AppEntry) {
         if (notificationRepository.openApp(app)) {
-            resetAllAppSearchPages()
+            appSearchController.resetAll()
         } else {
             Toast.makeText(activity, "This app cannot be opened directly", Toast.LENGTH_SHORT).show()
         }
@@ -1624,8 +1417,7 @@ class CalmLauncherRunner(
         notificationCardDisplayCache.clear()
         cardRenderAssetCache.clear()
         sideIconCache.clear()
-        appSearchQueries.clear()
-        appSearchPages.clear()
+        appSearchController.clear()
         refreshStateAsync()
     }
 
@@ -1633,7 +1425,6 @@ class CalmLauncherRunner(
         const val PAGE_PREWARM_INITIAL_DELAY_MS = 260L
         const val PAGE_PREWARM_STEP_DELAY_MS = 120L
         const val PAGE_PREWARM_MAX_PAGES = 3
-        const val APP_SEARCH_REFRESH_DELAY_MS = 90L
         const val APP_STACK_DEFERRED_BATCH_SIZE = 16
         const val APP_STACK_DEFERRED_INITIAL_DELAY_MS = 48L
         const val APP_STACK_PENDING_RESTORE_BATCH_DELAY_MS = 0L

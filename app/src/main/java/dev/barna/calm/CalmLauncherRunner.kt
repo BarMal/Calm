@@ -31,7 +31,6 @@ import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
-import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.EditText
@@ -68,6 +67,7 @@ class CalmLauncherRunner(
     private val appCardModelFactory = AppCardModelFactory(pinnedAppResolver = pinnedAppResolver)
     private val appCardDisplayCache = AppCardDisplayCache(notificationRepository, appCardModelFactory)
     private val notificationCardDisplayCache = NotificationCardDisplayCache(notificationRepository)
+    private val carouselController = ChapterCarouselController(activity, notificationCardDisplayCache, ::navigateToChapterPage)
     private val cardRenderAssetCache = CardRenderAssetCache()
     private val appLibraryPageModelFactory = AppLibraryPageModelFactory()
     private val appStackRenderPlanner = AppStackRenderPlanner()
@@ -159,8 +159,6 @@ class CalmLauncherRunner(
     }
 
     private var selectedPackageName = launcherStateViewModel.uiState.value.selectedPageKey ?: CalmTheme.OVERVIEW_KEY
-    private var chapterCarousel: HorizontalScrollView? = null
-    private var chapterCarouselRow: LinearLayout? = null
     private var currentPager: ViewPager2? = null
     private var currentScreen: View? = null
     private val currentUiState: LauncherRenderModel?
@@ -172,7 +170,6 @@ class CalmLauncherRunner(
     private var pagePrewarmGeneration = 0
     private var appLibraryEventGeneration = 0
     private var suppressedPageEntryKey: String? = null
-    private var selectedCarouselPosition = -1
     private val appSearchQueries = EnumMap<AppLibraryScope, String>(AppLibraryScope::class.java)
     private val appSearchPages = ArrayList<AppSearchPageState>()
     private val sideIconCache = HashMap<Int, android.graphics.Bitmap?>()
@@ -319,7 +316,7 @@ class CalmLauncherRunner(
         var previousPageIndex = initialPage
         pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageScrolled(position: Int, positionOffset: Float, positionOffsetPixels: Int) {
-                centerCarouselPosition(position, positionOffset)
+                carouselController.scrollToPosition(position, positionOffset)
             }
 
             override fun onPageSelected(position: Int) {
@@ -342,7 +339,7 @@ class CalmLauncherRunner(
                     }
                     ViewPager2.SCROLL_STATE_IDLE -> {
                         val currentPage = pages[pager.currentItem]
-                        updateChapterCarousel(pages, pager.currentItem)
+                        carouselController.update(pages, pager.currentItem)
                         resetInactiveAppSearchPages(currentPage.key)
                         if (!userSwipeInProgress && suppressedPageEntryKey != currentPage.key && lastAnimatedPageKey != currentPage.key) {
                             lastAnimatedPageKey = currentPage.key
@@ -357,12 +354,12 @@ class CalmLauncherRunner(
             }
         })
 
-        root.addView(createChapterCarousel(pages, initialPage))
+        root.addView(carouselController.create(pages, initialPage))
         root.addView(
             pager,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
         )
-        updateChapterCarousel(pages, initialPage)
+        carouselController.update(pages, initialPage)
         activity.setContentView(screen)
         if (animate) {
             pager.post { entryAnimator.animateCurrentPage(pager) }
@@ -535,45 +532,6 @@ class CalmLauncherRunner(
                 includeFontPadding = false
                 setPadding(0, activity.dp(3), 0, 0)
             })
-        }
-    }
-
-    private fun createChapterCarousel(pages: List<ChapterPage>, selectedPosition: Int): View {
-        val spine = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            clipToPadding = false
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = activity.dp(12)
-                bottomMargin = activity.dp(18)
-            }
-        }
-        spine.addView(spineLine())
-        chapterCarousel = HorizontalScrollView(activity).apply {
-            isHorizontalScrollBarEnabled = false
-            overScrollMode = View.OVER_SCROLL_NEVER
-            clipToPadding = false
-            setPadding(0, activity.dp(3), 0, activity.dp(3))
-            setBackgroundColor(Color.TRANSPARENT)
-        }
-        chapterCarouselRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
-        chapterCarousel?.addView(
-            chapterCarouselRow,
-            FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT),
-        )
-        spine.addView(chapterCarousel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        spine.addView(spineLine())
-        renderChapterCarouselItems(pages, selectedPosition)
-        chapterCarousel?.post {
-            updateCarouselCenterPadding()
-            centerCarouselItem(selectedPosition, smooth = false)
-        }
-        return spine
-    }
-
-    private fun spineLine(): View {
-        return View(activity).apply {
-            setBackgroundColor(Color.argb(52, Color.red(CalmTheme.ACCENT), Color.green(CalmTheme.ACCENT), Color.blue(CalmTheme.ACCENT)))
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, maxOf(1, activity.dp(1)))
         }
     }
 
@@ -1133,7 +1091,7 @@ class CalmLauncherRunner(
             tooltipText = "Open ${chapter.label}"
             setPadding(activity.dp(10), activity.dp(10), activity.dp(10), activity.dp(10))
             notificationCardDisplayCache.chapterMaskedIcon(chapter)?.let { icon ->
-                setImageDrawable(icon.toSizedDrawable(activity.dp(42)))
+                setImageDrawable(icon.toSizedDrawable(activity, activity.dp(42)))
             }
             alpha = if (chapter.launchable) 0.96f else 0.36f
             isEnabled = chapter.launchable
@@ -1320,79 +1278,6 @@ class CalmLauncherRunner(
         }
     }
 
-    private fun updateChapterCarousel(pages: List<ChapterPage>, position: Int) {
-        val carousel = chapterCarousel ?: return
-        if (chapterCarouselRow == null || pages.isEmpty()) return
-        updateChapterCarouselSelection(pages, position)
-        carousel.post {
-            updateCarouselCenterPadding()
-            centerCarouselItem(position)
-        }
-    }
-
-    private fun renderChapterCarouselItems(pages: List<ChapterPage>, selectedPosition: Int) {
-        val row = chapterCarouselRow ?: return
-        row.removeAllViews()
-        selectedCarouselPosition = selectedPosition
-        pages.forEachIndexed { index, page ->
-            val selected = index == selectedPosition
-            val item = chapterCarouselItem(page, index, selected)
-            row.addView(item, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                leftMargin = activity.dp(1)
-                rightMargin = activity.dp(1)
-            })
-        }
-        row.post {
-            updateCarouselCenterPadding()
-            centerCarouselItem(selectedPosition)
-        }
-    }
-
-    private fun updateChapterCarouselSelection(pages: List<ChapterPage>, selectedPosition: Int) {
-        val row = chapterCarouselRow ?: return
-        if (selectedCarouselPosition == selectedPosition) return
-        val previousPosition = selectedCarouselPosition
-        selectedCarouselPosition = selectedPosition
-        if (previousPosition in 0 until row.childCount) {
-            configureChapterCarouselItem(row.getChildAt(previousPosition) as TextView, pages[previousPosition], previousPosition, false)
-        }
-        if (selectedPosition in 0 until row.childCount) {
-            configureChapterCarouselItem(row.getChildAt(selectedPosition) as TextView, pages[selectedPosition], selectedPosition, true)
-        }
-    }
-
-    private fun chapterCarouselItem(page: ChapterPage, index: Int, selected: Boolean): TextView {
-        return label("", if (selected) 18 else 14, if (selected) CalmTheme.INK else CalmTheme.MUTED_INK, if (selected) Typeface.BOLD else Typeface.NORMAL).apply {
-            configureChapterCarouselItem(this, page, index, selected)
-        }
-    }
-
-    private fun configureChapterCarouselItem(item: TextView, page: ChapterPage, index: Int, selected: Boolean) {
-        item.apply {
-            text = "${page.marker}  ${page.title}"
-            textSize = (if (selected) 18 else 14).toFloat()
-            setTextColor(if (selected) CalmTheme.INK else CalmTheme.MUTED_INK)
-            typeface = Typeface.DEFAULT
-            setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
-            gravity = Gravity.CENTER
-            setSingleLine(true)
-            ellipsize = TextUtils.TruncateAt.END
-            setPadding(activity.dp(if (selected) 12 else 8), activity.dp(8), activity.dp(if (selected) 12 else 8), activity.dp(8))
-            alpha = if (selected) 1f else 0.5f
-            background = null
-            setCompoundDrawables(null, null, null, null)
-            page.chapter?.let { chapter ->
-                compoundDrawablePadding = activity.dp(6)
-                notificationCardDisplayCache.cachedChapterMaskedIcon(chapter)?.let { icon ->
-                    setCompoundDrawables(icon.toSizedDrawable(activity.dp(if (selected) 20 else 16)), null, null, null)
-                }
-            }
-            maxWidth = activity.dp(if (selected) 176 else 126)
-            minWidth = activity.dp(if (selected) 118 else 74)
-            setOnClickListener { navigateToChapterPage(index) }
-        }
-    }
-
     private fun navigateToChapterPage(index: Int) {
         val pager = currentPager ?: return
         val current = pager.currentItem
@@ -1405,52 +1290,10 @@ class CalmLauncherRunner(
         pager.setCurrentItem(index, smooth)
         if (!smooth) {
             currentUiState?.pages?.let { pages ->
-                updateChapterCarousel(pages, index)
+                carouselController.update(pages, index)
                 resetInactiveAppSearchPages(pages[index].key)
             }
         }
-    }
-
-    private fun centerCarouselItem(position: Int, smooth: Boolean = true) {
-        val row = chapterCarouselRow ?: return
-        val carousel = chapterCarousel ?: return
-        if (row.childCount <= position) return
-        updateCarouselCenterPadding()
-        val child = row.getChildAt(position)
-        val viewportCenter = carousel.width / 2
-        val childCenter = carousel.paddingLeft + child.left + (child.width / 2)
-        val target = childCenter - viewportCenter
-        if (smooth) {
-            carousel.smoothScrollTo(maxOf(0, target), 0)
-        } else {
-            carousel.scrollTo(maxOf(0, target), 0)
-        }
-    }
-
-    private fun centerCarouselPosition(position: Int, offset: Float) {
-        val row = chapterCarouselRow ?: return
-        val carousel = chapterCarousel ?: return
-        if (row.childCount == 0 || row.childCount <= position) return
-        updateCarouselCenterPadding()
-        val current = row.getChildAt(position)
-        val currentCenter = carousel.paddingLeft + current.left + (current.width / 2f)
-        val nextCenter = if (position + 1 < row.childCount) {
-            val next = row.getChildAt(position + 1)
-            carousel.paddingLeft + next.left + (next.width / 2f)
-        } else {
-            currentCenter
-        }
-        val interpolatedCenter = currentCenter + ((nextCenter - currentCenter) * offset.coerceIn(0f, 1f))
-        val target = (interpolatedCenter - (carousel.width / 2f)).toInt().coerceAtLeast(0)
-        carousel.scrollTo(target, 0)
-    }
-
-    private fun updateCarouselCenterPadding() {
-        val carousel = chapterCarousel ?: return
-        if (carousel.width <= 0) return
-        val sidePadding = carousel.width / 2
-        if (carousel.paddingLeft == sidePadding && carousel.paddingRight == sidePadding) return
-        carousel.setPadding(sidePadding, carousel.paddingTop, sidePadding, carousel.paddingBottom)
     }
 
     private fun nextAlarmClock(): AlarmManager.AlarmClockInfo? {
@@ -1535,12 +1378,6 @@ class CalmLauncherRunner(
     private fun cardSideIcon(drawableRes: Int): android.graphics.Bitmap? {
         return sideIconCache.getOrPut(drawableRes) {
             activity.getDrawable(drawableRes)?.toBitmap()
-        }
-    }
-
-    private fun android.graphics.Bitmap.toSizedDrawable(size: Int): android.graphics.drawable.BitmapDrawable {
-        return android.graphics.drawable.BitmapDrawable(activity.resources, this).apply {
-            setBounds(0, 0, size, size)
         }
     }
 

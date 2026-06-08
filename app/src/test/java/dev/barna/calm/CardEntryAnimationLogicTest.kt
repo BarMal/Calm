@@ -131,4 +131,51 @@ class CardEntryAnimationLogicTest {
         )
         assertEquals(0f, result, 0.001f)
     }
+
+    @Test
+    fun storedStyledPositionTakesPrecedenceForDeepCardWhereExitLandsPositive() {
+        // Edge case: deep card with styledY(100) > exitOffset(80). Exit result = 20 (positive).
+        // Without stored styledY: translationY(20) >= 0 → returned as-is → card drifts to 20.
+        // With stored styledY=100: card always returns to its true styled position.
+        assertEquals(100f, CardEntryAnimationLogic.entryTargetTranslationY(
+            currentTranslationY = 20f,
+            exitTranslateOffset = 80f,
+            styledTranslationY = 100f,
+        ), 0.001f)
+    }
+
+    @Test
+    fun storedStyledPositionAlsoWorksForNormalNegativeExitCase() {
+        // When styledY is provided, it is always used regardless of translationY sign.
+        assertEquals(30f, CardEntryAnimationLogic.entryTargetTranslationY(
+            currentTranslationY = -50f,
+            exitTranslateOffset = 80f,
+            styledTranslationY = 30f,
+        ), 0.001f)
+    }
+
+    // entryTargetAlpha with styledTranslationY
+
+    @Test
+    fun storedStyledPositionDetectsExitAnimatedCardWhenTranslationYIsPositive() {
+        // Card styled at 100, exit resulted in 20 (positive). Alpha was zeroed by exit.
+        // Without stored styledY: translationY(20)>=0 → 0f (card stays invisible — bug).
+        // With stored styledY=100: position changed → card was animated → restore to 1f.
+        assertEquals(1f, CardEntryAnimationLogic.entryTargetAlpha(
+            alpha = 0f,
+            translationY = 20f,
+            styledTranslationY = 100f,
+        ))
+    }
+
+    @Test
+    fun storedStyledPositionKeepsInvisibleCardHiddenWhenNotExitAnimated() {
+        // Deep invisible card: styledY = 100, never exit-animated, alpha = 0 by style().
+        // translationY == styledY → card was never moved → must stay hidden.
+        assertEquals(0f, CardEntryAnimationLogic.entryTargetAlpha(
+            alpha = 0f,
+            translationY = 100f,
+            styledTranslationY = 100f,
+        ))
+    }
 }

@@ -165,10 +165,12 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
             if (animatedCount >= MAX_ENTRY_ANIMATED_CARDS) break
 
             val currentTranslationY = card.translationY
-            val targetAlpha = CardEntryAnimationLogic.entryTargetAlpha(card.alpha, currentTranslationY)
+            val styledTranslationY = card.getTag(CalmAnimationTags.STYLED_TRANSLATION_Y_TAG_KEY) as? Float
+            val targetAlpha = CardEntryAnimationLogic.entryTargetAlpha(card.alpha, currentTranslationY, styledTranslationY)
             val targetY = CardEntryAnimationLogic.entryTargetTranslationY(
                 currentTranslationY = currentTranslationY,
                 exitTranslateOffset = activity.dp(CARD_EXIT_TRANSLATE_DP).toFloat(),
+                styledTranslationY = styledTranslationY,
             )
 
             if (direction < 0) {

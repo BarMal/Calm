@@ -222,7 +222,9 @@ class CardStackController(
             card.pivotY = 0f
             card.translationZ = 120f - focusDistance
             card.translationX = horizontalOffset(visualDepth, tuning)
-            card.translationY = focusedCardGap(visualDepth, tuning)
+            val styledTranslationY = focusedCardGap(visualDepth, tuning)
+            card.translationY = styledTranslationY
+            card.setTag(CalmAnimationTags.STYLED_TRANSLATION_Y_TAG_KEY, styledTranslationY)
             card.rotation = horizontalRotation(visualDepth, tuning)
             card.scaleX = scale
             card.scaleY = scale

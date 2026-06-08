@@ -86,6 +86,7 @@ class CalmLauncherRunner(
             pinApp = ::pinApp,
             unpinApp = ::unpinApp,
             openAppInfo = { app -> openAppInfo(app.packageName, app.userHandle, app.componentName) },
+            hideApp = ::hideApp,
             appShortcuts = { chapter -> notificationRepository.getAppShortcuts(chapter) },
             launchShortcut = { shortcut ->
                 if (!notificationRepository.launchShortcut(shortcut)) {
@@ -1485,6 +1486,12 @@ class CalmLauncherRunner(
             selectPage(CalmTheme.APP_LIBRARY_KEY)
         }
         Toast.makeText(activity, "Unpinned ${app.label}", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun hideApp(app: AppEntry) {
+        settings.setHiddenAppKeys(settings.hiddenAppKeys() + app.identityKey)
+        Toast.makeText(activity, "Hidden ${app.label}", Toast.LENGTH_SHORT).show()
         render()
     }
 

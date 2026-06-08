@@ -13,14 +13,29 @@ class LauncherContextActionFactoryTest {
         val pinActions = factory.appActions(app, pinned = false)
         val unpinActions = factory.appActions(app, pinned = true)
 
-        assertEquals(listOf("Open", "Pin", "Info"), pinActions.labels())
-        assertEquals(listOf("Open", "Unpin", "Info"), unpinActions.labels())
+        assertEquals(listOf("Open", "Pin", "Info", "Hide"), pinActions.labels())
+        assertEquals(listOf("Open", "Unpin", "Info", "Hide"), unpinActions.labels())
 
         pinActions[1].action.run()
         unpinActions[1].action.run()
         pinActions[2].action.run()
+        pinActions[3].action.run()
 
-        assertEquals(listOf("pin:maps.pkg", "unpin:maps.pkg", "info:maps.pkg"), events)
+        assertEquals(listOf("pin:maps.pkg", "unpin:maps.pkg", "info:maps.pkg", "hide:maps.pkg"), events)
+    }
+
+    @Test
+    fun appActionsHideRemovesCard() {
+        val events = ArrayList<String>()
+        val factory = LauncherContextActionFactory(callbacks(events))
+        val app = app("maps.pkg")
+
+        val actions = factory.appActions(app, pinned = false)
+        val hideAction = actions.first { it.label == "Hide" }
+
+        assertEquals(ContextActionCloseBehavior.REMOVE_CARD, hideAction.closeBehavior)
+        hideAction.action.run()
+        assertEquals(listOf("hide:maps.pkg"), events)
     }
 
     @Test
@@ -88,6 +103,7 @@ class LauncherContextActionFactoryTest {
             pinApp = { events.add("pin:${it.packageName}") },
             unpinApp = { events.add("unpin:${it.packageName}") },
             openAppInfo = { events.add("info:${it.packageName}") },
+            hideApp = { events.add("hide:${it.packageName}") },
             appShortcuts = { emptyList() },
             launchShortcut = { },
         )

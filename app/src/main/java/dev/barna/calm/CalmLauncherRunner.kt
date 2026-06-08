@@ -139,6 +139,7 @@ class CalmLauncherRunner(
             applyTimescapeStackPreset = ::applyTimescapeStackPreset,
             toggleAdvancedStackControls = ::toggleAdvancedStackControls,
             restoreNotificationSource = notificationActionController::restoreNotificationSource,
+            restoreHiddenApp = ::showApp,
             render = { render() },
             performCardScrollHaptic = ::performCardScrollHaptic,
         ),
@@ -1029,8 +1030,13 @@ class CalmLauncherRunner(
     }
 
     private fun hideApp(app: AppEntry) {
-        settings.setHiddenAppKeys(settings.hiddenAppKeys() + app.identityKey)
+        settings.hideApp(app.identityKey, app.label)
         Toast.makeText(activity, "Hidden ${app.label}", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun showApp(appKey: String) {
+        settings.showApp(appKey)
         render()
     }
 

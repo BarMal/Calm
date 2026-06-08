@@ -819,7 +819,11 @@ class CalmLauncherRunner(
         }
         fun scheduleNextBatch(delayMs: Long) {
             mainHandler.postDelayed({
-                if (stack.parent == null || !stackHost.isAttachedToWindow) return@postDelayed
+                if (stack.parent == null) return@postDelayed
+                if (!stackHost.isAttachedToWindow) {
+                    scheduleNextBatch(APP_STACK_DEFERRED_BATCH_DELAY_MS)
+                    return@postDelayed
+                }
                 if (currentPager?.scrollState != ViewPager2.SCROLL_STATE_IDLE) {
                     scheduleNextBatch(APP_STACK_DEFERRED_BATCH_DELAY_MS)
                     return@postDelayed
@@ -1106,13 +1110,44 @@ class CalmLauncherRunner(
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             clipToPadding = false
+            clipChildren = false
             addView(stackToolbar(groupingIconButton(chapter)), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(32)))
-            addView(notificationStack(chapter, tintCards), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+            addView(fadedStackHost(notificationStack(chapter, tintCards)), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
             if (mediaControls.hasAnyAction) {
                 addView(mediaControlsRow(mediaControls), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                     topMargin = activity.dp(12)
                 })
             }
+        }
+    }
+
+    private fun fadedStackHost(stack: View): FrameLayout {
+        val topFade = android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(CalmTheme.GLASS, Color.TRANSPARENT),
+        )
+        val bottomFade = android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(Color.TRANSPARENT, CalmTheme.GLASS),
+        )
+        return FrameLayout(activity).apply {
+            clipChildren = false
+            clipToPadding = false
+            addView(stack, matchParentParams())
+            addView(View(activity).apply {
+                background = topFade
+                isClickable = false
+                isFocusable = false
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(56)).apply {
+                gravity = Gravity.TOP
+            })
+            addView(View(activity).apply {
+                background = bottomFade
+                isClickable = false
+                isFocusable = false
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(72)).apply {
+                gravity = Gravity.BOTTOM
+            })
         }
     }
 

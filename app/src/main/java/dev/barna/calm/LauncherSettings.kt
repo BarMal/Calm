@@ -231,7 +231,7 @@ class LauncherSettings(private val context: Context) {
             focusedCardGap = preferences.getInt(PREF_CARD_STACK_FOCUSED_GAP, 36).coerceIn(0, 100),
             focusedCardScale = preferences.getInt(PREF_CARD_STACK_FOCUSED_SCALE, 32).coerceIn(0, 100),
             magnetStrength = preferences.getInt(PREF_CARD_STACK_MAGNET_STRENGTH, 70).coerceIn(0, 100),
-            stackPeakPosition = preferences.getInt(PREF_CARD_STACK_PEAK_POSITION, 50).coerceIn(0, 100),
+            stackPeakPosition = preferences.getInt(PREF_CARD_STACK_PEAK_POSITION, 20).coerceIn(0, 100),
         )
     }
 

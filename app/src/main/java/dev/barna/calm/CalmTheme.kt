@@ -23,4 +23,6 @@ object CalmTheme {
     val ACCENT: Int = Color.rgb(198, 181, 151)
     val REFRACTION_BLUE: Int = Color.argb(14, 116, 145, 210)
     val REFRACTION_LILAC: Int = Color.argb(12, 220, 198, 172)
+    val SURFACE: Int = Color.rgb(12, 11, 16)
+    val SURFACE_CONTAINER: Int = Color.rgb(28, 26, 34)
 }

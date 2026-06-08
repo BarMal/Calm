@@ -37,8 +37,8 @@ fun Drawable.toBitmap(): Bitmap {
 
 fun Drawable.toUnmaskedIconBitmap(): Bitmap {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && this is AdaptiveIconDrawable) {
-        val width = intrinsicWidth.takeIf { it > 0 } ?: DEFAULT_ICON_BITMAP_SIZE
-        val height = intrinsicHeight.takeIf { it > 0 } ?: DEFAULT_ICON_BITMAP_SIZE
+        val width = iconBitmapDimension(intrinsicWidth)
+        val height = iconBitmapDimension(intrinsicHeight)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         background?.let { layer ->
@@ -87,7 +87,12 @@ fun Activity.statusBarHeightFallback(): Int {
     return dp(28)
 }
 
-private const val DEFAULT_ICON_BITMAP_SIZE = 144
+// AdaptiveIconDrawable.intrinsicWidth returns -1; card backgrounds scale icons to ~520px,
+// so a small source bitmap (144px) would be magnified ~3.8× and appear blurry.
+internal const val MIN_ICON_BITMAP_SIZE = 512
+
+internal fun iconBitmapDimension(intrinsicSize: Int): Int =
+    maxOf(intrinsicSize.takeIf { it > 0 } ?: 0, MIN_ICON_BITMAP_SIZE)
 
 private fun Bitmap.hasTransparentCorners(): Boolean {
     if (width <= 0 || height <= 0) return false

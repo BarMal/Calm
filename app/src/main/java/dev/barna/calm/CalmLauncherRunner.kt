@@ -125,6 +125,7 @@ class CalmLauncherRunner(
         drawables = drawables,
         calendarRepository = calendarRepository,
         notificationRepository = notificationRepository,
+        cardStackController = cardStackController,
         actions = SettingsPageActions(
             toggleNotificationSurface = ::toggleNotificationSurface,
             toggleCardHaptics = ::toggleCardHaptics,

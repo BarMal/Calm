@@ -20,6 +20,7 @@ class SettingsPageFactory(
     private val drawables: CalmDrawables,
     private val calendarRepository: CalendarRepository,
     private val notificationRepository: NotificationChapterRepository,
+    private val cardStackController: CardStackController,
     private val copyFormatter: SettingsCopyFormatter = SettingsCopyFormatter(),
     private val actions: SettingsPageActions,
 ) {
@@ -37,6 +38,36 @@ class SettingsPageFactory(
             clipToPadding = false
             clipChildren = false
             setPadding(0, 0, 0, activity.dp(18))
+        }
+        val previewContainer = FrameLayout(activity).apply {
+            clipChildren = false
+            clipToPadding = false
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(220)).apply {
+                bottomMargin = activity.dp(10)
+            }
+        }
+        fun refreshPreview() {
+            previewContainer.removeAllViews()
+            val tuning = settings.cardStackTuning()
+            val cards = PREVIEW_CARD_TEXTS.map { text ->
+                label(text, CalmCardSpec().titleSp, CalmTheme.INK, Typeface.NORMAL).apply {
+                    setLineSpacing(activity.dp(2).toFloat(), 1.0f)
+                    setPadding(activity.dp(18), activity.dp(16), activity.dp(18), activity.dp(16))
+                    gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.START
+                    maxLines = 3
+                    background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(18))
+                    elevation = activity.dp(2).toFloat()
+                }
+            }.toMutableList()
+            val stack = cardStackController.cardStack(
+                cards,
+                activity.dp(CalmCardSpec().heightDp),
+                activity.dp(CalmCardSpec().stepDp),
+                tuning,
+                PREVIEW_STACK_KEY,
+            )
+            stack.setOnTouchListener { _, _ -> true }
+            previewContainer.addView(stack, matchParentParams())
         }
         scrollView.addView(content, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         page.addView(scrollView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -56,20 +87,22 @@ class SettingsPageFactory(
             addView(fullWidthAction(copyFormatter.appLibrary(settings.splitAppsByProfile()), actions.toggleSplitAppsByProfile))
             addView(fullWidthAction(copyFormatter.workNotificationPlacement(settings.placeWorkNotificationChaptersBeforeApps()), actions.toggleWorkNotificationChapterPlacement))
             addView(sectionTitle("Card stack"))
+            refreshPreview()
+            addView(previewContainer)
             addView(fullWidthAction("Timescape preset", actions.applyTimescapeStackPreset))
-            addView(cardStackHorizontalCurveControl())
-            addView(cardStackArcWidthControl())
-            addView(aboveFocusCardCountControl())
-            addView(focusedCardGapControl())
-            addView(focusedCardScaleControl())
-            addView(stackPeakPositionControl())
-            addView(cardStackRotationControl())
+            addView(cardStackHorizontalCurveControl(::refreshPreview))
+            addView(cardStackArcWidthControl(::refreshPreview))
+            addView(aboveFocusCardCountControl(::refreshPreview))
+            addView(focusedCardGapControl(::refreshPreview))
+            addView(focusedCardScaleControl(::refreshPreview))
+            addView(stackPeakPositionControl(::refreshPreview))
+            addView(cardStackRotationControl(::refreshPreview))
             addView(fullWidthAction(copyFormatter.advancedStackControls(settings.showAdvancedStackControls()), actions.toggleAdvancedStackControls))
             if (settings.showAdvancedStackControls()) {
-                addView(cardStackCurveControl())
-                addView(cardStackSpacingControl())
-                addView(visibleCardCountControl())
-                addView(magnetStrengthControl())
+                addView(cardStackCurveControl(::refreshPreview))
+                addView(cardStackSpacingControl(::refreshPreview))
+                addView(visibleCardCountControl(::refreshPreview))
+                addView(magnetStrengthControl(::refreshPreview))
             }
             addView(sectionTitle("Access"))
             addView(fullWidthAction("Set wallpaper", ::openWallpaperPicker))
@@ -134,97 +167,106 @@ class SettingsPageFactory(
         return card
     }
 
-    private fun cardStackCurveControl(): View {
+    private fun cardStackCurveControl(onLiveChange: () -> Unit = {}): View {
         val tuning = settings.cardStackTuning()
         return sliderCard(
             title = "Visual curve",
             initialProgress = tuning.curve,
             valueText = copyFormatter::visualCurve,
             onChanged = settings::setCardStackCurve,
+            onLiveChange = onLiveChange,
         )
     }
 
-    private fun cardStackSpacingControl(): View {
+    private fun cardStackSpacingControl(onLiveChange: () -> Unit = {}): View {
         val tuning = settings.cardStackTuning()
         return sliderCard(
             title = "Vertical spacing",
             initialProgress = tuning.verticalSpacing,
             valueText = copyFormatter::verticalSpacing,
             onChanged = settings::setCardStackSpacing,
+            onLiveChange = onLiveChange,
         )
     }
 
-    private fun cardStackHorizontalCurveControl(): View {
+    private fun cardStackHorizontalCurveControl(onLiveChange: () -> Unit = {}): View {
         val tuning = settings.cardStackTuning()
         return signedSliderCard(
             title = "Left / right path",
             initialValue = tuning.horizontalCurve,
             valueText = copyFormatter::horizontalCurve,
             onChanged = settings::setCardStackHorizontalCurve,
+            onLiveChange = onLiveChange,
         )
     }
 
-    private fun cardStackArcWidthControl(): View {
+    private fun cardStackArcWidthControl(onLiveChange: () -> Unit = {}): View {
         val tuning = settings.cardStackTuning()
         return sliderCard(
             title = "Arc width",
             initialProgress = tuning.arcWidth,
             valueText = copyFormatter::cardArcWidth,
             onChanged = settings::setCardStackArcWidth,
+            onLiveChange = onLiveChange,
         )
     }
 
-    private fun cardStackRotationControl(): View {
+    private fun cardStackRotationControl(onLiveChange: () -> Unit = {}): View {
         val tuning = settings.cardStackTuning()
         return sliderCard(
             title = "Card fan rotation",
             initialProgress = tuning.rotation,
             valueText = copyFormatter::cardFanRotation,
             onChanged = settings::setCardStackRotation,
+            onLiveChange = onLiveChange,
         )
     }
 
-    private fun focusedCardGapControl(): View {
+    private fun focusedCardGapControl(onLiveChange: () -> Unit = {}): View {
         val tuning = settings.cardStackTuning()
         return sliderCard(
             title = "Focused card gap",
             initialProgress = tuning.focusedCardGap,
             valueText = copyFormatter::focusedCardGap,
             onChanged = settings::setFocusedCardGap,
+            onLiveChange = onLiveChange,
         )
     }
 
-    private fun focusedCardScaleControl(): View {
+    private fun focusedCardScaleControl(onLiveChange: () -> Unit = {}): View {
         val tuning = settings.cardStackTuning()
         return sliderCard(
             title = "Focused card size",
             initialProgress = tuning.focusedCardScale,
             valueText = copyFormatter::focusedCardScale,
             onChanged = settings::setFocusedCardScale,
+            onLiveChange = onLiveChange,
         )
     }
 
-    private fun magnetStrengthControl(): View {
+    private fun magnetStrengthControl(onLiveChange: () -> Unit = {}): View {
         val tuning = settings.cardStackTuning()
         return sliderCard(
             title = "Magnet strength",
             initialProgress = tuning.magnetStrength,
             valueText = copyFormatter::magnetStrength,
             onChanged = settings::setMagnetStrength,
+            onLiveChange = onLiveChange,
         )
     }
 
-    private fun stackPeakPositionControl(): View {
+    private fun stackPeakPositionControl(onLiveChange: () -> Unit = {}): View {
         val tuning = settings.cardStackTuning()
         return sliderCard(
             title = "Stack peak position",
             initialProgress = tuning.stackPeakPosition,
             valueText = copyFormatter::stackPeakPosition,
             onChanged = settings::setStackPeakPosition,
+            onLiveChange = onLiveChange,
         )
     }
 
-    private fun aboveFocusCardCountControl(): View {
+    private fun aboveFocusCardCountControl(onLiveChange: () -> Unit = {}): View {
         val tuning = settings.cardStackTuning()
         val card = controlCard()
         card.addView(label("Cards above focus", 15, CalmTheme.INK, Typeface.BOLD))
@@ -239,6 +281,7 @@ class SettingsPageFactory(
             settings.setAboveFocusCardCount(next)
             value.text = copyFormatter.visibleCards(next)
             countLabel.text = next.toString()
+            onLiveChange()
             actions.render()
         }
         (row.getChildAt(2) as TextView).setOnClickListener {
@@ -246,13 +289,14 @@ class SettingsPageFactory(
             settings.setAboveFocusCardCount(next)
             value.text = copyFormatter.visibleCards(next)
             countLabel.text = next.toString()
+            onLiveChange()
             actions.render()
         }
         card.addView(row)
         return card
     }
 
-    private fun visibleCardCountControl(): View {
+    private fun visibleCardCountControl(onLiveChange: () -> Unit = {}): View {
         val tuning = settings.cardStackTuning()
         val card = controlCard()
         card.addView(label("Visible cards", 15, CalmTheme.INK, Typeface.BOLD))
@@ -267,6 +311,7 @@ class SettingsPageFactory(
             settings.setVisibleCardCount(next)
             value.text = copyFormatter.visibleCards(next)
             countLabel.text = next.toString()
+            onLiveChange()
             actions.render()
         }
         (row.getChildAt(2) as TextView).setOnClickListener {
@@ -274,6 +319,7 @@ class SettingsPageFactory(
             settings.setVisibleCardCount(next)
             value.text = copyFormatter.visibleCards(next)
             countLabel.text = next.toString()
+            onLiveChange()
             actions.render()
         }
         card.addView(row)
@@ -285,6 +331,7 @@ class SettingsPageFactory(
         initialProgress: Int,
         valueText: (Int) -> String,
         onChanged: (Int) -> Unit,
+        onLiveChange: () -> Unit = {},
     ): View {
         val card = controlCard()
         card.addView(label(title, 15, CalmTheme.INK, Typeface.BOLD))
@@ -298,7 +345,10 @@ class SettingsPageFactory(
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
                     value.text = valueText(progress)
-                    if (fromUser) onChanged(progress)
+                    if (fromUser) {
+                        onChanged(progress)
+                        onLiveChange()
+                    }
                 }
 
                 override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
@@ -316,6 +366,7 @@ class SettingsPageFactory(
         initialValue: Int,
         valueText: (Int) -> String,
         onChanged: (Int) -> Unit,
+        onLiveChange: () -> Unit = {},
     ): View {
         val card = controlCard()
         card.addView(label(title, 15, CalmTheme.INK, Typeface.BOLD))
@@ -330,7 +381,10 @@ class SettingsPageFactory(
                 override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
                     val signedValue = progress - 100
                     value.text = valueText(signedValue)
-                    if (fromUser) onChanged(signedValue)
+                    if (fromUser) {
+                        onChanged(signedValue)
+                        onLiveChange()
+                    }
                 }
 
                 override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
@@ -429,6 +483,17 @@ class SettingsPageFactory(
 
     private fun openWallpaperPicker() {
         activity.startActivity(Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Set wallpaper"))
+    }
+
+    companion object {
+        private const val PREVIEW_STACK_KEY = "settings-preview"
+        private val PREVIEW_CARD_TEXTS = listOf(
+            "Morning standup",
+            "Review pull request",
+            "Lunch with team",
+            "Fix notification bug",
+            "Update release notes",
+        )
     }
 }
 

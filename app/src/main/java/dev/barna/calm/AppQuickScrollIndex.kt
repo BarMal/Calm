@@ -7,10 +7,14 @@ class AppQuickScrollIndex {
             activeLetters.putIfAbsent(letter(app.label), index)
         }
         val allLetters = ('A'..'Z').map { it.toString() } + listOf("#")
-        val targets = allLetters.map { l ->
+        val activePositions = allLetters.mapIndexedNotNull { i, l ->
+            if (activeLetters.containsKey(l)) i to activeLetters[l]!! else null
+        }
+        val targets = allLetters.mapIndexed { i, l ->
+            val cardIndex = activeLetters[l] ?: interpolateCardIndex(i, activePositions)
             AppQuickScrollTarget(
                 label = l,
-                cardIndex = activeLetters[l] ?: 0,
+                cardIndex = cardIndex,
                 active = activeLetters.containsKey(l),
             )
         }
@@ -26,17 +30,21 @@ class AppQuickScrollIndex {
         val index = ((y.coerceIn(0f, (railHeight - 1).toFloat()) / railHeight) * model.targets.size)
             .toInt()
             .coerceIn(0, model.targets.lastIndex)
-        val hit = model.targets[index]
-        if (hit.active) return hit
-        // Inactive: find nearest preceding active target (keeps scroll at last active letter),
-        // falling forward only if there's no preceding active.
-        for (i in index downTo 0) {
-            if (model.targets[i].active) return model.targets[i]
+        return model.targets[index]
+    }
+
+    private fun interpolateCardIndex(position: Int, activePositions: List<Pair<Int, Int>>): Int {
+        val prev = activePositions.lastOrNull { (pos, _) -> pos < position }
+        val next = activePositions.firstOrNull { (pos, _) -> pos > position }
+        return when {
+            prev != null && next != null -> {
+                val fraction = (position - prev.first).toFloat() / (next.first - prev.first)
+                (prev.second + fraction * (next.second - prev.second)).toInt()
+            }
+            prev != null -> prev.second
+            next != null -> next.second
+            else -> 0
         }
-        for (i in index + 1..model.targets.lastIndex) {
-            if (model.targets[i].active) return model.targets[i]
-        }
-        return null
     }
 
     private fun letter(label: String): String {

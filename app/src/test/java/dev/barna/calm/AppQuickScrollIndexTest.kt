@@ -2,6 +2,7 @@ package dev.barna.calm
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -63,6 +64,49 @@ class AppQuickScrollIndexTest {
     }
 
     @Test
+    fun inactiveLetterGetsInterpolatedCardIndexBetweenNeighbours() {
+        // 10 A-apps then 15 Z-apps. B through Y are inactive and should get
+        // indices interpolated between A(cardIndex=0) and Z(cardIndex=10).
+        val apps = (0 until 10).map { i -> app("Alpha$i") } + (0 until 15).map { i -> app("Zap$i") }
+        val model = index.create(apps)
+
+        val targetA = model.targets.first { it.label == "A" }
+        val targetM = model.targets.first { it.label == "M" }  // midpoint, inactive
+        val targetZ = model.targets.first { it.label == "Z" }
+
+        assertEquals(0, targetA.cardIndex)
+        assertEquals(10, targetZ.cardIndex)
+        // M is at alphabet position 12 out of 26; interpolated index should be between A and Z.
+        assertTrue("M.cardIndex should be > 0", targetM.cardIndex > 0)
+        assertTrue("M.cardIndex should be < 10", targetM.cardIndex < 10)
+        assertFalse(targetM.active)
+    }
+
+    @Test
+    fun inactiveLetterBeforeAllActiveLettersSnapsToFirstActive() {
+        // All apps start at C and D; letters A and B have no apps.
+        val model = index.create(listOf(app("Charlie"), app("Delta")))
+
+        val targetA = model.targets.first { it.label == "A" }
+        val targetB = model.targets.first { it.label == "B" }
+        val targetC = model.targets.first { it.label == "C" }
+
+        assertEquals(targetC.cardIndex, targetA.cardIndex)
+        assertEquals(targetC.cardIndex, targetB.cardIndex)
+    }
+
+    @Test
+    fun inactiveLetterAfterAllActiveLettersSnapsToLastActive() {
+        // All apps start at A and B; letters C onwards have no apps.
+        val model = index.create(listOf(app("Alpha"), app("Beta")))
+
+        val targetB = model.targets.first { it.label == "B" }
+        val targetZ = model.targets.first { it.label == "Z" }
+
+        assertEquals(targetB.cardIndex, targetZ.cardIndex)
+    }
+
+    @Test
     fun targetAtReturnsActiveTargetDirectly() {
         val model = AppQuickScrollModel(
             listOf(
@@ -78,42 +122,39 @@ class AppQuickScrollIndexTest {
     }
 
     @Test
-    fun inactiveTargetFallsBackToPrecedingActiveTarget() {
-        // "T" is inactive between "S" (active) and "U" (active). Should resolve to "S".
+    fun targetAtReturnsInactiveTargetDirectlyEnablingProportionalScroll() {
+        // With interpolated card indices, inactive targets are returned as-is so
+        // slow drag through inactive letter zones actually scrolls the list.
         val model = AppQuickScrollModel(
             listOf(
                 AppQuickScrollTarget("S", 10, active = true),
-                AppQuickScrollTarget("T", 0, active = false),
+                AppQuickScrollTarget("T", 12, active = false),  // interpolated index
                 AppQuickScrollTarget("U", 15, active = true),
             ),
         )
-        // y=50 out of 90 → index 1 → "T" (inactive) → falls back to "S"
-        assertEquals(AppQuickScrollTarget("S", 10, active = true), index.targetAt(model, railHeight = 90, y = 50f))
+        // y=50 out of 90 → index 1 → returns "T" with its card index (not "S")
+        assertEquals(AppQuickScrollTarget("T", 12, active = false), index.targetAt(model, railHeight = 90, y = 50f))
     }
 
     @Test
-    fun inactiveTargetWithNoPrecedingActiveFallsForwardToNearestActive() {
-        // "A" and "B" are inactive, "C" is the first active letter.
-        val model = AppQuickScrollModel(
-            listOf(
-                AppQuickScrollTarget("A", 0, active = false),
-                AppQuickScrollTarget("B", 0, active = false),
-                AppQuickScrollTarget("C", 5, active = true),
-            ),
-        )
-        // y=0 → index 0 → "A" (inactive) → no preceding active → falls forward to "C"
-        assertEquals(AppQuickScrollTarget("C", 5, active = true), index.targetAt(model, railHeight = 90, y = 0f))
-    }
+    fun slowDragThroughInactiveZoneProducesNonDecreasingCardIndices() {
+        // 15 A-apps then 10 Z-apps. Letters B through Y are inactive.
+        // Dragging from top to bottom should yield non-decreasing card indices,
+        // proving that slow navigation actually scrolls in the correct direction.
+        val apps = (0 until 15).map { i -> app("Alpha$i") } + (0 until 10).map { i -> app("Zap$i") }
+        val model = index.create(apps)
 
-    @Test
-    fun allInactiveTargetsReturnNull() {
-        val model = AppQuickScrollModel(
-            listOf(
-                AppQuickScrollTarget("A", 0, active = false),
-                AppQuickScrollTarget("B", 0, active = false),
-            ),
-        )
-        assertNull(index.targetAt(model, railHeight = 90, y = 0f))
+        val railHeight = 270
+        var previousCardIndex = -1
+        for (y in 0..railHeight step 10) {
+            val target = index.targetAt(model, railHeight = railHeight, y = y.toFloat())
+            assertNotNull("Target should not be null at y=$y", target)
+            assertTrue(
+                "Card index should be non-decreasing during downward drag (y=$y, prev=$previousCardIndex, curr=${target!!.cardIndex})",
+                target.cardIndex >= previousCardIndex,
+            )
+            previousCardIndex = target.cardIndex
+        }
     }
 
     @Test

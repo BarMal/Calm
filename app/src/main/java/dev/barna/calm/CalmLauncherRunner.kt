@@ -649,10 +649,6 @@ class CalmLauncherRunner(
         fun scheduleNextBatch(delayMs: Long) {
             mainHandler.postDelayed({
                 if (stack.parent == null) return@postDelayed
-                if (!stackHost.isAttachedToWindow) {
-                    scheduleNextBatch(APP_STACK_DEFERRED_BATCH_DELAY_MS)
-                    return@postDelayed
-                }
                 if (currentPager?.scrollState != ViewPager2.SCROLL_STATE_IDLE) {
                     scheduleNextBatch(APP_STACK_DEFERRED_BATCH_DELAY_MS)
                     return@postDelayed
@@ -662,9 +658,26 @@ class CalmLauncherRunner(
                 }
             }, delayMs)
         }
+
+        fun startDeferredBatches() {
+            scheduleNextBatch(APP_STACK_DEFERRED_INITIAL_DELAY_MS)
+        }
+
         appQuickScrollController.attach(stackHost, stack, model, activePreferences.cardStackTuning, ::ensureRendered)
         if (deferredApps.isNotEmpty()) {
-            scheduleNextBatch(APP_STACK_DEFERRED_INITIAL_DELAY_MS)
+            if (stackHost.isAttachedToWindow) {
+                startDeferredBatches()
+            } else {
+                stackHost.addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(v: android.view.View) {
+                        v.removeOnAttachStateChangeListener(this)
+                        if (stack.parent != null) {
+                            startDeferredBatches()
+                        }
+                    }
+                    override fun onViewDetachedFromWindow(v: android.view.View) {}
+                })
+            }
         }
     }
 

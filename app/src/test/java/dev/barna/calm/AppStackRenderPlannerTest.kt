@@ -42,6 +42,36 @@ class AppStackRenderPlannerTest {
         assertEquals(listOf(16, 16, 1), batches.map { it.size })
     }
 
+    @Test
+    fun planReturnsNoDeferredAppsWhenAppCountEqualsVisibleCards() {
+        val apps = (1..5).map { index -> app("app.$index", isWorkProfile = false) }
+
+        val plan = planner.plan(apps, tuning = tuning(visibleCards = 5))
+
+        assertEquals(apps, plan.initialApps)
+        assertEquals(emptyList<AppEntry>(), plan.deferredApps)
+    }
+
+    @Test
+    fun planReturnsNoDeferredAppsWhenAppCountIsBelowVisibleCards() {
+        val apps = (1..3).map { index -> app("app.$index", isWorkProfile = false) }
+
+        val plan = planner.plan(apps, tuning = tuning(visibleCards = 5))
+
+        assertEquals(apps, plan.initialApps)
+        assertEquals(emptyList<AppEntry>(), plan.deferredApps)
+    }
+
+    @Test
+    fun planDeferesAppsExceedingVisibleCardCount() {
+        val apps = (1..10).map { index -> app("app.$index", isWorkProfile = false) }
+
+        val plan = planner.plan(apps, tuning = tuning(visibleCards = 4))
+
+        assertEquals(apps.take(4), plan.initialApps)
+        assertEquals(apps.drop(4), plan.deferredApps)
+    }
+
     private fun app(packageName: String, isWorkProfile: Boolean): AppEntry {
         return AppEntry(
             packageName = packageName,

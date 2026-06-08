@@ -57,33 +57,45 @@ class CardEntryAnimationLogicTest {
     // entryTargetAlpha
 
     @Test
-    fun entryTargetAlphaDefaultsTo1WhenCurrentAlphaIsZero() {
-        // After exit animation, alpha=0; we should animate to 1f (visible), not 0→0 (invisible).
-        assertEquals(1f, CardEntryAnimationLogic.entryTargetAlpha(0f))
+    fun exitAnimatedCardAlphaRestoredToOne() {
+        // Exit animation shifts translationY negative; card was visible, must come back visible.
+        assertEquals(1f, CardEntryAnimationLogic.entryTargetAlpha(alpha = 0f, translationY = -80f))
+    }
+
+    @Test
+    fun styleInvisibleCardAlphaRemainsZero() {
+        // style() set this card's alpha to 0 (out of visible range). translationY is the
+        // positive focusedCardGap value style() assigned — not exit-shifted. Must stay hidden.
+        assertEquals(0f, CardEntryAnimationLogic.entryTargetAlpha(alpha = 0f, translationY = 20f))
+    }
+
+    @Test
+    fun freshCardAtOriginAlphaRemainsZero() {
+        // Fresh card: style() hasn't run yet (translationZ=0) or style set alpha=0.
+        // isStackWaitingForFirstStyle guards against this, but the function itself must be safe.
+        assertEquals(0f, CardEntryAnimationLogic.entryTargetAlpha(alpha = 0f, translationY = 0f))
     }
 
     @Test
     fun entryTargetAlphaPreservesPositiveAlpha() {
-        assertEquals(0.7f, CardEntryAnimationLogic.entryTargetAlpha(0.7f), 0.001f)
+        assertEquals(0.7f, CardEntryAnimationLogic.entryTargetAlpha(alpha = 0.7f, translationY = 0f), 0.001f)
     }
 
     @Test
     fun entryTargetAlphaPreservesFullAlpha() {
-        assertEquals(1f, CardEntryAnimationLogic.entryTargetAlpha(1f))
+        assertEquals(1f, CardEntryAnimationLogic.entryTargetAlpha(alpha = 1f, translationY = 20f))
     }
 
     // entryTargetTranslationY
 
     @Test
     fun exitAnimatedCardTranslationYIsRestoredByUndoingExitOffset() {
-        // Exit animation shifts translationY by -exitOffset (card moves up 80dp).
+        // Exit animation shifts translationY negative (card moves up 80dp).
         // Entry must undo this to land at the true styled position.
         val exitOffset = 80f
         val styledY = 0f
         val exitAnimatedY = styledY - exitOffset  // -80f
         val result = CardEntryAnimationLogic.entryTargetTranslationY(
-            alpha = 0f,
-            translationZ = 115f,
             currentTranslationY = exitAnimatedY,
             exitTranslateOffset = exitOffset,
         )
@@ -91,11 +103,20 @@ class CardEntryAnimationLogicTest {
     }
 
     @Test
-    fun freshCardTranslationYIsPreservedDirectly() {
-        // Fresh card (never styled): alpha=0, translationZ=0; translationY is already correct.
+    fun styleInvisibleCardTranslationYIsPreservedWithoutExitOffset() {
+        // style() set this card's translationY to focusedCardGap (positive). It was never
+        // exit-animated so the offset must NOT be added — doing so would push it even further
+        // down, making it an outlier when the entry animation incorrectly renders it visible.
         val result = CardEntryAnimationLogic.entryTargetTranslationY(
-            alpha = 0f,
-            translationZ = 0f,
+            currentTranslationY = 20f,
+            exitTranslateOffset = 80f,
+        )
+        assertEquals(20f, result, 0.001f)
+    }
+
+    @Test
+    fun freshCardTranslationYIsPreservedDirectly() {
+        val result = CardEntryAnimationLogic.entryTargetTranslationY(
             currentTranslationY = 0f,
             exitTranslateOffset = 80f,
         )
@@ -104,10 +125,7 @@ class CardEntryAnimationLogicTest {
 
     @Test
     fun visibleStyledCardTranslationYIsPreservedDirectly() {
-        // Visible card: translationY is the correct styled position, no adjustment needed.
         val result = CardEntryAnimationLogic.entryTargetTranslationY(
-            alpha = 1f,
-            translationZ = 115f,
             currentTranslationY = 0f,
             exitTranslateOffset = 80f,
         )

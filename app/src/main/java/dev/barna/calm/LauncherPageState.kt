@@ -9,6 +9,7 @@ class LauncherPageStateFactory(
         notificationChapters: List<AppChapter>,
         appEntries: List<AppEntry>,
         pinnedKeys: Set<String>,
+        pinnedChapterPackages: Set<String> = emptySet(),
     ): LauncherPageState {
         val pinnedApps = pinnedAppResolver.resolve(appEntries, pinnedKeys)
         val pages = chapterPagePlanner.buildPages(
@@ -16,6 +17,7 @@ class LauncherPageStateFactory(
             notificationChapters = notificationChapters,
             appEntries = appEntries,
             pinnedApps = pinnedApps,
+            pinnedChapterPackages = pinnedChapterPackages,
         )
         return LauncherPageState(
             pages = pages,

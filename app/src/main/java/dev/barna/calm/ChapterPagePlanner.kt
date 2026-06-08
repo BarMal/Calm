@@ -6,13 +6,29 @@ class ChapterPagePlanner {
         notificationChapters: List<AppChapter>,
         appEntries: List<AppEntry>,
         pinnedApps: List<AppEntry>,
+        pinnedChapterPackages: Set<String> = emptySet(),
     ): List<ChapterPage> {
         val pages = ArrayList<ChapterPage>()
         var chapterNumber = 1
+
+        val chapterByPackage = notificationChapters.associateBy { it.packageName }
+        val appEntryByPackage = appEntries.associateBy { it.packageName }
+
+        // Resolve pinned chapters: live chapter if available, otherwise a stub from app entries.
+        // Packages not installed (not in appEntries) are silently ignored.
+        val pinnedChapters = pinnedChapterPackages.mapNotNull { pkg ->
+            chapterByPackage[pkg] ?: appEntryByPackage[pkg]?.let { entry -> stubChapter(entry) }
+        }
+        val pinnedPackageSet = pinnedChapters.map { it.packageName }.toSet()
+
+        val unpinnedChapters = notificationChapters.filter { it.packageName !in pinnedPackageSet }
+
+        val allChapters = pinnedChapters + unpinnedChapters
+
         val (workChapters, standardChapters) = if (preferences.placeWorkNotificationChaptersBeforeApps) {
-            notificationChapters.partition { it.isWorkProfile }
+            allChapters.partition { it.isWorkProfile }
         } else {
-            emptyList<AppChapter>() to notificationChapters
+            emptyList<AppChapter>() to allChapters
         }
 
         workChapters.forEach { chapter ->
@@ -43,5 +59,16 @@ class ChapterPagePlanner {
             chapterNumber++
         }
         return pages
+    }
+
+    private fun stubChapter(entry: AppEntry): AppChapter {
+        return AppChapter(
+            packageName = entry.packageName,
+            label = entry.label,
+            notifications = emptyList(),
+            launchable = true,
+            hueColor = entry.hueColor,
+            isWorkProfile = entry.isWorkProfile,
+        )
     }
 }

@@ -12,4 +12,5 @@ data class LauncherUiPreferences(
     val cardHapticStrength: Int,
     val cardStackTuning: CardStackTuning,
     val showAdvancedStackControls: Boolean,
+    val cardVibrancy: Int,
 )

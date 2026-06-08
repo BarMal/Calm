@@ -127,6 +127,7 @@ class LauncherSettings(private val context: Context) {
             cardHapticStrength = cardHapticStrength(),
             cardStackTuning = cardStackTuning(),
             showAdvancedStackControls = showAdvancedStackControls(),
+            cardVibrancy = cardVibrancy(),
         )
     }
 
@@ -279,6 +280,14 @@ class LauncherSettings(private val context: Context) {
         preferences.edit().putInt(PREF_CARD_STACK_PEAK_POSITION, position.coerceIn(0, 100)).apply()
     }
 
+    fun cardVibrancy(): Int {
+        return preferences.getInt(PREF_CARD_VIBRANCY, 50).coerceIn(0, 100)
+    }
+
+    fun setCardVibrancy(vibrancy: Int) {
+        preferences.edit().putInt(PREF_CARD_VIBRANCY, vibrancy.coerceIn(0, 100)).apply()
+    }
+
     fun showAdvancedStackControls(): Boolean {
         return preferences.getBoolean(PREF_CARD_STACK_ADVANCED, false)
     }
@@ -356,5 +365,6 @@ class LauncherSettings(private val context: Context) {
         private const val PREF_CARD_STACK_MAGNET_STRENGTH = "card_stack_magnet_strength"
         private const val PREF_CARD_STACK_ADVANCED = "card_stack_advanced"
         private const val PREF_CARD_STACK_PEAK_POSITION = "card_stack_peak_position"
+        private const val PREF_CARD_VIBRANCY = "card_vibrancy"
     }
 }

@@ -76,6 +76,7 @@ class LauncherStateViewModelTest {
                 visibleCards = 3,
             ),
             showAdvancedStackControls = false,
+            cardVibrancy = 50,
         )
         return LauncherRenderModel(
             preferences = preferences,

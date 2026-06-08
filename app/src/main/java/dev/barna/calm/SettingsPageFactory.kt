@@ -81,6 +81,7 @@ class SettingsPageFactory(
             })
             addView(sectionTitle("Appearance"))
             addView(fullWidthAction(copyFormatter.notificationSurface(settings.useTintedNotificationCards()), actions.toggleNotificationSurface))
+            addView(cardVibrancyControl())
             addView(fullWidthAction(copyFormatter.cardHaptics(settings.cardHapticsEnabled()), actions.toggleCardHaptics))
             addView(hapticStrengthControl())
             addView(sectionTitle("Apps"))
@@ -123,7 +124,8 @@ class SettingsPageFactory(
 
     private fun createPagePanel(): LinearLayout {
         return LinearLayout(activity).apply {
-            background = drawables.glass(CalmTheme.GLASS, activity.dp(22))
+            val glassColor = CardVibrancyLevel.applyTo(CalmTheme.GLASS, settings.cardVibrancy())
+            background = drawables.glass(glassColor, activity.dp(22))
             orientation = LinearLayout.VERTICAL
             clipChildren = false
             clipToPadding = false
@@ -165,6 +167,15 @@ class SettingsPageFactory(
             })
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         return card
+    }
+
+    private fun cardVibrancyControl(): View {
+        return sliderCard(
+            title = "Card vibrancy",
+            initialProgress = settings.cardVibrancy(),
+            valueText = copyFormatter::cardVibrancy,
+            onChanged = settings::setCardVibrancy,
+        )
     }
 
     private fun cardStackCurveControl(onLiveChange: () -> Unit = {}): View {

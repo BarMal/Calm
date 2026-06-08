@@ -860,18 +860,20 @@ class CalmLauncherRunner(
     private fun createPagePanel(backgroundImage: android.graphics.Bitmap?, hueColor: Int): LinearLayout {
         return LinearLayout(activity).apply {
             tag = CalmAnimationTags.PAGE_PANEL
-            background = drawables.glass(CalmTheme.GLASS, activity.dp(22))
+            val glassColor = CardVibrancyLevel.applyTo(CalmTheme.GLASS, activePreferences.cardVibrancy)
+            background = if (backgroundImage != null) {
+                drawables.glassWithImage(glassColor, activity.dp(22), backgroundImage, hueColor)
+            } else if (hueColor != 0) {
+                drawables.glassWithHue(glassColor, activity.dp(22), hueColor)
+            } else {
+                drawables.glass(glassColor, activity.dp(22))
+            }
             orientation = LinearLayout.VERTICAL
             clipChildren = false
             clipToPadding = false
             setPadding(activity.dp(20), activity.dp(28), activity.dp(20), activity.dp(30))
             elevation = activity.dp(1).toFloat()
             translationZ = 0f
-            if (backgroundImage != null) {
-                background = drawables.glassWithImage(CalmTheme.GLASS, activity.dp(22), backgroundImage, hueColor)
-            } else if (hueColor != 0) {
-                background = drawables.glassWithHue(CalmTheme.GLASS, activity.dp(22), hueColor)
-            }
             layoutParams = pageParams()
         }
     }

@@ -118,6 +118,15 @@ class SettingsPageFactory(
                     addView(fullWidthAction("Restore ${source.label}") { actions.restoreNotificationSource(source.packageName) })
                 }
             }
+            addView(sectionTitle("Hidden apps"))
+            val hidden = settings.hiddenApps()
+            if (hidden.isEmpty()) {
+                addView(emptyNote("No apps are hidden."))
+            } else {
+                hidden.forEach { app ->
+                    addView(fullWidthAction("Show ${app.label}") { actions.restoreHiddenApp(app.packageName) })
+                }
+            }
         }
         return page
     }
@@ -516,6 +525,7 @@ data class SettingsPageActions(
     val applyTimescapeStackPreset: () -> Unit,
     val toggleAdvancedStackControls: () -> Unit,
     val restoreNotificationSource: (String) -> Unit,
+    val restoreHiddenApp: (String) -> Unit,
     val render: () -> Unit,
     val performCardScrollHaptic: (View) -> Unit,
 )

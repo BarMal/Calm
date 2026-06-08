@@ -34,6 +34,29 @@ class LauncherSettings(private val context: Context) {
         return AppVisibility.isHidden(app, hiddenAppKeys())
     }
 
+    fun hideApp(appKey: String, label: String) {
+        preferences.edit()
+            .putStringSet(PREF_HIDDEN_APP_KEYS, hiddenAppKeys() + appKey)
+            .putString(PREF_HIDDEN_APP_LABEL_PREFIX + appKey, label)
+            .apply()
+    }
+
+    fun showApp(appKey: String) {
+        preferences.edit()
+            .putStringSet(PREF_HIDDEN_APP_KEYS, hiddenAppKeys() - appKey)
+            .remove(PREF_HIDDEN_APP_LABEL_PREFIX + appKey)
+            .apply()
+    }
+
+    fun hiddenApps(): List<ExcludedSource> {
+        return hiddenAppKeys()
+            .map { appKey ->
+                val savedLabel = preferences.getString(PREF_HIDDEN_APP_LABEL_PREFIX + appKey, null)
+                ExcludedSource(appKey, savedLabel ?: appKey)
+            }
+            .sortedWith { left, right -> Collator.getInstance().compare(left.label, right.label) }
+    }
+
     fun pinPackage(packageName: String) {
         val pinned = pinnedPackages().toMutableSet()
         pinned.add(packageName)
@@ -340,6 +363,7 @@ class LauncherSettings(private val context: Context) {
         private const val PREF_NOTIFICATION_FILTERS = "notification_filters"
         private const val PREF_PINNED_PACKAGES = "pinned_packages"
         private const val PREF_HIDDEN_APP_KEYS = "hidden_app_keys"
+        private const val PREF_HIDDEN_APP_LABEL_PREFIX = "hidden_app_label_"
         private const val PREF_APP_HUE_PREFIX = "app_hue_"
         private const val PREF_LAUNCHABLE_APPS_SNAPSHOT = "launchable_apps_snapshot"
         private const val PREF_EXCLUDED_LABEL_PREFIX = "excluded_label_"

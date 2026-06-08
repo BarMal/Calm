@@ -111,7 +111,6 @@ class CalmLauncherRunner(
         ::performCardScrollHaptic,
     )
     private val entryAnimator = LauncherEntryAnimator(activity)
-    private val pageEntryAnimationPolicy = PageEntryAnimationPolicy()
     private val notificationActionController = NotificationActionController(
         activity = activity,
         settings = settings,
@@ -316,10 +315,9 @@ class CalmLauncherRunner(
         if (!animate) {
             suppressedPageEntryKey = pages.getOrNull(initialPage)?.key
         }
-        var userSwipeInProgress = false
         var previousPageIndex = initialPage
         var currentNavigationDirection = 0
-        var animationTriggeredForCurrentSwipe = false
+        val animTrigger = PageScrollAnimationTrigger()
         pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageScrolled(position: Int, positionOffset: Float, positionOffsetPixels: Int) {
                 carouselController.scrollToPosition(position, positionOffset)
@@ -333,8 +331,14 @@ class CalmLauncherRunner(
                     else -> 0
                 }
                 previousPageIndex = position
-                if (userSwipeInProgress && prev != position) {
+                if (animTrigger.isSwipeInProgress && prev != position) {
                     entryAnimator.animatePageExit(pager, prev)
+                    // Trigger entry animation now — pager.currentItem reflects the new page here,
+                    // but SCROLL_STATE_SETTLING fires before onPageSelected updates currentItem,
+                    // so triggering at SETTLING would animate the wrong (outgoing) page.
+                    val direction = currentNavigationDirection
+                    animTrigger.onSwipePageChanged(pages[position].key, suppressedPageEntryKey)
+                        ?.let { pager.post { entryAnimator.animateCurrentPage(pager, direction) } }
                 }
                 selectPage(pages[position].key)
                 if (suppressedPageEntryKey != selectedPackageName) {
@@ -346,30 +350,25 @@ class CalmLauncherRunner(
             override fun onPageScrollStateChanged(state: Int) {
                 when (state) {
                     ViewPager2.SCROLL_STATE_DRAGGING -> {
-                        userSwipeInProgress = true
+                        animTrigger.onDragging()
                     }
                     ViewPager2.SCROLL_STATE_SETTLING -> {
-                        if (userSwipeInProgress) {
-                            val currentPage = pages[pager.currentItem]
-                            if (pageEntryAnimationPolicy.shouldAnimate(userSwipeInProgress, currentPage.key, suppressedPageEntryKey)) {
-                                animationTriggeredForCurrentSwipe = true
-                                val direction = currentNavigationDirection
-                                pager.post { entryAnimator.animateCurrentPage(pager, direction) }
-                            }
-                        }
+                        // Only fires an animation if onSwipePageChanged didn't already fire one.
+                        // Handles swipe-back-to-same-page and overscroll past last page.
+                        val direction = currentNavigationDirection
+                        animTrigger.onSettling(pages[pager.currentItem].key, suppressedPageEntryKey)
+                            ?.let { pager.post { entryAnimator.animateCurrentPage(pager, direction) } }
                     }
                     ViewPager2.SCROLL_STATE_IDLE -> {
                         val currentPage = pages[pager.currentItem]
                         carouselController.update(pages, pager.currentItem)
                         appSearchController.resetInactiveExcept(currentPage.key)
-                        if (!animationTriggeredForCurrentSwipe && pageEntryAnimationPolicy.shouldAnimate(userSwipeInProgress, currentPage.key, suppressedPageEntryKey)) {
-                            pager.post { entryAnimator.animateCurrentPage(pager, currentNavigationDirection) }
-                        }
+                        val direction = currentNavigationDirection
+                        animTrigger.onIdle(currentPage.key, suppressedPageEntryKey)
+                            ?.let { pager.post { entryAnimator.animateCurrentPage(pager, direction) } }
                         if (suppressedPageEntryKey == currentPage.key) {
                             suppressedPageEntryKey = null
                         }
-                        userSwipeInProgress = false
-                        animationTriggeredForCurrentSwipe = false
                     }
                 }
             }

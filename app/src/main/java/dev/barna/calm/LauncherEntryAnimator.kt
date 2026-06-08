@@ -154,13 +154,13 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
             val card = content.getChildAt(index)
             if (card.tag != CalmAnimationTags.CARD) continue
             cardCount++
-            if (card.alpha > 0f) return false
+            if (card.alpha > 0f || card.translationZ != 0f) return false
         }
         return cardCount > 0
     }
 
     private fun animateCardIntoView(card: View, index: Int) {
-        val targetAlpha = card.alpha
+        val targetAlpha = card.alpha.takeIf { it > 0f } ?: 1f
         val targetY = card.translationY
         card.animate().cancel()
         card.alpha = 0f

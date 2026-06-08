@@ -1,15 +1,12 @@
 package dev.barna.calm
 
 import android.graphics.Bitmap
-import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.text.format.DateFormat
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -109,7 +106,7 @@ class ChapterPageBuilder(
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(32)),
             )
             addView(
-                fadedStackHost(notificationStack(chapter, tintCards)),
+                notificationStack(chapter, tintCards),
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
             )
             if (mediaControls.hasAnyAction) {
@@ -120,36 +117,6 @@ class ChapterPageBuilder(
                     },
                 )
             }
-        }
-    }
-
-    private fun fadedStackHost(stack: View): FrameLayout {
-        val topFade = GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(CalmTheme.GLASS, Color.TRANSPARENT),
-        )
-        val bottomFade = GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.TRANSPARENT, CalmTheme.GLASS),
-        )
-        return FrameLayout(activity).apply {
-            clipChildren = false
-            clipToPadding = false
-            addView(stack, matchParentParams())
-            addView(View(activity).apply {
-                background = topFade
-                isClickable = false
-                isFocusable = false
-            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(56)).apply {
-                gravity = Gravity.TOP
-            })
-            addView(View(activity).apply {
-                background = bottomFade
-                isClickable = false
-                isFocusable = false
-            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(72)).apply {
-                gravity = Gravity.BOTTOM
-            })
         }
     }
 

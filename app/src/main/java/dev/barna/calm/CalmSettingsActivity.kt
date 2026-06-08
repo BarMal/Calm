@@ -15,7 +15,8 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
-import android.widget.Switch
+import android.graphics.drawable.GradientDrawable
+import androidx.appcompat.widget.SwitchCompat
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -52,14 +53,14 @@ class CalmSettingsActivity : ComponentActivity() {
     }
 
     private fun configureWindow() {
-        CalmSystemBars.applyTransparentWallpaper(this)
+        CalmSystemBars.applySettingsWindow(this)
     }
 
     private fun render() {
         val screen = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), statusBarHeightFallback() + dp(18), dp(18), dp(20))
-            background = drawables.wallpaperShade()
+            setBackgroundColor(CalmTheme.SURFACE)
         }
 
         val scrollView = ScrollView(this).apply {
@@ -208,7 +209,7 @@ class CalmSettingsActivity : ComponentActivity() {
                 })
             }
             addView(text, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(Switch(this@CalmSettingsActivity).apply {
+            addView(SwitchCompat(this@CalmSettingsActivity).apply {
                 isChecked = checked
                 setOnClickListener { onToggle() }
             })
@@ -349,7 +350,11 @@ class CalmSettingsActivity : ComponentActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(16), dp(14), dp(16), dp(14))
-            background = drawables.glass(CalmTheme.QUIET_GLASS, dp(16))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                setColor(CalmTheme.SURFACE_CONTAINER)
+                cornerRadius = dp(16).toFloat()
+            }
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(10)
             }

@@ -17,4 +17,13 @@ object CalmSystemBars {
             navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
         )
     }
+
+    fun applySettingsWindow(activity: ComponentActivity) {
+        activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+        activity.window.setBackgroundDrawable(ColorDrawable(CalmTheme.SURFACE))
+        activity.enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(CalmTheme.SURFACE),
+        )
+    }
 }

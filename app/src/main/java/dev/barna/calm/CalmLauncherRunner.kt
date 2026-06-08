@@ -67,12 +67,13 @@ class CalmLauncherRunner(
     private val appLibraryPageModelFactory = AppLibraryPageModelFactory()
     private val appStackRenderPlanner = AppStackRenderPlanner()
     private val appLibraryStore = AppLibraryRenderStore()
+    private val appSearchState = AppSearchState(appLibraryPageModelFactory)
     private val appSearchController = AppSearchController(
         activity = activity,
         mainHandler = mainHandler,
         drawables = drawables,
         appLibraryStore = appLibraryStore,
-        appLibraryPageModelFactory = appLibraryPageModelFactory,
+        appSearchState = appSearchState,
         refreshAppStack = ::refreshAppStack,
     )
     private val contextActionFactory = LauncherContextActionFactory(
@@ -580,7 +581,7 @@ class CalmLauncherRunner(
             clipToPadding = false
         }
         page.addView(stackHost, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        val searchBox = appSearchController.registerPage(pageModel, page, header, stackHost)
+        val searchBox = appSearchController.registerPage(pageModel, page, header, stackHost, model)
         page.addView(animatedChrome(searchBox), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = activity.dp(12)
         })

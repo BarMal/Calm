@@ -17,18 +17,16 @@ import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
-import java.util.EnumMap
 
 class AppSearchController(
     private val activity: MainActivity,
     private val mainHandler: Handler,
     private val drawables: CalmDrawables,
     private val appLibraryStore: AppLibraryRenderStore,
-    private val appLibraryPageModelFactory: AppLibraryPageModelFactory,
+    private val appSearchState: AppSearchState,
     private val refreshAppStack: (FrameLayout, AppLibraryPageModel, MutableMap<String, TextView>) -> Unit,
 ) {
     private val pages = ArrayList<PageState>()
-    private val queries = EnumMap<AppLibraryScope, String>(AppLibraryScope::class.java)
 
     private data class PageState(
         val key: String,
@@ -46,32 +44,22 @@ class AppSearchController(
         page: LinearLayout,
         header: LinearLayout,
         stackHost: FrameLayout,
+        initialModel: AppLibraryPageModel,
     ): View {
         val scope = pageModel.appScope ?: AppLibraryScope.ALL
         val cardCache = LinkedHashMap<String, TextView>()
-        val model = appLibraryPageModelFactory.create(
-            page = pageModel,
-            appEntries = appLibraryStore.state().apps,
-            query = queryFor(scope),
-            loading = appLibraryStore.state().loading,
-        )
         val (searchRoot, searchEdit) = buildSearchBox(page, header, stackHost, pageModel, cardCache, scope)
         pages.add(PageState(pageModel.key, scope, pageModel, page, header, stackHost, searchEdit, cardCache))
         installKeyboardAnimator(page, header, searchEdit)
-        refreshAppStack(stackHost, model, cardCache)
+        refreshAppStack(stackHost, initialModel, cardCache)
         return searchRoot
     }
 
-    fun queryFor(scope: AppLibraryScope): String = queries[scope].orEmpty()
+    fun queryFor(scope: AppLibraryScope): String = appSearchState.queryFor(scope)
 
     fun refreshVisible(state: AppLibraryRenderState) {
         pages.forEach { pageState ->
-            val model = appLibraryPageModelFactory.create(
-                page = pageState.pageModel,
-                appEntries = state.apps,
-                query = queryFor(pageState.scope),
-                loading = state.loading,
-            )
+            val model = appSearchState.buildModel(pageState.pageModel, state.apps, state.loading)
             refreshAppStack(pageState.stackHost, model, pageState.cardCache)
         }
     }
@@ -84,7 +72,7 @@ class AppSearchController(
 
     fun clear() {
         pages.clear()
-        queries.clear()
+        appSearchState.clear()
     }
 
     private fun buildSearchBox(
@@ -137,18 +125,14 @@ class AppSearchController(
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                     val query = s?.toString().orEmpty()
                     if (query == queryFor(scope)) return
-                    setQuery(scope, query)
+                    appSearchState.updateQuery(scope, query)
                     clearButton.visibility = if (query.isBlank()) View.GONE else View.VISIBLE
                     pendingRefresh?.let(mainHandler::removeCallbacks)
                     pendingRefresh = Runnable {
+                        val storeState = appLibraryStore.state()
                         refreshAppStack(
                             stackHost,
-                            appLibraryPageModelFactory.create(
-                                page = pageModel,
-                                appEntries = appLibraryStore.state().apps,
-                                query = query,
-                                loading = appLibraryStore.state().loading,
-                            ),
+                            appSearchState.buildModel(pageModel, storeState.apps, storeState.loading),
                             cardCache,
                         )
                     }.also { mainHandler.postDelayed(it, APP_SEARCH_REFRESH_DELAY_MS) }
@@ -228,17 +212,13 @@ class AppSearchController(
         if (state.search.text?.isNotBlank() == true) {
             state.search.setText("")
         } else {
-            setQuery(state.scope, "")
+            appSearchState.updateQuery(state.scope, "")
         }
         state.header.animate().cancel()
         state.page.animate().cancel()
         state.header.alpha = 1f
         state.header.translationY = 0f
         state.page.translationY = 0f
-    }
-
-    private fun setQuery(scope: AppLibraryScope, query: String) {
-        if (query.isBlank()) queries.remove(scope) else queries[scope] = query
     }
 
     private fun hideKeyboard(view: View) {

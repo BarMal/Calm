@@ -63,6 +63,7 @@ class CalmLauncherRunner(
     private val notificationCardDisplayCache = NotificationCardDisplayCache(notificationRepository)
     private val carouselController = ChapterCarouselController(activity, notificationCardDisplayCache, ::navigateToChapterPage)
     private val cardRenderAssetCache = CardRenderAssetCache()
+    private val cardRenderer = CardRenderer(activity, drawables, cardSpec, cardRenderAssetCache) { activePreferences }
     private val appLibraryPageModelFactory = AppLibraryPageModelFactory()
     private val appStackRenderPlanner = AppStackRenderPlanner()
     private val appLibraryStore = AppLibraryRenderStore()
@@ -149,6 +150,23 @@ class CalmLauncherRunner(
         { currentScreen },
         { activePreferences.focusBlurRadius },
     )
+    private val chapterPageBuilder = ChapterPageBuilder(
+        activity = activity,
+        drawables = drawables,
+        settings = settings,
+        notificationCardDisplayCache = notificationCardDisplayCache,
+        notificationRepository = notificationRepository,
+        cardStackController = cardStackController,
+        cardRenderer = cardRenderer,
+        notificationActionController = notificationActionController,
+        contextActionFactory = contextActionFactory,
+        focusOverlay = focusOverlay,
+        activePreferences = { activePreferences },
+        createPagePanel = ::createPagePanel,
+        createBarePagePanel = ::createBarePagePanel,
+        openPackage = ::openPackage,
+        toggleNotificationGrouping = ::toggleNotificationGrouping,
+    )
     private val stateExecutor = Executors.newFixedThreadPool(4)
     private val stateGeneration = AtomicInteger(0)
     private val deferredRender = Runnable { refreshStateAsync() }
@@ -174,7 +192,6 @@ class CalmLauncherRunner(
     private var pagePrewarmGeneration = 0
     private var appLibraryEventGeneration = 0
     private var suppressedPageEntryKey: String? = null
-    private val sideIconCache = HashMap<Int, android.graphics.Bitmap?>()
 
     fun onCreate() {
         configureWindow()
@@ -605,7 +622,7 @@ class CalmLauncherRunner(
             val batch = deferredApps.subList(nextDeferredIndex, end)
             nextDeferredIndex = end
             val newCards = batch.map { app -> appCardFromCache(app, cardCache) }
-            cardStackController.appendCards(stack, renderedCards, newCards, cardHeight(), cardStep(), activePreferences.cardStackTuning)
+            cardStackController.appendCards(stack, renderedCards, newCards, cardRenderer.cardHeight(), cardRenderer.cardStep(), activePreferences.cardStackTuning)
             return true
         }
         fun ensureRendered(cardIndex: Int) {
@@ -653,8 +670,8 @@ class CalmLauncherRunner(
     private fun appStack(cards: MutableList<TextView>, stackKey: String): ScrollView {
         return cardStackController.cardStack(
             cards,
-            cardHeight(),
-            cardStep(),
+            cardRenderer.cardHeight(),
+            cardRenderer.cardStep(),
             activePreferences.cardStackTuning,
             stackKey,
         )
@@ -665,11 +682,11 @@ class CalmLauncherRunner(
     }
 
     private fun appSearchEmptyStack(message: String, stackKey: String): View {
-        val card = stackCard(
+        val card = cardRenderer.stackCard(
             "Search\n$message",
             CalmTheme.ACCENT,
             true,
-            cardSideIcon(R.drawable.ic_search_card),
+            cardRenderer.cardSideIcon(R.drawable.ic_search_card),
             sideImageRenderKey = "res:${R.drawable.ic_search_card}",
         ).apply {
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
@@ -678,8 +695,8 @@ class CalmLauncherRunner(
         }
         return cardStackController.cardStack(
             listOf(card),
-            cardHeight(),
-            cardStep(),
+            cardRenderer.cardHeight(),
+            cardRenderer.cardStep(),
             activePreferences.cardStackTuning,
             stackKey,
         )
@@ -689,76 +706,9 @@ class CalmLauncherRunner(
         return CardStackStateKey.appLibrary(model.key, model.scope, model.query)
     }
 
-    private fun cardHeight(): Int = activity.dp(cardSpec.heightDp)
-
-    private fun cardStep(): Int = activity.dp(cardSpec.stepDp)
-
-    private fun cardCornerRadius(): Int = activity.dp(activePreferences.cardCornerRadiusDp)
-
-    private fun stackCard(
-        text: String,
-        hueColor: Int,
-        tinted: Boolean,
-        sideImage: android.graphics.Bitmap? = null,
-        sideImageAlpha: Int = 64,
-        sideImageRenderKey: String? = null,
-    ): TextView {
-        return label(text, cardSpec.titleSp, CalmTheme.INK, Typeface.NORMAL).apply {
-            val showImageAsBackground = sideImage != null && activePreferences.useCardIconBackgrounds
-            val iconRenderData = if (showImageAsBackground) {
-                cardRenderAssetCache.iconRenderData(
-                    imageKey = sideImageRenderKey ?: "bitmap-${sideImage.generationId}",
-                    image = sideImage,
-                    style = CardRenderStyleKey(
-                        radiusPx = cardCornerRadius(),
-                        hueColor = hueColor,
-                        tintCards = tinted,
-                        imageAlpha = sideImageAlpha,
-                        imageBlur = activePreferences.cardIconBlur,
-                        useIconBackgrounds = activePreferences.useCardIconBackgrounds,
-                    ),
-                )
-            } else {
-                null
-            }
-            setLineSpacing(activity.dp(2).toFloat(), 1.0f)
-            setPadding(
-                activity.dp(cardSpec.horizontalPaddingDp),
-                activity.dp(cardSpec.verticalPaddingDp),
-                activity.dp(if (showImageAsBackground) 116 else cardSpec.horizontalPaddingDp),
-                activity.dp(cardSpec.verticalPaddingDp),
-            )
-            gravity = Gravity.CENTER_VERTICAL or Gravity.START
-            maxLines = 4
-            ellipsize = TextUtils.TruncateAt.END
-            background = drawables.cardWithSideImage(
-                cardCornerRadius(),
-                hueColor,
-                tinted,
-                sideImage.takeIf { showImageAsBackground },
-                sideImageAlpha,
-                activePreferences.cardIconBlur,
-                iconRenderData,
-            )
-            if (sideImage != null && !showImageAsBackground) {
-                compoundDrawablePadding = activity.dp(14)
-                setCompoundDrawables(null, null, sideImage.toCardIconDrawable(), null)
-            }
-            elevation = activity.dp(2).toFloat()
-        }
-    }
-
-    private fun android.graphics.Bitmap.toCardIconDrawable(): android.graphics.drawable.BitmapDrawable {
-        return android.graphics.drawable.BitmapDrawable(activity.resources, this).apply {
-            val size = activity.dp(cardSpec.iconSizeDp)
-            setBounds(0, 0, size, size)
-            alpha = 214
-        }
-    }
-
     private fun appCard(app: AppEntry): TextView {
         val data = appCardDisplayCache.getCachedOrCreateLightweight(app, currentUiState?.pinnedKeys ?: settings.pinnedPackages())
-        return stackCard(data.text, data.hueColor, true, data.icon, sideImageRenderKey = data.iconRenderKey).apply {
+        return cardRenderer.stackCard(data.text, data.hueColor, true, data.icon, sideImageRenderKey = data.iconRenderKey).apply {
             maxLines = 4
             setOnClickListener { openAppEntry(app) }
             setOnLongClickListener {
@@ -843,195 +793,15 @@ class CalmLauncherRunner(
 
     private fun createSettingsPage(): View = settingsPageFactory.create()
 
-    private fun createChapterPage(chapter: AppChapter): LinearLayout {
-        val tintCards = activePreferences.useTintedNotificationCards
-        val page = if (tintCards) {
-            createBarePagePanel(activity.dp(20))
-        } else {
-            createPagePanel(notificationRepository.resolveChapterBackground(chapter), chapter.hueColor)
-        }
-        page.addView(chapterHeader(chapter))
-        page.addView(notificationArea(chapter, tintCards), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 2.25f))
-        return page
-    }
+    private fun createChapterPage(chapter: AppChapter): LinearLayout = chapterPageBuilder.buildPage(chapter)
 
-    private fun chapterHeader(chapter: AppChapter): View {
-        return LinearLayout(activity).apply {
-            tag = CalmAnimationTags.CHROME
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            clipToPadding = false
-            clipChildren = false
-            setPadding(0, 0, 0, activity.dp(24))
-
-            addView(chapterLaunchButton(chapter), LinearLayout.LayoutParams(activity.dp(58), activity.dp(58)).apply {
-                rightMargin = activity.dp(14)
-            })
-
-            addView(LinearLayout(activity).apply {
-                orientation = LinearLayout.VERTICAL
-                addView(label(chapter.label, 30, CalmTheme.INK, Typeface.NORMAL).apply {
-                    setSingleLine(true)
-                    ellipsize = TextUtils.TruncateAt.END
-                    setPadding(0, activity.dp(8), 0, 0)
-                })
-                addView(label(notificationSummary(chapter), 15, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
-                    setPadding(0, activity.dp(6), 0, 0)
-                })
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        }
-    }
-
-    private fun chapterLaunchButton(chapter: AppChapter): ImageButton {
-        return ImageButton(activity).apply {
-            scaleType = ImageView.ScaleType.CENTER_INSIDE
-            background = drawables.notificationCard(activity.dp(18), chapter.hueColor, true)
-            contentDescription = "Open ${chapter.label}"
-            tooltipText = "Open ${chapter.label}"
-            setPadding(activity.dp(10), activity.dp(10), activity.dp(10), activity.dp(10))
-            notificationCardDisplayCache.chapterMaskedIcon(chapter)?.let { icon ->
-                setImageDrawable(icon.toSizedDrawable(activity, activity.dp(42)))
-            }
-            alpha = if (chapter.launchable) 0.96f else 0.36f
-            isEnabled = chapter.launchable
-            if (chapter.launchable) {
-                setOnClickListener { openPackage(chapter) }
-            }
-        }
-    }
-
-    private fun notificationArea(chapter: AppChapter, tintCards: Boolean): View {
-        val mediaControls = MediaNotificationControls.from(chapter.notifications)
-        return LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            clipToPadding = false
-            clipChildren = false
-            addView(stackToolbar(groupingIconButton(chapter)), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(32)))
-            addView(fadedStackHost(notificationStack(chapter, tintCards)), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-            if (mediaControls.hasAnyAction) {
-                addView(mediaControlsRow(mediaControls), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    topMargin = activity.dp(12)
-                })
-            }
-        }
-    }
-
-    private fun fadedStackHost(stack: View): FrameLayout {
-        val topFade = android.graphics.drawable.GradientDrawable(
-            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(CalmTheme.GLASS, Color.TRANSPARENT),
-        )
-        val bottomFade = android.graphics.drawable.GradientDrawable(
-            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.TRANSPARENT, CalmTheme.GLASS),
-        )
-        return FrameLayout(activity).apply {
-            clipChildren = false
-            clipToPadding = false
-            addView(stack, matchParentParams())
-            addView(View(activity).apply {
-                background = topFade
-                isClickable = false
-                isFocusable = false
-            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(56)).apply {
-                gravity = Gravity.TOP
-            })
-            addView(View(activity).apply {
-                background = bottomFade
-                isClickable = false
-                isFocusable = false
-            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(72)).apply {
-                gravity = Gravity.BOTTOM
-            })
-        }
-    }
-
-    private fun mediaControlsRow(controls: MediaNotificationControls): View {
-        return LinearLayout(activity).apply {
-            tag = CalmAnimationTags.CHROME
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            clipToPadding = false
-            clipChildren = false
-            addView(mediaControlButton(R.drawable.ic_media_previous, "Previous", controls.previous), LinearLayout.LayoutParams(0, activity.dp(46), 1f).apply {
-                rightMargin = activity.dp(8)
-            })
-            addView(mediaControlButton(playPauseIcon(controls), controls.playPauseLabel, controls.playPause), LinearLayout.LayoutParams(0, activity.dp(46), 1.35f).apply {
-                leftMargin = activity.dp(4)
-                rightMargin = activity.dp(4)
-            })
-            addView(mediaControlButton(R.drawable.ic_media_next, "Next", controls.next), LinearLayout.LayoutParams(0, activity.dp(46), 1f).apply {
-                leftMargin = activity.dp(8)
-            })
-        }
-    }
-
-    private fun stackToolbar(action: View? = null): View {
+    private fun stackToolbarSpacer(): View {
         return LinearLayout(activity).apply {
             tag = CalmAnimationTags.CHROME
             gravity = Gravity.END
             clipChildren = false
             clipToPadding = false
-            action?.let {
-                addView(it, LinearLayout.LayoutParams(activity.dp(38), activity.dp(30)))
-            }
         }
-    }
-
-    private fun stackToolbarSpacer(): View {
-        return stackToolbar()
-    }
-
-    private fun playPauseIcon(controls: MediaNotificationControls): Int {
-        val label = controls.playPauseLabel.lowercase(Locale.ROOT)
-        return if (label.contains("pause")) R.drawable.ic_media_pause else R.drawable.ic_media_play
-    }
-
-    private fun mediaControlButton(iconRes: Int, description: String, action: NotificationAction?): ImageButton {
-        return ImageButton(activity).apply {
-            setImageResource(iconRes)
-            setColorFilter(if (action == null) CalmTheme.MUTED_INK else CalmTheme.INK)
-            scaleType = ImageView.ScaleType.CENTER
-            alpha = if (action == null) 0.34f else 0.92f
-            isEnabled = action != null
-            contentDescription = description
-            tooltipText = description
-            setPadding(activity.dp(11), activity.dp(11), activity.dp(11), activity.dp(11))
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(999))
-            if (action != null) {
-                setOnClickListener { notificationActionController.performNotificationAction(action) }
-            }
-        }
-    }
-
-    private fun groupingIconButton(chapter: AppChapter): ImageButton {
-        val grouped = settings.groupNotifications(chapter.identityKey)
-        val description = if (grouped) "Notifications grouped by conversation" else "Notifications split"
-        return ImageButton(activity).apply {
-            setImageResource(if (grouped) R.drawable.ic_grouped_notifications else R.drawable.ic_split_notifications)
-            setColorFilter(CalmTheme.INK)
-            scaleType = ImageView.ScaleType.CENTER
-            contentDescription = description
-            tooltipText = description
-            alpha = 0.84f
-            background = null
-            setPadding(activity.dp(7), activity.dp(4), activity.dp(7), activity.dp(4))
-            setOnClickListener { toggleNotificationGrouping(chapter) }
-        }
-    }
-
-    private fun notificationStack(chapter: AppChapter, tintCards: Boolean): View {
-        val cards = NotificationCardGrouper.cards(
-            chapter.notifications,
-            settings.groupNotifications(chapter.identityKey),
-        )
-        return cardStackController.cardStack(
-            cards.map { notificationCard(it, chapter, tintCards) },
-            cardHeight(),
-            cardStep(),
-            activePreferences.cardStackTuning,
-            CardStackStateKey.notifications(chapter),
-        )
     }
 
     private fun overviewCalendarStack(state: LauncherRenderModel): View {
@@ -1039,11 +809,11 @@ class CalmLauncherRunner(
         if (state.hasCalendarPermission) {
             if (state.calendarEvents.isEmpty()) {
                 cards.add(
-                    stackCard(
+                    cardRenderer.stackCard(
                         "Upcoming calendar\nNo upcoming calendar events found.",
                         CalmTheme.ACCENT,
                         true,
-                        cardSideIcon(R.drawable.ic_calendar_card),
+                        cardRenderer.cardSideIcon(R.drawable.ic_calendar_card),
                         sideImageRenderKey = "res:${R.drawable.ic_calendar_card}",
                     ),
                 )
@@ -1052,19 +822,19 @@ class CalmLauncherRunner(
             }
         } else {
             cards.add(
-                stackCard(
+                cardRenderer.stackCard(
                     "Calendar access\nCalendar access is needed before Calm can index upcoming events.\nManage it in Settings.",
                     CalmTheme.ACCENT,
                     true,
-                    cardSideIcon(R.drawable.ic_calendar_card),
+                    cardRenderer.cardSideIcon(R.drawable.ic_calendar_card),
                     sideImageRenderKey = "res:${R.drawable.ic_calendar_card}",
                 ),
             )
         }
         return cardStackController.cardStack(
             cards,
-            cardHeight(),
-            cardStep(),
+            cardRenderer.cardHeight(),
+            cardRenderer.cardStep(),
             activePreferences.cardStackTuning,
             CardStackStateKey.OVERVIEW_CALENDAR,
         )
@@ -1154,11 +924,11 @@ class CalmLauncherRunner(
         val title = event.title.takeUnless { it.isBlank() } ?: "Untitled event"
         val location = event.location.takeUnless { it.isBlank() }?.let { "\n$it" }.orEmpty()
         val today = calendarRepository.isToday(event.begin)
-        return stackCard(
+        return cardRenderer.stackCard(
             "${if (today) "Today" else "Upcoming"}\n$title\n${calendarRepository.formatEventTime(event)}$location",
             if (today) CalmTheme.ACCENT else Color.rgb(122, 146, 178),
             true,
-            cardSideIcon(R.drawable.ic_calendar_card),
+            cardRenderer.cardSideIcon(R.drawable.ic_calendar_card),
             sideImageRenderKey = "res:${R.drawable.ic_calendar_card}",
         ).apply {
             setOnClickListener { openCalendarEvent(event) }
@@ -1170,49 +940,6 @@ class CalmLauncherRunner(
                 true
             }
         }
-    }
-
-    private fun notificationCard(
-        item: NotificationCardItem,
-        chapter: AppChapter,
-        tintCards: Boolean,
-    ): TextView {
-        val data = notificationCardDisplayCache.getOrCreate(item, chapter, ::formatNotificationTime)
-        return stackCard(
-            data.text,
-            chapter.hueColor,
-            tintCards,
-            data.sideImage,
-            data.sideImageAlpha,
-            data.sideImageRenderKey,
-        ).apply {
-            if (data.mediaBackgroundImage != null) {
-                background = drawables.notificationCardWithImage(
-                    cardCornerRadius(),
-                    data.mediaBackgroundImage,
-                    chapter.hueColor,
-                    tintCards,
-                )
-            }
-            maxLines = 4
-            setOnClickListener {
-                focusOverlay.show(this, contextActionFactory.notificationActions(item, chapter), data.fullText)
-            }
-            setOnLongClickListener {
-                notificationActionController.showNotificationHideOptions(item, chapter)
-                true
-            }
-        }
-    }
-
-    private fun cardSideIcon(drawableRes: Int): android.graphics.Bitmap? {
-        return sideIconCache.getOrPut(drawableRes) {
-            activity.getDrawable(drawableRes)?.toBitmap()
-        }
-    }
-
-    private fun formatNotificationTime(postTime: Long): String {
-        return DateFormat.getTimeFormat(activity).format(Date(postTime))
     }
 
     private fun emptyNote(text: String): TextView {
@@ -1248,9 +975,8 @@ class CalmLauncherRunner(
         }
     }
 
-    private fun notificationSummary(chapter: AppChapter): String {
-        val count = chapter.notifications.size
-        return if (count == 1) "1 active note" else "$count active notes"
+    private fun formatNotificationTime(postTime: Long): String {
+        return DateFormat.getTimeFormat(activity).format(Date(postTime))
     }
 
     private fun openSettingsActivity() {
@@ -1416,7 +1142,7 @@ class CalmLauncherRunner(
         appCardDisplayCache.clear()
         notificationCardDisplayCache.clear()
         cardRenderAssetCache.clear()
-        sideIconCache.clear()
+        cardRenderer.clearIconCache()
         appSearchController.clear()
         refreshStateAsync()
     }

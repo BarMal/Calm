@@ -149,18 +149,19 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
 
     private fun isCardStackWaitingForFirstStyle(stackView: View): Boolean {
         val content = (stackView as? ViewGroup)?.getChildAt(0) as? ViewGroup ?: return false
-        var cardCount = 0
-        for (index in 0 until content.childCount) {
+        val cardStates = (0 until content.childCount).map { index ->
             val card = content.getChildAt(index)
-            if (card.tag != CalmAnimationTags.CARD) continue
-            cardCount++
-            if (card.alpha > 0f || card.translationZ != 0f) return false
+            CardEntryAnimationLogic.CardState(
+                isCard = card.tag == CalmAnimationTags.CARD,
+                alpha = card.alpha,
+                translationZ = card.translationZ,
+            )
         }
-        return cardCount > 0
+        return CardEntryAnimationLogic.isStackWaitingForFirstStyle(cardStates)
     }
 
     private fun animateCardIntoView(card: View, index: Int) {
-        val targetAlpha = card.alpha.takeIf { it > 0f } ?: 1f
+        val targetAlpha = CardEntryAnimationLogic.entryTargetAlpha(card.alpha)
         val targetY = card.translationY
         card.animate().cancel()
         card.alpha = 0f

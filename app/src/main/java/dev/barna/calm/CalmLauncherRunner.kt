@@ -111,6 +111,7 @@ class CalmLauncherRunner(
         ::performCardScrollHaptic,
     )
     private val entryAnimator = LauncherEntryAnimator(activity)
+    private val pageEntryAnimationPolicy = PageEntryAnimationPolicy()
     private val notificationActionController = NotificationActionController(
         activity = activity,
         settings = settings,
@@ -316,7 +317,6 @@ class CalmLauncherRunner(
             suppressedPageEntryKey = pages.getOrNull(initialPage)?.key
         }
         var userSwipeInProgress = false
-        var lastAnimatedPageKey: String? = null
         var previousPageIndex = initialPage
         pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageScrolled(position: Int, positionOffset: Float, positionOffsetPixels: Int) {
@@ -345,8 +345,7 @@ class CalmLauncherRunner(
                         val currentPage = pages[pager.currentItem]
                         carouselController.update(pages, pager.currentItem)
                         appSearchController.resetInactiveExcept(currentPage.key)
-                        if (!userSwipeInProgress && suppressedPageEntryKey != currentPage.key && lastAnimatedPageKey != currentPage.key) {
-                            lastAnimatedPageKey = currentPage.key
+                        if (pageEntryAnimationPolicy.shouldAnimate(userSwipeInProgress, currentPage.key, suppressedPageEntryKey)) {
                             pager.post { entryAnimator.animateCurrentPage(pager) }
                         }
                         if (suppressedPageEntryKey == currentPage.key) {

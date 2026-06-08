@@ -71,6 +71,7 @@ class LauncherPageStateTest {
             cardHapticStrength = 1,
             cardStackTuning = defaultCardStackTuning(),
             showAdvancedStackControls = false,
+            cardVibrancy = 50,
         )
     }
 

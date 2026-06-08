@@ -53,6 +53,7 @@ class CalmLauncherRunner(
     private val calendarRepository = CalendarRepository(activity, requestCalendarPermission)
     private val drawables = CalmDrawables(activity)
     private val cardSpec = CalmCardSpec()
+    private val expandedOverviewGroups = mutableSetOf<String>()
     private val pinnedAppResolver = PinnedAppResolver()
     private val resumeRefreshPolicy = ResumeRefreshPolicy()
     private val renderModelFactory = LauncherRenderModelFactory(
@@ -551,9 +552,22 @@ class CalmLauncherRunner(
     private fun createOverviewPage(state: LauncherRenderModel): LinearLayout {
         return createBarePagePanel().apply {
             addView(overviewHeader())
-            addView(sectionTitle("Upcoming calendar"))
+            addView(sectionTitle("Notifications"))
             addView(stackToolbarSpacer(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(32)))
-            addView(overviewCalendarStack(state), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+            val notifContainer = FrameLayout(activity).apply {
+                clipChildren = false
+                clipToPadding = false
+            }
+            var rebuild: () -> Unit = {}
+            rebuild = {
+                notifContainer.removeAllViews()
+                notifContainer.addView(
+                    overviewNotificationsStack(state.notificationChapters) { rebuild() },
+                    matchParentParams()
+                )
+            }
+            rebuild()
+            addView(notifContainer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         }
     }
 
@@ -856,6 +870,87 @@ class CalmLauncherRunner(
             activePreferences.cardStackTuning,
             CardStackStateKey.OVERVIEW_CALENDAR,
         )
+    }
+
+    private fun overviewNotificationsStack(
+        chapters: List<AppChapter>,
+        onRebuild: () -> Unit,
+    ): ScrollView {
+        val sortedChapters = chapters
+            .filter { it.notifications.isNotEmpty() }
+            .sortedByDescending { chapter -> chapter.notifications.maxOf { it.postTime } }
+        val cards = mutableListOf<TextView>()
+        for (chapter in sortedChapters) {
+            val isExpanded = chapter.identityKey in expandedOverviewGroups
+            cards.add(overviewGroupHeaderCard(chapter, isExpanded, onRebuild))
+            if (isExpanded) {
+                NotificationCardGrouper.cards(chapter.notifications, groupingEnabled = false).forEach { item ->
+                    cards.add(overviewNotificationSubCard(item, chapter))
+                }
+            }
+        }
+        if (cards.isEmpty()) {
+            cards.add(
+                cardRenderer.stackCard(
+                    "All clear\nNo active notifications right now.",
+                    CalmTheme.ACCENT,
+                    true,
+                ),
+            )
+        }
+        return cardStackController.cardStack(
+            cards,
+            cardRenderer.cardHeight(),
+            cardRenderer.cardStep(),
+            activePreferences.cardStackTuning,
+            CardStackStateKey.OVERVIEW_NOTIFICATIONS,
+        )
+    }
+
+    private fun overviewGroupHeaderCard(
+        chapter: AppChapter,
+        isExpanded: Boolean,
+        onRebuild: () -> Unit,
+    ): TextView {
+        val count = chapter.notifications.size
+        val action = if (isExpanded) "collapse" else "expand"
+        val text = "${chapter.label}\n$count notification${if (count == 1) "" else "s"} · tap to $action"
+        val icon = notificationCardDisplayCache.chapterMaskedIcon(chapter)
+        return cardRenderer.stackCard(
+            text,
+            chapter.hueColor,
+            activePreferences.useTintedNotificationCards,
+            icon,
+            sideImageRenderKey = "icon:${chapter.identityKey}",
+        ).apply {
+            setOnClickListener {
+                if (!expandedOverviewGroups.remove(chapter.identityKey)) {
+                    expandedOverviewGroups.add(chapter.identityKey)
+                }
+                onRebuild()
+            }
+        }
+    }
+
+    private fun overviewNotificationSubCard(
+        item: NotificationCardItem,
+        chapter: AppChapter,
+    ): TextView {
+        val data = notificationCardDisplayCache.getOrCreate(item, chapter, ::formatNotificationTime)
+        return cardRenderer.stackCard(
+            data.text,
+            chapter.hueColor,
+            activePreferences.useTintedNotificationCards,
+            data.sideImage,
+            data.sideImageAlpha,
+            data.sideImageRenderKey,
+        ).apply {
+            maxLines = 3
+            setPadding(paddingLeft + activity.dp(20), paddingTop, paddingRight, paddingBottom)
+            setOnClickListener {
+                focusOverlay.show(this, contextActionFactory.notificationActions(item, chapter), data.fullText)
+            }
+        }
     }
 
     private fun createPagePanel(backgroundImage: android.graphics.Bitmap?, hueColor: Int): LinearLayout {

@@ -249,7 +249,7 @@ class ChapterPagePlannerTest {
             pinnedApps = emptyList(),
         )
 
-        val chapterTitles = pages.drop(2).map { it.title } // skip Apps and Overview
+        val chapterTitles = pages.filter { it.chapter != null }.map { it.title }
         assertEquals(listOf("Alpha", "Mango", "Zeta"), chapterTitles)
     }
 
@@ -266,7 +266,7 @@ class ChapterPagePlannerTest {
             pinnedApps = emptyList(),
         )
 
-        val chapterTitles = pages.drop(2).map { it.title }
+        val chapterTitles = pages.filter { it.chapter != null }.map { it.title }
         assertEquals(listOf("Zeta", "Mango", "Alpha"), chapterTitles)
     }
 
@@ -283,7 +283,7 @@ class ChapterPagePlannerTest {
             pinnedApps = emptyList(),
         )
 
-        val chapterTitles = pages.drop(2).map { it.title }
+        val chapterTitles = pages.filter { it.chapter != null }.map { it.title }
         assertEquals(listOf("NewApp", "MidApp", "OldApp"), chapterTitles)
     }
 
@@ -300,7 +300,7 @@ class ChapterPagePlannerTest {
             pinnedApps = emptyList(),
         )
 
-        val chapterTitles = pages.drop(2).map { it.title }
+        val chapterTitles = pages.filter { it.chapter != null }.map { it.title }
         assertEquals(listOf("OldApp", "MidApp", "NewApp"), chapterTitles)
     }
 

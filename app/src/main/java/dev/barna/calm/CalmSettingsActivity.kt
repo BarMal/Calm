@@ -31,6 +31,7 @@ class CalmSettingsActivity : ComponentActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val deferredRender = Runnable { render() }
     private var settingsScrollY = 0
+    private var cachedAppEntries: List<AppEntry>? = null
     private val calendarPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
         render()
     }
@@ -45,6 +46,13 @@ class CalmSettingsActivity : ComponentActivity() {
         drawables = CalmDrawables(this)
         configureWindow()
         render()
+        Thread {
+            val entries = appRepository.loadAppEntries()
+            mainHandler.post {
+                cachedAppEntries = entries
+                requestRender()
+            }
+        }.start()
     }
 
     override fun onDestroy() {
@@ -231,14 +239,17 @@ class CalmSettingsActivity : ComponentActivity() {
     private fun hiddenAppsSummary(): String {
         val hidden = settings.hiddenAppKeys()
         if (hidden.isEmpty()) return "Choose apps to remove from app lists."
-        val matchingHiddenCount = appRepository.loadAppEntries()
-            .count { app -> app.identityKey in hidden || app.packageName in hidden }
+        val apps = cachedAppEntries ?: return "${hidden.size} hidden ${if (hidden.size == 1) "app" else "apps"}."
+        val matchingHiddenCount = apps.count { app -> app.identityKey in hidden || app.packageName in hidden }
         val count = maxOf(matchingHiddenCount, hidden.size)
         return "$count hidden ${if (count == 1) "app" else "apps"}."
     }
 
     private fun showHiddenAppsDialog() {
-        val apps = appRepository.loadAppEntries()
+        val apps = cachedAppEntries ?: run {
+            Toast.makeText(this, "App list is loading, try again shortly", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (apps.isEmpty()) {
             Toast.makeText(this, "No apps are available to hide", Toast.LENGTH_SHORT).show()
             return

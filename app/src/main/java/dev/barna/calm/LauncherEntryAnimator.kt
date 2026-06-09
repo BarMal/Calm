@@ -165,6 +165,10 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
             if (animatedCount >= MAX_ENTRY_ANIMATED_CARDS) break
 
             val currentTranslationY = card.translationY
+            // Capture the styled horizontal-curve X that style() just set. The entry animation must
+            // land cards on this X (not 0), otherwise the curve is flattened until the first scroll
+            // re-runs style().
+            val styledTranslationX = card.translationX
             val styledTranslationY = card.getTag(CalmAnimationTags.STYLED_TRANSLATION_Y_TAG_KEY) as? Float
             val targetAlpha = CardEntryAnimationLogic.entryTargetAlpha(card.alpha, currentTranslationY, styledTranslationY)
             val targetY = CardEntryAnimationLogic.entryTargetTranslationY(
@@ -174,25 +178,25 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
             )
 
             if (direction < 0) {
-                // Backward: slide in from the left with alpha fade
+                // Backward: slide in from the left into the styled (curved) X with alpha fade
                 params.add(CardAnimParams(
                     card = card,
                     animIndex = animatedCount,
-                    startTranslationX = -activity.dp(CARD_SIDE_ENTRY_TRANSLATE_DP).toFloat(),
+                    startTranslationX = styledTranslationX - activity.dp(CARD_SIDE_ENTRY_TRANSLATE_DP).toFloat(),
                     startTranslationY = targetY,
                     targetAlpha = targetAlpha,
-                    targetTranslationX = 0f,
+                    targetTranslationX = styledTranslationX,
                     targetTranslationY = targetY,
                 ))
             } else {
-                // Forward or initial: fly in from below
+                // Forward or initial: fly in from below into the styled (curved) X
                 params.add(CardAnimParams(
                     card = card,
                     animIndex = animatedCount,
-                    startTranslationX = 0f,
+                    startTranslationX = styledTranslationX,
                     startTranslationY = targetY + activity.dp(132 + (animatedCount * 18)),
                     targetAlpha = targetAlpha,
-                    targetTranslationX = 0f,
+                    targetTranslationX = styledTranslationX,
                     targetTranslationY = targetY,
                 ))
             }

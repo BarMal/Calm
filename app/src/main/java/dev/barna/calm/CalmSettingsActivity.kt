@@ -16,7 +16,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.graphics.drawable.GradientDrawable
-import androidx.appcompat.widget.SwitchCompat
+import android.content.res.ColorStateList
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -217,13 +218,30 @@ class CalmSettingsActivity : ComponentActivity() {
                 })
             }
             addView(text, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(SwitchCompat(this@CalmSettingsActivity).apply {
-                isChecked = checked
-                setOnClickListener { onToggle() }
-            })
+            addView(themedSwitch(checked, onToggle))
             setOnClickListener { onToggle() }
         }
     }
+
+    // Uses the framework Switch rather than androidx SwitchCompat: this activity is a bare
+    // ComponentActivity under the framework Theme.Material theme (not Theme.AppCompat), and
+    // SwitchCompat is the only appcompat widget in the app — instantiating it outside an AppCompat
+    // context is unsupported and is the one path unique to this screen. The framework widget is
+    // tinted to read correctly on the dark settings surface.
+    private fun themedSwitch(checked: Boolean, onToggle: () -> Unit): Switch {
+        return Switch(this).apply {
+            isChecked = checked
+            val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+            thumbTintList = ColorStateList(states, intArrayOf(CalmTheme.ACCENT, CalmTheme.INK))
+            trackTintList = ColorStateList(
+                states,
+                intArrayOf(withAlpha(CalmTheme.ACCENT, 140), withAlpha(CalmTheme.MUTED_INK, 90)),
+            )
+            setOnClickListener { onToggle() }
+        }
+    }
+
+    private fun withAlpha(color: Int, alpha: Int): Int = (color and 0x00FFFFFF) or (alpha shl 24)
 
     private fun actionRow(title: String, summary: String, action: () -> Unit): View {
         return rowBase().apply {

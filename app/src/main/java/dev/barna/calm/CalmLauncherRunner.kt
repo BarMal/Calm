@@ -161,14 +161,6 @@ class CalmLauncherRunner(
         currentPageKey = { selectedPageKey },
         performCardScrollHaptic = ::performCardScrollHaptic,
     )
-    private val focusOverlay = FocusOverlayController(
-        activity,
-        mainHandler,
-        drawables,
-        ::label,
-        { currentScreen },
-        { activePreferences.focusBlurRadius },
-    )
     private val chapterPageBuilder = ChapterPageBuilder(
         activity = activity,
         drawables = drawables,

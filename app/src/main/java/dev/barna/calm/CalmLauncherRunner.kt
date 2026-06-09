@@ -239,7 +239,11 @@ class CalmLauncherRunner(
     }
 
     fun onDestroy() {
-        unregisterPackageChangeReceiver()
+        try {
+            mainHandler.removeCallbacksAndMessages(null)
+        } finally {
+            unregisterPackageChangeReceiver()
+        }
     }
 
     fun onCalendarPermissionResult() {

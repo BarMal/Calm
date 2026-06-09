@@ -27,7 +27,6 @@ import androidx.viewpager2.widget.CompositePageTransformer
 import androidx.viewpager2.widget.ViewPager2
 import java.util.Date
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicInteger
 
 class CalmLauncherRunner(
     private val activity: MainActivity,
@@ -179,8 +178,30 @@ class CalmLauncherRunner(
         toggleNotificationGrouping = settingsToggleHandler::toggleNotificationGrouping,
     )
     private val stateExecutor = Executors.newFixedThreadPool(4)
-    private val stateGeneration = AtomicInteger(0)
-    private val deferredRender = Runnable { refreshStateAsync() }
+    private val appLibraryDataManager = LauncherAppLibraryDataManager(
+        notificationRepository = notificationRepository,
+        settings = settings,
+        appLibraryStore = appLibraryStore,
+        appCardDisplayCache = appCardDisplayCache,
+        notificationCardDisplayCache = notificationCardDisplayCache,
+        appSearchController = appSearchController,
+        mainHandler = mainHandler,
+        executor = stateExecutor,
+    )
+    private val stateManager = LauncherStateManager(
+        notificationRepository = notificationRepository,
+        calendarRepository = calendarRepository,
+        settings = settings,
+        renderModelFactory = renderModelFactory,
+        appCardDisplayCache = appCardDisplayCache,
+        mainHandler = mainHandler,
+        executor = stateExecutor,
+        loadAppEntries = appLibraryDataManager::loadAppEntries,
+        loadCachedAppEntries = appLibraryDataManager::loadCachedAppEntries,
+        markLoading = launcherStateViewModel::markLoading,
+        onStateReady = { state -> render(state, animate = false) },
+    )
+    private val deferredRender = Runnable { stateManager.refreshAsync() }
     private val notificationRefresh = Runnable {
         notificationCardDisplayCache.clear()
         requestRender()
@@ -201,7 +222,6 @@ class CalmLauncherRunner(
     private var settingsChangeToken = settings.launcherChangeToken()
     private var packageChangeReceiverRegistered = false
     private var pagePrewarmGeneration = 0
-    private var appLibraryEventGeneration = 0
     private var suppressedPageEntryKey: String? = null
 
     fun onCreate() {
@@ -216,11 +236,11 @@ class CalmLauncherRunner(
         val existingState = currentUiState
         if (existingState != null) {
             render(existingState, animate = false)
-            refreshStateAsync()
+            stateManager.refreshAsync()
         } else {
-            render(buildUiState(), animate = true)
+            render(stateManager.buildSync(), animate = true)
         }
-        refreshLaunchableAppsInBackground()
+        appLibraryDataManager.refreshInBackground()
     }
 
     fun onResume() {
@@ -235,10 +255,10 @@ class CalmLauncherRunner(
             )
         ) {
             if (hasCurrentScreen && hasCurrentState) {
-                refreshStateAsync()
+                stateManager.refreshAsync()
                 return
             }
-            render(buildUiState(), animate = true)
+            render(stateManager.buildSync(), animate = true)
         }
     }
 
@@ -255,7 +275,7 @@ class CalmLauncherRunner(
     }
 
     fun onCalendarPermissionResult() {
-        refreshStateAsync()
+        stateManager.refreshAsync()
     }
 
     private fun configureWindow() {
@@ -460,87 +480,6 @@ class CalmLauncherRunner(
         mainHandler.postDelayed(deferredRender, 90)
     }
 
-    private fun refreshStateAsync() {
-        launcherStateViewModel.markLoading()
-        val generation = stateGeneration.incrementAndGet()
-        val notifications = stateExecutor.submit<List<AppChapter>> {
-            notificationRepository.buildNotificationChapters()
-        }
-        val apps = stateExecutor.submit<List<AppEntry>> {
-            loadAppEntries()
-        }
-        val calendar = stateExecutor.submit<Pair<Boolean, List<CalendarEvent>>> {
-            val hasPermission = calendarRepository.hasCalendarPermission()
-            hasPermission to if (hasPermission) calendarRepository.loadUpcomingEvents() else emptyList()
-        }
-        stateExecutor.execute {
-            val appEntries = apps.get()
-            val pinnedKeys = settings.pinnedPackages()
-            val calendarState = calendar.get()
-            val state = renderModelFactory.create(
-                preferences = settings.uiPreferences(),
-                notificationChapters = notifications.get(),
-                appEntries = appEntries,
-                pinnedKeys = pinnedKeys,
-                pinnedChapterPackages = settings.pinnedChapterPackages(),
-                dockConfig = settings.dockConfig(),
-                dockKeys = settings.dockKeys(),
-                hasCalendarPermission = calendarState.first,
-                calendarEvents = calendarState.second,
-            )
-            appCardDisplayCache.preloadNow(state.appEntries, state.pinnedKeys)
-            mainHandler.post {
-                if (generation == stateGeneration.get()) {
-                    render(state, animate = false)
-                }
-            }
-        }
-    }
-
-    private fun refreshLaunchableAppsInBackground() {
-        val scheduled = notificationRepository.refreshLaunchableApps(stateExecutor) { result ->
-            mainHandler.post {
-                if (result.changed) {
-                    appCardDisplayCache.clear()
-                    notificationCardDisplayCache.clear()
-                }
-                appLibraryEventGeneration++
-                val state = appLibraryStore.replace(result.apps.filterNot(settings::isAppHidden))
-                refreshVisibleAppLibraryPages(state)
-            }
-        }
-        if (scheduled) {
-            applyAppLibraryEvent(AppLibraryRenderEvent.LoadingStarted)
-        }
-    }
-
-    private fun applyAppLibraryEvent(event: AppLibraryRenderEvent) {
-        val state = appLibraryStore.dispatch(event)
-        refreshVisibleAppLibraryPages(state)
-    }
-
-    private fun refreshVisibleAppLibraryPages(state: AppLibraryRenderState) {
-        appSearchController.refreshVisible(state)
-    }
-
-    private fun buildUiState(): LauncherRenderModel {
-        val appEntries = loadCachedAppEntries()
-        val notificationChapters = notificationRepository.buildNotificationChapters(appEntries)
-        val pinnedKeys = settings.pinnedPackages()
-        val hasCalendarPermission = calendarRepository.hasCalendarPermission()
-        return renderModelFactory.create(
-            preferences = settings.uiPreferences(),
-            notificationChapters = notificationChapters,
-            appEntries = appEntries,
-            pinnedKeys = pinnedKeys,
-            pinnedChapterPackages = settings.pinnedChapterPackages(),
-            dockConfig = settings.dockConfig(),
-            dockKeys = settings.dockKeys(),
-            hasCalendarPermission = hasCalendarPermission,
-            calendarEvents = if (hasCalendarPermission) calendarRepository.loadUpcomingEvents() else emptyList(),
-        )
-    }
-
     private fun createHeader(): View {
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -616,29 +555,6 @@ class CalmLauncherRunner(
             topMargin = activity.dp(12)
         })
         return page
-    }
-
-    private fun loadAppEntries(): List<AppEntry> {
-        val apps = notificationRepository.loadAppEntries()
-            .filterNot(settings::isAppHidden)
-        appLibraryEventGeneration++
-        appLibraryStore.replace(apps)
-        return apps
-    }
-
-    private fun loadCachedAppEntries(): List<AppEntry> {
-        val apps = notificationRepository.loadCachedAppEntries()
-            .filterNot(settings::isAppHidden)
-        appLibraryEventGeneration++
-        appLibraryStore.replace(apps)
-        return apps
-    }
-
-    private fun loadPinnedApps(): List<AppEntry> {
-        val pinnedPackages = settings.pinnedPackages()
-        if (pinnedPackages.isEmpty()) return emptyList()
-        return notificationRepository.loadPinnedAppEntries(pinnedPackages)
-            .filterNot(settings::isAppHidden)
     }
 
     private fun createChapterPage(chapter: AppChapter): LinearLayout = chapterPageBuilder.buildPage(chapter)
@@ -731,6 +647,8 @@ class CalmLauncherRunner(
     private fun formatNotificationTime(postTime: Long): String {
         return DateFormat.getTimeFormat(activity).format(Date(postTime))
     }
+
+    private fun loadPinnedApps(): List<AppEntry> = appLibraryDataManager.loadPinnedAppEntries()
 
     private fun openSettingsActivity() {
         activity.startActivity(Intent(activity, CalmSettingsActivity::class.java))
@@ -825,7 +743,7 @@ class CalmLauncherRunner(
         cardRenderAssetCache.clear()
         cardRenderer.clearIconCache()
         appSearchController.clear()
-        refreshStateAsync()
+        stateManager.refreshAsync()
     }
 
     private companion object {

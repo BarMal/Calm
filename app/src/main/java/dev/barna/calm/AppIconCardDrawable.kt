@@ -101,9 +101,9 @@ class AppIconCardDrawable(
             Shader.TileMode.CLAMP,
         )
 
-        cachedGlow1Cx = bounds.right - cachedBoundsHeight * 0.74f
+        cachedGlow1Cx = bounds.right - cachedBoundsHeight * GLOW1_CENTER_OFFSET
         cachedGlow1Cy = bounds.centerY().toFloat()
-        cachedGlow1Radius = cachedBoundsHeight * 0.92f
+        cachedGlow1Radius = cachedBoundsHeight * GLOW1_RADIUS_FACTOR
         cachedGlow1Shader = RadialGradient(
             cachedGlow1Cx, cachedGlow1Cy, cachedGlow1Radius,
             intArrayOf(
@@ -115,9 +115,9 @@ class AppIconCardDrawable(
             Shader.TileMode.CLAMP,
         )
 
-        cachedGlow2Cx = bounds.right - cachedBoundsHeight * 0.18f
+        cachedGlow2Cx = bounds.right - cachedBoundsHeight * GLOW2_CENTER_OFFSET
         cachedGlow2Cy = bounds.centerY().toFloat()
-        cachedGlow2Radius = cachedBoundsHeight * 0.72f
+        cachedGlow2Radius = cachedBoundsHeight * GLOW2_RADIUS_FACTOR
         cachedGlow2Shader = RadialGradient(
             cachedGlow2Cx, cachedGlow2Cy, cachedGlow2Radius,
             intArrayOf(
@@ -129,16 +129,16 @@ class AppIconCardDrawable(
             Shader.TileMode.CLAMP,
         )
 
-        val targetSize = cachedBoundsHeight * 1.18f
+        val targetSize = cachedBoundsHeight * ICON_TARGET_SIZE_FACTOR
         val scale = maxOf(targetSize / icon.width.toFloat(), targetSize / icon.height.toFloat())
-        val iconLeft = bounds.right - targetSize + (targetSize * 0.06f)
+        val iconLeft = bounds.right - targetSize + (targetSize * ICON_LEFT_INSET_FRACTION)
         val iconTop = bounds.top + (cachedBoundsHeight - targetSize) / 2f
         iconMatrix.reset()
         iconMatrix.setScale(scale, scale)
         iconMatrix.postTranslate(iconLeft, iconTop)
 
-        val fadeStart = iconLeft - (targetSize * 0.92f)
-        val fadeEnd = iconLeft + (targetSize * 0.96f)
+        val fadeStart = iconLeft - (targetSize * ICON_FADE_START_FACTOR)
+        val fadeEnd = iconLeft + (targetSize * ICON_FADE_END_FACTOR)
         maskPaint.shader = LinearGradient(
             fadeStart, 0f, fadeEnd, 0f,
             intArrayOf(
@@ -152,9 +152,9 @@ class AppIconCardDrawable(
             Shader.TileMode.CLAMP,
         )
 
-        val strength = maxOf(blurStrength.coerceIn(0, 100), 38)
-        cachedBlurDistance = targetSize * (0.018f + (strength / 100f) * 0.052f)
-        cachedBlurAlpha = (imageAlpha * (0.12f + (strength / 100f) * 0.28f)).toInt().coerceIn(18, 180)
+        val strength = maxOf(blurStrength.coerceIn(0, 100), BLUR_STRENGTH_FLOOR)
+        cachedBlurDistance = targetSize * (BLUR_DISTANCE_BASE_FRACTION + (strength / 100f) * BLUR_DISTANCE_SCALE)
+        cachedBlurAlpha = (imageAlpha * (BLUR_ALPHA_BASE_FRACTION + (strength / 100f) * BLUR_ALPHA_SCALE)).toInt().coerceIn(BLUR_ALPHA_MIN, BLUR_ALPHA_MAX)
 
         veilPaint.shader = LinearGradient(
             bounds.left.toFloat(), 0f, bounds.right.toFloat(), 0f,
@@ -163,7 +163,7 @@ class AppIconCardDrawable(
                 Color.argb(veilMidAlpha / 2, 4, 4, 8),
                 Color.argb(veilEndAlpha, 4, 4, 8),
             ),
-            floatArrayOf(0f, 0.74f, 1f),
+            floatArrayOf(0f, VEIL_START_FRACTION, 1f),
             Shader.TileMode.CLAMP,
         )
     }
@@ -182,6 +182,25 @@ class AppIconCardDrawable(
 
     @Deprecated("Deprecated in Java")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+
+    private companion object {
+        const val GLOW1_CENTER_OFFSET = 0.74f
+        const val GLOW1_RADIUS_FACTOR = 0.92f
+        const val GLOW2_CENTER_OFFSET = 0.18f
+        const val GLOW2_RADIUS_FACTOR = 0.72f
+        const val ICON_TARGET_SIZE_FACTOR = 1.18f
+        const val ICON_LEFT_INSET_FRACTION = 0.06f
+        const val ICON_FADE_START_FACTOR = 0.92f
+        const val ICON_FADE_END_FACTOR = 0.96f
+        const val VEIL_START_FRACTION = 0.74f
+        const val BLUR_STRENGTH_FLOOR = 38
+        const val BLUR_DISTANCE_BASE_FRACTION = 0.018f
+        const val BLUR_DISTANCE_SCALE = 0.052f
+        const val BLUR_ALPHA_BASE_FRACTION = 0.12f
+        const val BLUR_ALPHA_SCALE = 0.28f
+        const val BLUR_ALPHA_MIN = 18
+        const val BLUR_ALPHA_MAX = 180
+    }
 
     private fun drawIcon(canvas: Canvas) {
         val layer = canvas.saveLayer(rect, null)
@@ -213,16 +232,25 @@ data class AppIconCardRenderData(
 ) {
     companion object {
         fun from(icon: Bitmap, imageAlpha: Int): AppIconCardRenderData {
+            val highAlpha = imageAlpha >= HIGH_IMAGE_ALPHA_THRESHOLD
             return AppIconCardRenderData(
-                leftColor = sampleRegionColor(icon, 0f, 0.36f),
-                midColor = sampleRegionColor(icon, 0.28f, 0.60f),
-                nearEdgeColor = sampleRegionColor(icon, 0.50f, 0.82f),
-                edgeColor = sampleRegionColor(icon, 0.68f, 1f),
-                washEndAlpha = if (imageAlpha >= 120) 126 else 78,
-                veilMidAlpha = if (imageAlpha >= 120) 14 else 26,
-                veilEndAlpha = if (imageAlpha >= 120) 44 else 92,
+                leftColor = sampleRegionColor(icon, 0f, LEFT_REGION_END),
+                midColor = sampleRegionColor(icon, MID_REGION_START, MID_REGION_END),
+                nearEdgeColor = sampleRegionColor(icon, NEAR_EDGE_REGION_START, NEAR_EDGE_REGION_END),
+                edgeColor = sampleRegionColor(icon, EDGE_REGION_START, 1f),
+                washEndAlpha = if (highAlpha) 126 else 78,
+                veilMidAlpha = if (highAlpha) 14 else 26,
+                veilEndAlpha = if (highAlpha) 44 else 92,
             )
         }
+
+        private const val HIGH_IMAGE_ALPHA_THRESHOLD = 120
+        private const val LEFT_REGION_END = 0.36f
+        private const val MID_REGION_START = 0.28f
+        private const val MID_REGION_END = 0.60f
+        private const val NEAR_EDGE_REGION_START = 0.50f
+        private const val NEAR_EDGE_REGION_END = 0.82f
+        private const val EDGE_REGION_START = 0.68f
 
         private fun sampleRegionColor(bitmap: Bitmap, startRatio: Float, endRatio: Float): Int {
             if (bitmap.width <= 0 || bitmap.height <= 0) return Color.rgb(64, 60, 70)

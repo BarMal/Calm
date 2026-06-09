@@ -35,15 +35,15 @@ object CalmColor {
         var green = 0L
         var blue = 0L
         var weight = 0L
-        val stepX = maxOf(1, bitmap.width / 24)
-        val stepY = maxOf(1, bitmap.height / 24)
+        val stepX = maxOf(1, bitmap.width / DOMINANT_SAMPLE_GRID)
+        val stepY = maxOf(1, bitmap.height / DOMINANT_SAMPLE_GRID)
 
         var y = 0
         while (y < bitmap.height) {
             var x = 0
             while (x < bitmap.width) {
                 val pixel = bitmap.getPixel(x, y)
-                if (alpha(pixel) >= 96) {
+                if (alpha(pixel) >= MIN_PIXEL_ALPHA) {
                     val r = red(pixel)
                     val g = green(pixel)
                     val b = blue(pixel)
@@ -51,7 +51,7 @@ object CalmColor {
                     val min = minOf(r, g, b)
                     val saturation = max - min
                     val brightness = (r + g + b) / 3
-                    if (saturation >= 22 && brightness >= 28 && brightness <= 236) {
+                    if (saturation >= MIN_VIABLE_SATURATION && brightness >= MIN_VIABLE_BRIGHTNESS && brightness <= MAX_VIABLE_BRIGHTNESS) {
                         val pixelWeight = maxOf(1, saturation)
                         red += r.toLong() * pixelWeight
                         green += g.toLong() * pixelWeight
@@ -81,4 +81,10 @@ object CalmColor {
     private fun rgb(red: Int, green: Int, blue: Int): Int {
         return -0x1000000 or (red and 0xff shl 16) or (green and 0xff shl 8) or (blue and 0xff)
     }
+
+    private const val DOMINANT_SAMPLE_GRID = 24
+    private const val MIN_PIXEL_ALPHA = 96
+    private const val MIN_VIABLE_SATURATION = 22
+    private const val MIN_VIABLE_BRIGHTNESS = 28
+    private const val MAX_VIABLE_BRIGHTNESS = 236
 }

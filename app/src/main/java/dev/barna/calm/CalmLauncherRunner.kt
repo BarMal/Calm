@@ -161,25 +161,13 @@ class CalmLauncherRunner(
         currentPageKey = { selectedPageKey },
         performCardScrollHaptic = ::performCardScrollHaptic,
     )
-    private val settingsPageFactory = SettingsPageFactory(
-        activity = activity,
-        settings = settings,
-        drawables = drawables,
-        calendarRepository = calendarRepository,
-        notificationRepository = notificationRepository,
-        cardStackController = cardStackController,
-        actions = SettingsPageActions(
-            toggleNotificationSurface = settingsToggleHandler::toggleNotificationSurface,
-            toggleCardHaptics = settingsToggleHandler::toggleCardHaptics,
-            toggleSplitAppsByProfile = settingsToggleHandler::toggleSplitAppsByProfile,
-            toggleWorkNotificationChapterPlacement = settingsToggleHandler::toggleWorkNotificationChapterPlacement,
-            applyTimescapeStackPreset = settingsToggleHandler::applyTimescapeStackPreset,
-            toggleAdvancedStackControls = settingsToggleHandler::toggleAdvancedStackControls,
-            restoreNotificationSource = notificationActionController::restoreNotificationSource,
-            restoreHiddenApp = appMutationHandler::showApp,
-            render = { render() },
-            performCardScrollHaptic = ::performCardScrollHaptic,
-        ),
+    private val focusOverlay = FocusOverlayController(
+        activity,
+        mainHandler,
+        drawables,
+        ::label,
+        { currentScreen },
+        { activePreferences.focusBlurRadius },
     )
     private val chapterPageBuilder = ChapterPageBuilder(
         activity = activity,

@@ -137,6 +137,14 @@ class LauncherSettings(private val context: Context) {
         return preferences.getBoolean(PREF_TINT_NOTIFICATION_CARDS, false)
     }
 
+    fun pageSortOrder(): PageSortOrder {
+        return PageSortOrder.decode(preferences.getString(PREF_PAGE_SORT_ORDER, null) ?: "")
+    }
+
+    fun setPageSortOrder(order: PageSortOrder) {
+        preferences.edit().putString(PREF_PAGE_SORT_ORDER, order.name).apply()
+    }
+
     fun uiPreferences(): LauncherUiPreferences {
         return LauncherUiPreferences(
             useTintedNotificationCards = useTintedNotificationCards(),
@@ -151,6 +159,7 @@ class LauncherSettings(private val context: Context) {
             cardStackTuning = cardStackTuning(),
             showAdvancedStackControls = showAdvancedStackControls(),
             cardVibrancy = cardVibrancy(),
+            pageSortOrder = pageSortOrder(),
         )
     }
 
@@ -390,5 +399,6 @@ class LauncherSettings(private val context: Context) {
         private const val PREF_CARD_STACK_ADVANCED = "card_stack_advanced"
         private const val PREF_CARD_STACK_PEAK_POSITION = "card_stack_peak_position"
         private const val PREF_CARD_VIBRANCY = "card_vibrancy"
+        private const val PREF_PAGE_SORT_ORDER = "page_sort_order"
     }
 }

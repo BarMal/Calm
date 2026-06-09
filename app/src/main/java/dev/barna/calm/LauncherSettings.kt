@@ -4,9 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import java.text.Collator
 
-class LauncherSettings(private val context: Context) {
-    private val preferences: SharedPreferences
-        get() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+class LauncherSettings(private val preferences: SharedPreferences) {
+    constructor(context: Context) : this(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE))
 
     fun excludedPackages(): Set<String> {
         return HashSet(preferences.getStringSet(PREF_EXCLUDED_PACKAGES, emptySet()) ?: emptySet())

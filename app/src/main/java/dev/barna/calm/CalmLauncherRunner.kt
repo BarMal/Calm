@@ -930,7 +930,7 @@ class CalmLauncherRunner(
             try {
                 showIntent.send()
                 return
-            } catch (_: Exception) {
+            } catch (_: PendingIntent.CanceledException) {
             }
         }
         activity.startActivity(Intent(Settings.ACTION_SETTINGS))
@@ -1024,7 +1024,7 @@ class CalmLauncherRunner(
             .build()
         try {
             activity.startActivity(Intent(Intent.ACTION_VIEW, uri))
-        } catch (_: Exception) {
+        } catch (_: android.content.ActivityNotFoundException) {
             Toast.makeText(activity, "Calendar cannot be opened", Toast.LENGTH_SHORT).show()
         }
     }

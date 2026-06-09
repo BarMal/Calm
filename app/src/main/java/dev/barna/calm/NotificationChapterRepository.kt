@@ -225,10 +225,10 @@ class NotificationChapterRepository(
 
     private fun loadProfileLaunchableApps(): List<AppEntry> {
         val launcher = launcherApps ?: return emptyList()
-        val users = runCatching { userManager?.userProfiles.orEmpty() }.getOrDefault(emptyList())
+        val users = runCatching { userManager?.userProfiles.orEmpty() }.getOrNull() ?: emptyList()
         return users.flatMap { user ->
             runCatching { launcher.getActivityList(null, user) }
-                .getOrDefault(emptyList())
+                .getOrNull().orEmpty()
                 .map { info -> appEntry(info, user) }
         }
     }

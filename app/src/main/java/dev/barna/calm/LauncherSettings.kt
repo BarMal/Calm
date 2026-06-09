@@ -69,6 +69,82 @@ class LauncherSettings(private val context: Context) {
         preferences.edit().putStringSet(PREF_PINNED_PACKAGES, pinned).apply()
     }
 
+    fun pinnedChapterPackages(): Set<String> {
+        return HashSet(preferences.getStringSet(PREF_PINNED_CHAPTER_PACKAGES, emptySet()) ?: emptySet())
+    }
+
+    fun pinChapter(packageName: String) {
+        preferences.edit()
+            .putStringSet(PREF_PINNED_CHAPTER_PACKAGES, pinnedChapterPackages() + packageName)
+            .apply()
+    }
+
+    fun unpinChapter(packageName: String) {
+        preferences.edit()
+            .putStringSet(PREF_PINNED_CHAPTER_PACKAGES, pinnedChapterPackages() - packageName)
+            .apply()
+    }
+
+    fun dockConfig(): DockConfig {
+        return DockConfig(
+            enabled = preferences.getBoolean(PREF_DOCK_ENABLED, false),
+            itemCount = preferences.getInt(PREF_DOCK_ITEM_COUNT, DockConfig.DEFAULT_ITEM_COUNT)
+                .coerceIn(DockConfig.MIN_ITEM_COUNT, DockConfig.MAX_ITEM_COUNT),
+            verticalPaddingDp = preferences.getInt(PREF_DOCK_VERTICAL_PADDING, DockConfig.DEFAULT_VERTICAL_PADDING_DP)
+                .coerceIn(DockConfig.MIN_VERTICAL_PADDING_DP, DockConfig.MAX_VERTICAL_PADDING_DP),
+            horizontalPaddingDp = preferences.getInt(PREF_DOCK_HORIZONTAL_PADDING, DockConfig.DEFAULT_HORIZONTAL_PADDING_DP)
+                .coerceIn(DockConfig.MIN_HORIZONTAL_PADDING_DP, DockConfig.MAX_HORIZONTAL_PADDING_DP),
+        )
+    }
+
+    fun setDockEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean(PREF_DOCK_ENABLED, enabled).apply()
+    }
+
+    fun setDockItemCount(count: Int) {
+        preferences.edit()
+            .putInt(PREF_DOCK_ITEM_COUNT, count.coerceIn(DockConfig.MIN_ITEM_COUNT, DockConfig.MAX_ITEM_COUNT))
+            .apply()
+    }
+
+    fun setDockVerticalPadding(dp: Int) {
+        preferences.edit()
+            .putInt(PREF_DOCK_VERTICAL_PADDING, dp.coerceIn(DockConfig.MIN_VERTICAL_PADDING_DP, DockConfig.MAX_VERTICAL_PADDING_DP))
+            .apply()
+    }
+
+    fun setDockHorizontalPadding(dp: Int) {
+        preferences.edit()
+            .putInt(PREF_DOCK_HORIZONTAL_PADDING, dp.coerceIn(DockConfig.MIN_HORIZONTAL_PADDING_DP, DockConfig.MAX_HORIZONTAL_PADDING_DP))
+            .apply()
+    }
+
+    fun dockKeys(): List<String> {
+        val raw = preferences.getString(PREF_DOCK_KEYS, "") ?: ""
+        return raw.split('\n').filter { it.isNotEmpty() }
+    }
+
+    fun addDockKey(identityKey: String): Boolean {
+        val config = dockConfig()
+        val current = dockKeys()
+        if (current.size >= config.itemCount || identityKey in current) return false
+        preferences.edit().putString(PREF_DOCK_KEYS, (current + identityKey).joinToString("\n")).apply()
+        return true
+    }
+
+    fun removeDockKey(identityKey: String) {
+        preferences.edit().putString(PREF_DOCK_KEYS, (dockKeys() - identityKey).joinToString("\n")).apply()
+    }
+
+    fun moveDockKey(identityKey: String, toIndex: Int) {
+        val current = dockKeys().toMutableList()
+        val from = current.indexOf(identityKey)
+        if (from == -1) return
+        current.removeAt(from)
+        current.add(toIndex.coerceIn(0, current.size), identityKey)
+        preferences.edit().putString(PREF_DOCK_KEYS, current.joinToString("\n")).apply()
+    }
+
     fun addNotificationFilter(filter: NotificationFilter) {
         val filters = preferences.getStringSet(PREF_NOTIFICATION_FILTERS, emptySet())
             .orEmpty()
@@ -371,6 +447,7 @@ class LauncherSettings(private val context: Context) {
         private const val PREF_EXCLUDED_PACKAGES = "excluded_notification_packages"
         private const val PREF_NOTIFICATION_FILTERS = "notification_filters"
         private const val PREF_PINNED_PACKAGES = "pinned_packages"
+        private const val PREF_PINNED_CHAPTER_PACKAGES = "pinned_chapter_packages"
         private const val PREF_HIDDEN_APP_KEYS = "hidden_app_keys"
         private const val PREF_HIDDEN_APP_LABEL_PREFIX = "hidden_app_label_"
         private const val PREF_APP_HUE_PREFIX = "app_hue_"
@@ -400,5 +477,10 @@ class LauncherSettings(private val context: Context) {
         private const val PREF_CARD_STACK_PEAK_POSITION = "card_stack_peak_position"
         private const val PREF_CARD_VIBRANCY = "card_vibrancy"
         private const val PREF_PAGE_SORT_ORDER = "page_sort_order"
+        private const val PREF_DOCK_ENABLED = "dock_enabled"
+        private const val PREF_DOCK_ITEM_COUNT = "dock_item_count"
+        private const val PREF_DOCK_VERTICAL_PADDING = "dock_vertical_padding"
+        private const val PREF_DOCK_HORIZONTAL_PADDING = "dock_horizontal_padding"
+        private const val PREF_DOCK_KEYS = "dock_keys"
     }
 }

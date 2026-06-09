@@ -161,26 +161,6 @@ class CalmLauncherRunner(
         currentPageKey = { selectedPageKey },
         performCardScrollHaptic = ::performCardScrollHaptic,
     )
-    private val settingsPageFactory = SettingsPageFactory(
-        activity = activity,
-        settings = settings,
-        drawables = drawables,
-        calendarRepository = calendarRepository,
-        notificationRepository = notificationRepository,
-        cardStackController = cardStackController,
-        actions = SettingsPageActions(
-            toggleNotificationSurface = settingsToggleHandler::toggleNotificationSurface,
-            toggleCardHaptics = settingsToggleHandler::toggleCardHaptics,
-            toggleSplitAppsByProfile = settingsToggleHandler::toggleSplitAppsByProfile,
-            toggleWorkNotificationChapterPlacement = settingsToggleHandler::toggleWorkNotificationChapterPlacement,
-            applyTimescapeStackPreset = settingsToggleHandler::applyTimescapeStackPreset,
-            toggleAdvancedStackControls = settingsToggleHandler::toggleAdvancedStackControls,
-            restoreNotificationSource = notificationActionController::restoreNotificationSource,
-            restoreHiddenApp = appMutationHandler::showApp,
-            render = { render() },
-            performCardScrollHaptic = ::performCardScrollHaptic,
-        ),
-    )
     private val chapterPageBuilder = ChapterPageBuilder(
         activity = activity,
         drawables = drawables,
@@ -930,7 +910,7 @@ class CalmLauncherRunner(
             try {
                 showIntent.send()
                 return
-            } catch (_: Exception) {
+            } catch (_: PendingIntent.CanceledException) {
             }
         }
         activity.startActivity(Intent(Settings.ACTION_SETTINGS))
@@ -1024,7 +1004,7 @@ class CalmLauncherRunner(
             .build()
         try {
             activity.startActivity(Intent(Intent.ACTION_VIEW, uri))
-        } catch (_: Exception) {
+        } catch (_: android.content.ActivityNotFoundException) {
             Toast.makeText(activity, "Calendar cannot be opened", Toast.LENGTH_SHORT).show()
         }
     }

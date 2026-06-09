@@ -11,6 +11,10 @@ class CardRenderAssetCache {
         image: Bitmap,
         style: CardRenderStyleKey,
     ): AppIconCardRenderData {
+        // AppIconCardRenderData.from() only depends on the image and imageAlpha — the other style
+        // fields (radius, hue, blur, ...) don't affect the sampled colours. Keying only on what the
+        // result depends on lets the (now bounded-cost) sampling be reused across style variations,
+        // so changing card rounding/blur no longer invalidates and recomputes it.
         val key = buildString {
             append(imageKey)
             append('|')
@@ -20,7 +24,7 @@ class CardRenderAssetCache {
             append('|')
             append(image.generationId)
             append('|')
-            append(style.configurationHash())
+            append(style.imageAlpha)
         }
         iconRenderData[key]?.let { return it }
         val data = AppIconCardRenderData.from(image, style.imageAlpha)
@@ -50,15 +54,4 @@ data class CardRenderStyleKey(
     val imageAlpha: Int,
     val imageBlur: Int,
     val useIconBackgrounds: Boolean,
-) {
-    fun configurationHash(): String {
-        return listOf(
-            radiusPx,
-            hueColor,
-            tintCards,
-            imageAlpha,
-            imageBlur,
-            useIconBackgrounds,
-        ).joinToString(":")
-    }
-}
+)

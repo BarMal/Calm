@@ -23,14 +23,27 @@ class CardRenderAssetCacheTest {
     }
 
     @Test
-    fun keepsSeparateEntriesForDifferentStyleConfigurations() {
+    fun reusesRenderDataAcrossStyleFieldsThatDoNotAffectColours() {
         val cache = CardRenderAssetCache()
         val icon = icon()
 
+        // imageBlur (and radius/hue/tint) don't affect the sampled colours, so the render data is
+        // shared rather than recomputed when only those fields differ.
         val blurred = cache.iconRenderData("app:mail", icon, style(imageBlur = 20))
         val sharp = cache.iconRenderData("app:mail", icon, style(imageBlur = 0))
 
-        assertNotSame(blurred, sharp)
+        assertSame(blurred, sharp)
+    }
+
+    @Test
+    fun keepsSeparateEntriesForDifferentImageAlpha() {
+        val cache = CardRenderAssetCache()
+        val icon = icon()
+
+        val low = cache.iconRenderData("app:mail", icon, style(imageBlur = 0, imageAlpha = 64))
+        val high = cache.iconRenderData("app:mail", icon, style(imageBlur = 0, imageAlpha = 200))
+
+        assertNotSame(low, high)
     }
 
     @Test
@@ -52,12 +65,12 @@ class CardRenderAssetCacheTest {
         }
     }
 
-    private fun style(imageBlur: Int): CardRenderStyleKey {
+    private fun style(imageBlur: Int, imageAlpha: Int = 64): CardRenderStyleKey {
         return CardRenderStyleKey(
             radiusPx = 24,
             hueColor = Color.rgb(40, 80, 120),
             tintCards = true,
-            imageAlpha = 64,
+            imageAlpha = imageAlpha,
             imageBlur = imageBlur,
             useIconBackgrounds = true,
         )

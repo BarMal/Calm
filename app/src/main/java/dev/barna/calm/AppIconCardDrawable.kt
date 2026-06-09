@@ -252,6 +252,12 @@ data class AppIconCardRenderData(
         private const val NEAR_EDGE_REGION_END = 0.82f
         private const val EDGE_REGION_START = 0.68f
 
+        // Icons are normalised to >=512px, so a full per-pixel getPixel() scan is ~1M JNI calls per
+        // region (x4 regions per icon) on the main thread during card binding. Subsample on a bounded
+        // grid instead: the averaged colour is visually identical but the cost stays flat (~48x48
+        // samples) regardless of icon size. Mirrors averageVisibleColor() in AndroidTools.kt.
+        private const val SAMPLE_AXIS_STEPS = 48
+
         private fun sampleRegionColor(bitmap: Bitmap, startRatio: Float, endRatio: Float): Int {
             if (bitmap.width <= 0 || bitmap.height <= 0) return Color.rgb(64, 60, 70)
             var red = 0L
@@ -260,16 +266,23 @@ data class AppIconCardRenderData(
             var weight = 0L
             val startX = (bitmap.width * startRatio).toInt().coerceIn(0, bitmap.width - 1)
             val endX = (bitmap.width * endRatio).toInt().coerceIn(startX + 1, bitmap.width)
-            for (x in startX until endX) {
-                for (y in 0 until bitmap.height) {
+            val stepX = maxOf(1, (endX - startX) / SAMPLE_AXIS_STEPS)
+            val stepY = maxOf(1, bitmap.height / SAMPLE_AXIS_STEPS)
+            var x = startX
+            while (x < endX) {
+                var y = 0
+                while (y < bitmap.height) {
                     val pixel = bitmap.getPixel(x, y)
                     val alpha = Color.alpha(pixel)
-                    if (alpha < 32) continue
-                    red += Color.red(pixel).toLong() * alpha
-                    green += Color.green(pixel).toLong() * alpha
-                    blue += Color.blue(pixel).toLong() * alpha
-                    weight += alpha.toLong()
+                    if (alpha >= 32) {
+                        red += Color.red(pixel).toLong() * alpha
+                        green += Color.green(pixel).toLong() * alpha
+                        blue += Color.blue(pixel).toLong() * alpha
+                        weight += alpha.toLong()
+                    }
+                    y += stepY
                 }
+                x += stepX
             }
             if (weight == 0L) return Color.rgb(64, 60, 70)
             return Color.rgb((red / weight).toInt(), (green / weight).toInt(), (blue / weight).toInt())

@@ -183,7 +183,7 @@ class CalmLauncherRunner(
         }
     }
 
-    private var selectedPackageName = launcherStateViewModel.uiState.value.selectedPageKey ?: CalmTheme.OVERVIEW_KEY
+    private var selectedPageKey = launcherStateViewModel.uiState.value.selectedPageKey ?: CalmTheme.OVERVIEW_KEY
     private var currentPager: ViewPager2? = null
     private var currentScreen: View? = null
     private val currentUiState: LauncherRenderModel?
@@ -343,10 +343,10 @@ class CalmLauncherRunner(
                         ?.let { pager.post { entryAnimator.animateCurrentPage(pager, direction) } }
                 }
                 selectPage(pages[position].key)
-                if (suppressedPageEntryKey != selectedPackageName) {
+                if (suppressedPageEntryKey != selectedPageKey) {
                     suppressedPageEntryKey = null
                 }
-                appSearchController.resetInactiveExcept(selectedPackageName)
+                appSearchController.resetInactiveExcept(selectedPageKey)
             }
 
             override fun onPageScrollStateChanged(state: Int) {
@@ -390,15 +390,15 @@ class CalmLauncherRunner(
     }
 
     private fun resolveInitialPage(pages: List<ChapterPage>): Int {
-        val selection = pageSelectionResolver.resolve(pages, selectedPackageName)
-        if (selection.key != selectedPackageName) {
+        val selection = pageSelectionResolver.resolve(pages, selectedPageKey)
+        if (selection.key != selectedPageKey) {
             selectPage(selection.key)
         }
         return selection.index
     }
 
     private fun selectPage(pageKey: String) {
-        selectedPackageName = pageKey
+        selectedPageKey = pageKey
         launcherStateViewModel.selectPage(pageKey)
     }
 
@@ -1201,9 +1201,9 @@ class CalmLauncherRunner(
 
     private fun toggleSplitAppsByProfile() {
         val nextValue = settings.toggleSplitAppsByProfile()
-        if (selectedPackageName == CalmTheme.APP_LIBRARY_KEY ||
-            selectedPackageName == CalmTheme.PERSONAL_APP_LIBRARY_KEY ||
-            selectedPackageName == CalmTheme.WORK_APP_LIBRARY_KEY
+        if (selectedPageKey == CalmTheme.APP_LIBRARY_KEY ||
+            selectedPageKey == CalmTheme.PERSONAL_APP_LIBRARY_KEY ||
+            selectedPageKey == CalmTheme.WORK_APP_LIBRARY_KEY
         ) {
             selectPage(if (nextValue) CalmTheme.PERSONAL_APP_LIBRARY_KEY else CalmTheme.APP_LIBRARY_KEY)
         }

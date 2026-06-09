@@ -41,14 +41,5 @@ class ChapterPageTest {
         assertEquals(AppLibraryScope.WORK, work.appScope)
     }
 
-    @Test
-    fun settingsUsesProvidedKeyAndMarker() {
-        val page = ChapterPage.settings("settings-key", "V")
 
-        assertEquals("settings-key", page.key)
-        assertEquals("V", page.marker)
-        assertEquals("Settings", page.title)
-        assertNull(page.chapter)
-        assertNull(page.appScope)
-    }
 }

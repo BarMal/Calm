@@ -842,8 +842,6 @@ class CalmLauncherRunner(
         return pinnedAppResolver.isPinned(app, pinned)
     }
 
-    private fun createSettingsPage(): View = settingsPageFactory.create()
-
     private fun createChapterPage(chapter: AppChapter): LinearLayout = chapterPageBuilder.buildPage(chapter)
 
     private fun stackToolbarSpacer(): View {

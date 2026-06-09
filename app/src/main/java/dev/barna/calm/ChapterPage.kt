@@ -42,9 +42,5 @@ class ChapterPage private constructor(
             return ChapterPage(chapter.identityKey, marker, chapter.label, chapter, null)
         }
 
-        @JvmStatic
-        fun settings(settingsKey: String, marker: String): ChapterPage {
-            return ChapterPage(settingsKey, marker, "Settings", null, null)
-        }
     }
 }

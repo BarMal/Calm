@@ -66,16 +66,14 @@ class CalmLauncherRunner(
     private val cardRenderAssetCache = CardRenderAssetCache()
     private val cardRenderer = CardRenderer(activity, drawables, cardSpec, cardRenderAssetCache) { activePreferences }
     private val appLibraryPageModelFactory = AppLibraryPageModelFactory()
-    private val appStackRenderPlanner = AppStackRenderPlanner()
     private val appLibraryStore = AppLibraryRenderStore()
     private val appSearchState = AppSearchState(appLibraryPageModelFactory)
-    private val appSearchController = AppSearchController(
+    private val appMutationHandler = LauncherAppMutationHandler(
         activity = activity,
-        mainHandler = mainHandler,
-        drawables = drawables,
-        appLibraryStore = appLibraryStore,
-        appSearchState = appSearchState,
-        refreshAppStack = ::refreshAppStack,
+        settings = settings,
+        render = ::render,
+        selectPage = ::selectPage,
+        loadPinnedApps = ::loadPinnedApps,
     )
     private val contextActionFactory = LauncherContextActionFactory(
         LauncherContextActionCallbacks(
@@ -88,10 +86,10 @@ class CalmLauncherRunner(
             requestCalendarAccess = { calendarRepository.requestCalendarAccess() },
             openSettings = ::openSettingsActivity,
             openAppEntry = ::openAppEntry,
-            pinApp = ::pinApp,
-            unpinApp = ::unpinApp,
+            pinApp = appMutationHandler::pinApp,
+            unpinApp = appMutationHandler::unpinApp,
             openAppInfo = { app -> openAppInfo(app.packageName, app.userHandle, app.componentName) },
-            hideApp = ::hideApp,
+            hideApp = appMutationHandler::hideApp,
             appShortcuts = { chapter -> notificationRepository.getAppShortcuts(chapter) },
             launchShortcut = { shortcut ->
                 if (!notificationRepository.launchShortcut(shortcut)) {
@@ -111,6 +109,36 @@ class CalmLauncherRunner(
         cardStackController,
         ::performCardScrollHaptic,
     )
+    private val focusOverlay = FocusOverlayController(
+        activity,
+        mainHandler,
+        drawables,
+        ::label,
+        { currentScreen },
+        { activePreferences.focusBlurRadius },
+    )
+    private val appLibraryController = LauncherAppLibraryController(
+        activity = activity,
+        cardRenderer = cardRenderer,
+        cardStackController = cardStackController,
+        appQuickScrollController = appQuickScrollController,
+        appCardDisplayCache = appCardDisplayCache,
+        contextActionFactory = contextActionFactory,
+        focusOverlay = focusOverlay,
+        mainHandler = mainHandler,
+        activePreferences = { activePreferences },
+        currentPager = { currentPager },
+        pinnedKeys = { currentUiState?.pinnedKeys ?: settings.pinnedPackages() },
+        openAppEntry = ::openAppEntry,
+    )
+    private val appSearchController = AppSearchController(
+        activity = activity,
+        mainHandler = mainHandler,
+        drawables = drawables,
+        appLibraryStore = appLibraryStore,
+        appSearchState = appSearchState,
+        refreshAppStack = appLibraryController::refreshAppStack,
+    )
     private val entryAnimator = LauncherEntryAnimator(activity)
     private val notificationActionController = NotificationActionController(
         activity = activity,
@@ -125,6 +153,14 @@ class CalmLauncherRunner(
         openAppInfo = ::openAppInfo,
         openSettings = ::openSettingsActivity,
     )
+    private val settingsToggleHandler = LauncherSettingsToggleHandler(
+        activity = activity,
+        settings = settings,
+        render = ::render,
+        selectPage = ::selectPage,
+        currentPageKey = { selectedPageKey },
+        performCardScrollHaptic = ::performCardScrollHaptic,
+    )
     private val settingsPageFactory = SettingsPageFactory(
         activity = activity,
         settings = settings,
@@ -133,25 +169,17 @@ class CalmLauncherRunner(
         notificationRepository = notificationRepository,
         cardStackController = cardStackController,
         actions = SettingsPageActions(
-            toggleNotificationSurface = ::toggleNotificationSurface,
-            toggleCardHaptics = ::toggleCardHaptics,
-            toggleSplitAppsByProfile = ::toggleSplitAppsByProfile,
-            toggleWorkNotificationChapterPlacement = ::toggleWorkNotificationChapterPlacement,
-            applyTimescapeStackPreset = ::applyTimescapeStackPreset,
-            toggleAdvancedStackControls = ::toggleAdvancedStackControls,
+            toggleNotificationSurface = settingsToggleHandler::toggleNotificationSurface,
+            toggleCardHaptics = settingsToggleHandler::toggleCardHaptics,
+            toggleSplitAppsByProfile = settingsToggleHandler::toggleSplitAppsByProfile,
+            toggleWorkNotificationChapterPlacement = settingsToggleHandler::toggleWorkNotificationChapterPlacement,
+            applyTimescapeStackPreset = settingsToggleHandler::applyTimescapeStackPreset,
+            toggleAdvancedStackControls = settingsToggleHandler::toggleAdvancedStackControls,
             restoreNotificationSource = notificationActionController::restoreNotificationSource,
-            restoreHiddenApp = ::showApp,
+            restoreHiddenApp = appMutationHandler::showApp,
             render = { render() },
             performCardScrollHaptic = ::performCardScrollHaptic,
         ),
-    )
-    private val focusOverlay = FocusOverlayController(
-        activity,
-        mainHandler,
-        drawables,
-        ::label,
-        { currentScreen },
-        { activePreferences.focusBlurRadius },
     )
     private val chapterPageBuilder = ChapterPageBuilder(
         activity = activity,
@@ -168,7 +196,7 @@ class CalmLauncherRunner(
         createPagePanel = ::createPagePanel,
         createBarePagePanel = ::createBarePagePanel,
         openPackage = ::openPackage,
-        toggleNotificationGrouping = ::toggleNotificationGrouping,
+        toggleNotificationGrouping = settingsToggleHandler::toggleNotificationGrouping,
     )
     private val stateExecutor = Executors.newFixedThreadPool(4)
     private val stateGeneration = AtomicInteger(0)
@@ -587,7 +615,7 @@ class CalmLauncherRunner(
                 setPadding(0, activity.dp(8), 0, activity.dp(24))
             }))
             addView(
-                appStack(pinnedApps, stackKey = CardStackStateKey.appEntries("pinned", pinnedApps)),
+                appLibraryController.appStack(pinnedApps, stackKey = CardStackStateKey.appEntries("pinned", pinnedApps)),
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
             )
         }
@@ -627,150 +655,6 @@ class CalmLauncherRunner(
             topMargin = activity.dp(12)
         })
         return page
-    }
-
-    private fun refreshAppStack(
-        stackHost: FrameLayout,
-        model: AppLibraryPageModel,
-        cardCache: MutableMap<String, TextView>? = null,
-    ) {
-        cardCache?.values?.forEach { card ->
-            (card.parent as? ViewGroup)?.removeView(card)
-        }
-        stackHost.removeAllViews()
-        if (model.apps.isEmpty()) {
-            stackHost.addView(appSearchEmptyStack(model.emptyMessage, appLibraryStackKey(model)), matchParentParams())
-        } else {
-            val plan = appStackRenderPlanner.plan(model.apps, activePreferences.cardStackTuning)
-            val cards = plan.initialApps.map { app -> appCardFromCache(app, cardCache) }.toMutableList()
-            val stack = appStack(cards, appLibraryStackKey(model))
-            stackHost.addView(stack, matchParentParams())
-            appendDeferredAppCards(stackHost, stack, cards, plan.deferredApps, cardCache, model)
-        }
-    }
-
-    private fun appendDeferredAppCards(
-        stackHost: FrameLayout,
-        stack: ScrollView,
-        renderedCards: MutableList<TextView>,
-        deferredApps: List<AppEntry>,
-        cardCache: MutableMap<String, TextView>?,
-        model: AppLibraryPageModel,
-    ) {
-        var nextDeferredIndex = 0
-        fun appendNextBatch(): Boolean {
-            if (nextDeferredIndex >= deferredApps.size) return false
-            val end = (nextDeferredIndex + APP_STACK_DEFERRED_BATCH_SIZE).coerceAtMost(deferredApps.size)
-            val batch = deferredApps.subList(nextDeferredIndex, end)
-            nextDeferredIndex = end
-            val newCards = batch.map { app -> appCardFromCache(app, cardCache) }
-            cardStackController.appendCards(stack, renderedCards, newCards, cardRenderer.cardHeight(), cardRenderer.cardStep(), activePreferences.cardStackTuning)
-            return true
-        }
-        fun ensureRendered(cardIndex: Int) {
-            while (renderedCards.size <= cardIndex && appendNextBatch()) {
-            }
-        }
-        fun scheduleNextBatch(delayMs: Long) {
-            mainHandler.postDelayed({
-                if (stack.parent == null) return@postDelayed
-                if (currentPager?.scrollState != ViewPager2.SCROLL_STATE_IDLE) {
-                    scheduleNextBatch(APP_STACK_DEFERRED_BATCH_DELAY_MS)
-                    return@postDelayed
-                }
-                if (appendNextBatch()) {
-                    scheduleNextBatch(nextDeferredBatchDelay(stack))
-                }
-            }, delayMs)
-        }
-
-        fun startDeferredBatches() {
-            scheduleNextBatch(APP_STACK_DEFERRED_INITIAL_DELAY_MS)
-        }
-
-        appQuickScrollController.attach(stackHost, stack, model, activePreferences.cardStackTuning, ::ensureRendered)
-        if (deferredApps.isNotEmpty()) {
-            if (stackHost.isAttachedToWindow) {
-                startDeferredBatches()
-            } else {
-                stackHost.addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
-                    override fun onViewAttachedToWindow(v: android.view.View) {
-                        v.removeOnAttachStateChangeListener(this)
-                        if (stack.parent != null) {
-                            startDeferredBatches()
-                        }
-                    }
-                    override fun onViewDetachedFromWindow(v: android.view.View) {}
-                })
-            }
-        }
-    }
-
-    private fun nextDeferredBatchDelay(stack: ScrollView): Long {
-        return if (cardStackController.hasPendingRestore(stack)) {
-            APP_STACK_PENDING_RESTORE_BATCH_DELAY_MS
-        } else {
-            APP_STACK_DEFERRED_BATCH_DELAY_MS
-        }
-    }
-
-    private fun appStack(
-        apps: List<AppEntry>,
-        cardCache: MutableMap<String, TextView>? = null,
-        stackKey: String = CardStackStateKey.appEntries("apps", apps),
-    ): ScrollView {
-        return appStack(apps.map { app -> appCardFromCache(app, cardCache) }.toMutableList(), stackKey)
-    }
-
-    private fun appStack(cards: MutableList<TextView>, stackKey: String): ScrollView {
-        return cardStackController.cardStack(
-            cards,
-            cardRenderer.cardHeight(),
-            cardRenderer.cardStep(),
-            activePreferences.cardStackTuning,
-            stackKey,
-        )
-    }
-
-    private fun appCardFromCache(app: AppEntry, cardCache: MutableMap<String, TextView>? = null): TextView {
-        return cardCache?.getOrPut(app.identityKey) { appCard(app) } ?: appCard(app)
-    }
-
-    private fun appSearchEmptyStack(message: String, stackKey: String): View {
-        val card = cardRenderer.stackCard(
-            "Search\n$message",
-            CalmTheme.ACCENT,
-            true,
-            cardRenderer.cardSideIcon(R.drawable.ic_search_card),
-            sideImageRenderKey = "res:${R.drawable.ic_search_card}",
-        ).apply {
-            gravity = Gravity.CENTER_VERTICAL or Gravity.START
-            maxLines = 3
-            isEnabled = false
-        }
-        return cardStackController.cardStack(
-            listOf(card),
-            cardRenderer.cardHeight(),
-            cardRenderer.cardStep(),
-            activePreferences.cardStackTuning,
-            stackKey,
-        )
-    }
-
-    private fun appLibraryStackKey(model: AppLibraryPageModel): String {
-        return CardStackStateKey.appLibrary(model.key, model.scope, model.query)
-    }
-
-    private fun appCard(app: AppEntry): TextView {
-        val data = appCardDisplayCache.getCachedOrCreateLightweight(app, currentUiState?.pinnedKeys ?: settings.pinnedPackages())
-        return cardRenderer.stackCard(data.text, data.hueColor, true, data.icon, sideImageRenderKey = data.iconRenderKey).apply {
-            maxLines = 4
-            setOnClickListener { openAppEntry(app) }
-            setOnLongClickListener {
-                focusOverlay.show(this, contextActionFactory.appActions(data.app, data.isPinned), data.app.label)
-                true
-            }
-        }
     }
 
     private fun settingsButton(): ImageButton {
@@ -839,11 +723,6 @@ class CalmLauncherRunner(
         if (pinnedPackages.isEmpty()) return emptyList()
         return notificationRepository.loadPinnedAppEntries(pinnedPackages)
             .filterNot(settings::isAppHidden)
-    }
-
-    private fun isPinned(app: AppEntry): Boolean {
-        val pinned = currentUiState?.pinnedKeys ?: settings.pinnedPackages()
-        return pinnedAppResolver.isPinned(app, pinned)
     }
 
     private fun createChapterPage(chapter: AppChapter): LinearLayout = chapterPageBuilder.buildPage(chapter)
@@ -1128,34 +1007,6 @@ class CalmLauncherRunner(
         }
     }
 
-    private fun pinApp(app: AppEntry) {
-        settings.pinPackage(app.identityKey)
-        selectPage(CalmTheme.PINNED_KEY)
-        Toast.makeText(activity, "Pinned ${app.label}", Toast.LENGTH_SHORT).show()
-        render()
-    }
-
-    private fun unpinApp(app: AppEntry) {
-        settings.unpinPackage(app.identityKey)
-        settings.unpinPackage(app.packageName)
-        if (loadPinnedApps().isEmpty()) {
-            selectPage(CalmTheme.APP_LIBRARY_KEY)
-        }
-        Toast.makeText(activity, "Unpinned ${app.label}", Toast.LENGTH_SHORT).show()
-        render()
-    }
-
-    private fun hideApp(app: AppEntry) {
-        settings.hideApp(app.identityKey, app.label)
-        Toast.makeText(activity, "Hidden ${app.label}", Toast.LENGTH_SHORT).show()
-        render()
-    }
-
-    private fun showApp(appKey: String) {
-        settings.showApp(appKey)
-        render()
-    }
-
     private fun openPackage(chapter: AppChapter) {
         if (!chapter.launchable) {
             Toast.makeText(activity, "This notification source has no launcher entry", Toast.LENGTH_SHORT).show()
@@ -1193,55 +1044,6 @@ class CalmLauncherRunner(
         activity.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
             data = Uri.parse("package:$packageName")
         })
-    }
-
-    private fun toggleNotificationSurface() {
-        val nextValue = settings.toggleNotificationSurface()
-        Toast.makeText(activity, if (nextValue) "Notification cards are tinted" else "Chapter panels are tinted", Toast.LENGTH_SHORT).show()
-        render()
-    }
-
-    private fun toggleSplitAppsByProfile() {
-        val nextValue = settings.toggleSplitAppsByProfile()
-        if (selectedPageKey == CalmTheme.APP_LIBRARY_KEY ||
-            selectedPageKey == CalmTheme.PERSONAL_APP_LIBRARY_KEY ||
-            selectedPageKey == CalmTheme.WORK_APP_LIBRARY_KEY
-        ) {
-            selectPage(if (nextValue) CalmTheme.PERSONAL_APP_LIBRARY_KEY else CalmTheme.APP_LIBRARY_KEY)
-        }
-        Toast.makeText(activity, if (nextValue) "Apps split by profile" else "Apps combined", Toast.LENGTH_SHORT).show()
-        render()
-    }
-
-    private fun toggleWorkNotificationChapterPlacement() {
-        val nextValue = settings.toggleWorkNotificationChaptersBeforeApps()
-        Toast.makeText(activity, if (nextValue) "Work notification chapters moved left" else "Work notification chapters moved right", Toast.LENGTH_SHORT).show()
-        render()
-    }
-
-    private fun toggleNotificationGrouping(chapter: AppChapter) {
-        val nextGrouped = settings.toggleNotificationGrouping(chapter.identityKey)
-        Toast.makeText(activity, if (nextGrouped) "Notifications grouped" else "Notifications split", Toast.LENGTH_SHORT).show()
-        render()
-    }
-
-    private fun toggleCardHaptics() {
-        val nextValue = settings.toggleCardHaptics()
-        if (nextValue) performCardScrollHaptic(activity.window.decorView)
-        Toast.makeText(activity, if (nextValue) "Card haptics on" else "Card haptics off", Toast.LENGTH_SHORT).show()
-        render()
-    }
-
-    private fun applyTimescapeStackPreset() {
-        settings.applyTimescapeStackPreset()
-        Toast.makeText(activity, "Timescape stack preset applied", Toast.LENGTH_SHORT).show()
-        render()
-    }
-
-    private fun toggleAdvancedStackControls() {
-        val nextValue = settings.toggleAdvancedStackControls()
-        Toast.makeText(activity, if (nextValue) "Advanced stack controls shown" else "Advanced stack controls hidden", Toast.LENGTH_SHORT).show()
-        render()
     }
 
     private fun performCardScrollHaptic(source: View) {
@@ -1293,9 +1095,5 @@ class CalmLauncherRunner(
         const val PAGE_PREWARM_INITIAL_DELAY_MS = 260L
         const val PAGE_PREWARM_STEP_DELAY_MS = 120L
         const val PAGE_PREWARM_MAX_PAGES = 3
-        const val APP_STACK_DEFERRED_BATCH_SIZE = 16
-        const val APP_STACK_DEFERRED_INITIAL_DELAY_MS = 48L
-        const val APP_STACK_PENDING_RESTORE_BATCH_DELAY_MS = 0L
-        const val APP_STACK_DEFERRED_BATCH_DELAY_MS = 32L
     }
 }

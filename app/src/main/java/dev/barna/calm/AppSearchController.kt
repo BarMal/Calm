@@ -10,6 +10,7 @@ import android.os.Handler
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
+import android.view.ViewTreeObserver
 import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
@@ -159,14 +160,22 @@ class AppSearchController(
     }
 
     private fun installKeyboardAnimator(page: LinearLayout, header: LinearLayout, search: EditText) {
-        page.viewTreeObserver.addOnGlobalLayoutListener {
-            if (!search.hasFocus()) return@addOnGlobalLayoutListener
+        val listener = ViewTreeObserver.OnGlobalLayoutListener {
+            if (!search.hasFocus()) return@OnGlobalLayoutListener
             val kbHeight = keyboardHeight()
             val visible = kbHeight > activity.dp(120)
             animateHeader(header, visible)
             animatePage(page, if (visible) kbHeight else 0)
             if (!visible && search.text.isNullOrBlank()) search.clearFocus()
         }
+        page.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        page.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) = Unit
+            override fun onViewDetachedFromWindow(v: View) {
+                v.viewTreeObserver.removeOnGlobalLayoutListener(listener)
+                v.removeOnAttachStateChangeListener(this)
+            }
+        })
     }
 
     private fun keyboardHeight(): Int {

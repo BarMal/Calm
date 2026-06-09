@@ -86,17 +86,27 @@ class CardStackController(
             )
             layoutCache.remember(stackKey, stackTopPadding)
             stack.setPadding(0, stackTopPadding, 0, trailingPadding)
-            stack.addOnLayoutChangeListener(object : android.view.View.OnLayoutChangeListener {
-                override fun onLayoutChange(v: android.view.View, left: Int, top: Int, right: Int, bottom: Int, oldLeft: Int, oldTop: Int, oldRight: Int, oldBottom: Int) {
-                    v.removeOnLayoutChangeListener(this)
+            // Apply the first style on the next frame via a one-shot pre-draw listener rather than a
+            // layout-change listener: setPadding only triggers a layout pass (and onLayoutChange) when
+            // the bounds actually change, so on page revisits where the cached top padding already
+            // matches the computed value the listener would never fire — leaving every card stuck at
+            // alpha 0 (and the entry animator dropping the stack) until the first manual scroll.
+            // OnPreDrawListener runs after measure+layout regardless, so card positions are final and
+            // style() is guaranteed to run promptly. invalidate() guarantees a draw traversal even when
+            // setPadding was a no-op.
+            stack.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+                override fun onPreDraw(): Boolean {
+                    stack.viewTreeObserver.removeOnPreDrawListener(this)
                     val maxScroll = maxOf(0, (cards.lastOrNull()?.top ?: stackTopPadding) - stackTopPadding)
                     stack.minimumHeight = scroller.height + maxScroll
                     val restore = scrollMemory.initialRestore(stackKey, maxScroll)
                     if (restore.pendingTarget != null) suppressedRestoreScrolls[scroller] = restore.scrollY
                     if (restore.scrollY != scroller.scrollY) scroller.scrollTo(0, restore.scrollY)
                     style(scroller, cards, tunedStep, tuning, false, runtimeState.lastHapticIndex, runtimeState.styledRange)
+                    return true
                 }
             })
+            stack.invalidate()
         }
         scroller.post {
             if (scroller.height > 0) {

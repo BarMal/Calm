@@ -58,7 +58,7 @@ class CalmLauncherRunner(
         settings = settings,
         render = ::render,
         selectPage = ::selectPage,
-        loadPinnedApps = { appLibraryDataManager.loadPinnedAppEntries() },
+        loadPinnedApps = ::loadPinnedApps,
     )
     private val contextActionFactory = LauncherContextActionFactory(
         LauncherContextActionCallbacks(
@@ -647,6 +647,8 @@ class CalmLauncherRunner(
     private fun formatNotificationTime(postTime: Long): String {
         return DateFormat.getTimeFormat(activity).format(Date(postTime))
     }
+
+    private fun loadPinnedApps(): List<AppEntry> = appLibraryDataManager.loadPinnedAppEntries()
 
     private fun openSettingsActivity() {
         activity.startActivity(Intent(activity, CalmSettingsActivity::class.java))

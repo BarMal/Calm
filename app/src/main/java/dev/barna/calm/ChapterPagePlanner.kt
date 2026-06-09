@@ -1,5 +1,7 @@
 package dev.barna.calm
 
+import java.text.Collator
+
 class ChapterPagePlanner {
     fun buildPages(
         preferences: LauncherUiPreferences,
@@ -21,7 +23,9 @@ class ChapterPagePlanner {
         }
         val pinnedPackageSet = pinnedChapters.map { it.packageName }.toSet()
 
-        val unpinnedChapters = notificationChapters.filter { it.packageName !in pinnedPackageSet }
+        val unpinnedChapters = notificationChapters
+            .filter { it.packageName !in pinnedPackageSet }
+            .let { sorted(it, preferences.pageSortOrder) }
 
         val allChapters = pinnedChapters + unpinnedChapters
 
@@ -59,6 +63,20 @@ class ChapterPagePlanner {
             chapterNumber++
         }
         return pages
+    }
+
+    private fun sorted(chapters: List<AppChapter>, order: PageSortOrder): List<AppChapter> {
+        val collator = Collator.getInstance()
+        return when (order) {
+            PageSortOrder.APP_NAME_ASC -> chapters.sortedWith { a, b -> collator.compare(a.label, b.label) }
+            PageSortOrder.APP_NAME_DESC -> chapters.sortedWith { a, b -> collator.compare(b.label, a.label) }
+            PageSortOrder.NOTIFICATION_AGE_NEWEST -> chapters.sortedByDescending {
+                it.notifications.maxOfOrNull { n -> n.postTime } ?: 0L
+            }
+            PageSortOrder.NOTIFICATION_AGE_OLDEST -> chapters.sortedBy {
+                it.notifications.maxOfOrNull { n -> n.postTime } ?: Long.MAX_VALUE
+            }
+        }
     }
 
     private fun stubChapter(entry: AppEntry): AppChapter {

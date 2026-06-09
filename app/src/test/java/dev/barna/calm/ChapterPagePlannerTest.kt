@@ -51,6 +51,7 @@ class ChapterPagePlannerTest {
     private fun preferences(
         splitAppsByProfile: Boolean = false,
         placeWorkNotificationChaptersBeforeApps: Boolean = false,
+        sortOrder: PageSortOrder = PageSortOrder.DEFAULT,
     ): LauncherUiPreferences {
         return LauncherUiPreferences(
             useTintedNotificationCards = true,
@@ -65,6 +66,7 @@ class ChapterPagePlannerTest {
             cardStackTuning = defaultCardStackTuning(),
             showAdvancedStackControls = false,
             cardVibrancy = 50,
+            pageSortOrder = sortOrder,
         )
     }
 
@@ -84,11 +86,26 @@ class ChapterPagePlannerTest {
         packageName: String,
         label: String,
         isWorkProfile: Boolean = false,
+        postTime: Long? = null,
     ): AppChapter {
+        val notifications = if (postTime != null) listOf(
+            CalmNotificationListenerService.CalmNotification(
+                key = "key_$packageName",
+                packageName = packageName,
+                title = "Test",
+                text = "",
+                subText = "",
+                conversationTitle = "",
+                postTime = postTime,
+                contentIntent = null,
+                backgroundImage = null,
+                actions = emptyList(),
+            )
+        ) else emptyList()
         return AppChapter(
             packageName = packageName,
             label = label,
-            notifications = emptyList(),
+            notifications = notifications,
             launchable = true,
             hueColor = 0xff123456.toInt(),
             isWorkProfile = isWorkProfile,
@@ -215,5 +232,125 @@ class ChapterPagePlannerTest {
         )
 
         assertEquals(listOf("Apps", "Overview", "AppA"), pages.map { it.title })
+    }
+
+    // --- Page sorting (#126) ---
+
+    @Test
+    fun sortByAppNameAscOrders() {
+        val pages = planner.buildPages(
+            preferences = preferences(sortOrder = PageSortOrder.APP_NAME_ASC),
+            notificationChapters = listOf(
+                chapter("c", "Zeta"),
+                chapter("b", "Alpha"),
+                chapter("a", "Mango"),
+            ),
+            appEntries = emptyList(),
+            pinnedApps = emptyList(),
+        )
+
+        val chapterTitles = pages.drop(2).map { it.title } // skip Apps and Overview
+        assertEquals(listOf("Alpha", "Mango", "Zeta"), chapterTitles)
+    }
+
+    @Test
+    fun sortByAppNameDescOrders() {
+        val pages = planner.buildPages(
+            preferences = preferences(sortOrder = PageSortOrder.APP_NAME_DESC),
+            notificationChapters = listOf(
+                chapter("c", "Zeta"),
+                chapter("b", "Alpha"),
+                chapter("a", "Mango"),
+            ),
+            appEntries = emptyList(),
+            pinnedApps = emptyList(),
+        )
+
+        val chapterTitles = pages.drop(2).map { it.title }
+        assertEquals(listOf("Zeta", "Mango", "Alpha"), chapterTitles)
+    }
+
+    @Test
+    fun sortByNotificationAgeNewestFirst() {
+        val pages = planner.buildPages(
+            preferences = preferences(sortOrder = PageSortOrder.NOTIFICATION_AGE_NEWEST),
+            notificationChapters = listOf(
+                chapter("a", "OldApp", postTime = 1000L),
+                chapter("b", "NewApp", postTime = 5000L),
+                chapter("c", "MidApp", postTime = 3000L),
+            ),
+            appEntries = emptyList(),
+            pinnedApps = emptyList(),
+        )
+
+        val chapterTitles = pages.drop(2).map { it.title }
+        assertEquals(listOf("NewApp", "MidApp", "OldApp"), chapterTitles)
+    }
+
+    @Test
+    fun sortByNotificationAgeOldestFirst() {
+        val pages = planner.buildPages(
+            preferences = preferences(sortOrder = PageSortOrder.NOTIFICATION_AGE_OLDEST),
+            notificationChapters = listOf(
+                chapter("a", "OldApp", postTime = 1000L),
+                chapter("b", "NewApp", postTime = 5000L),
+                chapter("c", "MidApp", postTime = 3000L),
+            ),
+            appEntries = emptyList(),
+            pinnedApps = emptyList(),
+        )
+
+        val chapterTitles = pages.drop(2).map { it.title }
+        assertEquals(listOf("OldApp", "MidApp", "NewApp"), chapterTitles)
+    }
+
+    @Test
+    fun sortDoesNotReorderPinnedChapters() {
+        val pages = planner.buildPages(
+            preferences = preferences(sortOrder = PageSortOrder.APP_NAME_ASC),
+            notificationChapters = emptyList(),
+            appEntries = listOf(app("z.pkg", "Zebra"), app("a.pkg", "Ant")),
+            pinnedApps = emptyList(),
+            pinnedChapterPackages = setOf("z.pkg", "a.pkg"),
+        )
+
+        // Pinned insertion order: z.pkg first, a.pkg second — if sort applied it would be [Ant, Zebra]
+        val chapterTitles = pages.filter { it.chapter != null }.map { it.title }
+        assertEquals(listOf("Zebra", "Ant"), chapterTitles)
+    }
+
+    @Test
+    fun unpinnedChaptersSortedIndependentlyOfPinned() {
+        val pages = planner.buildPages(
+            preferences = preferences(sortOrder = PageSortOrder.APP_NAME_ASC),
+            notificationChapters = listOf(
+                chapter("c.pkg", "Zeta"),
+                chapter("b.pkg", "Beta"),
+            ),
+            appEntries = listOf(app("a.pkg", "Alpha")),
+            pinnedApps = emptyList(),
+            pinnedChapterPackages = setOf("a.pkg"),
+        )
+
+        // Alpha is pinned (comes first among chapters), then Beta < Zeta alphabetically
+        val chapterTitles = pages.filter { it.chapter != null }.map { it.title }
+        assertEquals(listOf("Alpha", "Beta", "Zeta"), chapterTitles)
+    }
+
+    @Test
+    fun chaptersWithNoNotificationsSortLastForNewest() {
+        // A chapter with no notifications has postTime fallback 0, so sorts after real notifications
+        val pages = planner.buildPages(
+            preferences = preferences(sortOrder = PageSortOrder.NOTIFICATION_AGE_NEWEST),
+            notificationChapters = listOf(
+                chapter("a", "NoNotifApp"),
+                chapter("b", "RealApp", postTime = 1000L),
+            ),
+            appEntries = emptyList(),
+            pinnedApps = emptyList(),
+        )
+
+        val chapterTitles = pages.filter { it.chapter != null }.map { it.title }
+        assertEquals(listOf("RealApp", "NoNotifApp"), chapterTitles)
     }
 }

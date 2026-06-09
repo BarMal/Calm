@@ -7,19 +7,13 @@ import android.content.pm.LauncherActivityInfo
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.os.Process
 import android.os.UserHandle
 import android.os.UserManager
-import java.io.File
-import java.security.MessageDigest
 import java.text.Collator
-import java.util.Collections
 import java.util.LinkedHashMap
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executor
-import java.util.concurrent.Executors
 
 class NotificationChapterRepository(
     private val activity: Context,
@@ -27,20 +21,19 @@ class NotificationChapterRepository(
 ) : NotificationCardAssetResolver {
     private val launcherApps: LauncherApps? = activity.getSystemService(LauncherApps::class.java)
     private val userManager: UserManager? = activity.getSystemService(UserManager::class.java)
-    private val hueCache = ConcurrentHashMap<String, Int>()
-    private val iconCache = ConcurrentHashMap<String, Bitmap>()
-    private val maskedIconCache = ConcurrentHashMap<String, Bitmap>()
-    private val iconDiskCacheDir = File(activity.cacheDir, "calm_icons").apply { mkdirs() }
-    private val pendingHueKeys = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
-    private val hueExecutor = Executors.newSingleThreadExecutor()
+    private val appIconRepository = AppIconRepository(
+        cacheDir = activity.cacheDir,
+        launcherApps = launcherApps,
+        packageManager = activity.packageManager,
+        settings = settings,
+    )
     private val launchableAppsCache = AppLibrarySnapshotCache(
         store = SettingsAppLibrarySnapshotStore(settings),
         loader = ::loadFreshLaunchableApps,
     )
-    private var onHueResolved: Runnable? = null
 
     fun setOnHueResolved(listener: Runnable) {
-        onHueResolved = listener
+        appIconRepository.setOnHueResolved(listener)
     }
 
     fun buildNotificationChapters(launchableApps: List<AppEntry> = loadLaunchableApps()): List<AppChapter> {
@@ -76,7 +69,7 @@ class NotificationChapterRepository(
                     label = launchable?.label ?: resolveAppLabel(first.packageName),
                     notifications = notifications,
                     launchable = launchable != null,
-                    hueColor = resolveAppHue(launchable?.identityKey ?: sourceKey, first.packageName, launchable?.userHandle),
+                    hueColor = appIconRepository.resolveAppHue(launchable?.identityKey ?: sourceKey, first.packageName, launchable?.userHandle),
                     identityKey = sourceKey,
                     launcherIdentityKey = launchable?.identityKey ?: sourceKey,
                     componentName = launchable?.componentName,
@@ -160,7 +153,7 @@ class NotificationChapterRepository(
         for (notification in chapter.notifications) {
             notification.backgroundImage?.let { return it }
         }
-        return resolveAppBitmap(chapter.launcherIdentityKey, chapter.packageName, chapter.userHandle)
+        return appIconRepository.resolveAppBitmap(chapter.launcherIdentityKey, chapter.packageName, chapter.userHandle)
     }
 
     fun resolveAppLabel(packageName: String): String {
@@ -169,7 +162,7 @@ class NotificationChapterRepository(
     }
 
     fun resolveAppHue(packageName: String): Int {
-        return resolveAppHue(AppIdentity.packageOnly(packageName).key, packageName, null)
+        return appIconRepository.resolveAppHue(AppIdentity.packageOnly(packageName).key, packageName, null)
     }
 
     fun resolveAppIcon(app: AppEntry, sizePx: Int): BitmapDrawable? {
@@ -177,11 +170,11 @@ class NotificationChapterRepository(
     }
 
     fun resolveAppIconBitmap(app: AppEntry): Bitmap? {
-        return resolveAppBitmap(app.identityKey, app.packageName, app.userHandle)
+        return appIconRepository.resolveAppBitmap(app.identityKey, app.packageName, app.userHandle)
     }
 
     override fun resolveAppIconBitmap(chapter: AppChapter): Bitmap? {
-        return resolveAppBitmap(chapter.launcherIdentityKey, chapter.packageName, chapter.userHandle)
+        return appIconRepository.resolveAppBitmap(chapter.launcherIdentityKey, chapter.packageName, chapter.userHandle)
     }
 
     fun resolveAppIcon(chapter: AppChapter, sizePx: Int): BitmapDrawable? {
@@ -189,7 +182,7 @@ class NotificationChapterRepository(
     }
 
     override fun resolveMaskedAppIconBitmap(chapter: AppChapter): Bitmap? {
-        return resolveMaskedAppBitmap(chapter.launcherIdentityKey, chapter.packageName, chapter.userHandle)
+        return appIconRepository.resolveMaskedAppBitmap(chapter.launcherIdentityKey, chapter.packageName, chapter.userHandle)
     }
 
     fun resolveMaskedAppIcon(chapter: AppChapter, sizePx: Int): BitmapDrawable? {
@@ -251,7 +244,7 @@ class NotificationChapterRepository(
         return AppEntry(
             packageName = componentName.packageName,
             label = label,
-            hueColor = resolveAppHue(identity.key, componentName.packageName, user),
+            hueColor = appIconRepository.resolveAppHue(identity.key, componentName.packageName, user),
             identityKey = identity.key,
             notificationSourceKey = identity.notificationSourceKey,
             componentName = componentName,
@@ -271,7 +264,7 @@ class NotificationChapterRepository(
             AppEntry(
                 packageName = packageName,
                 label = resolveInfo.loadLabel(packageManager).toString(),
-                hueColor = resolveAppHue(identity.key, packageName, null),
+                hueColor = appIconRepository.resolveAppHue(identity.key, packageName, null),
                 identityKey = identity.key,
                 notificationSourceKey = identity.notificationSourceKey,
                 componentName = ComponentName(packageName, className),
@@ -285,7 +278,7 @@ class NotificationChapterRepository(
         userHandle: UserHandle?,
         sizePx: Int,
     ): BitmapDrawable? {
-        val bitmap = resolveAppBitmap(identityKey, packageName, userHandle) ?: return null
+        val bitmap = appIconRepository.resolveAppBitmap(identityKey, packageName, userHandle) ?: return null
         return BitmapDrawable(activity.resources, bitmap).apply {
             setBounds(0, 0, sizePx, sizePx)
         }
@@ -297,74 +290,10 @@ class NotificationChapterRepository(
         userHandle: UserHandle?,
         sizePx: Int,
     ): BitmapDrawable? {
-        val bitmap = resolveMaskedAppBitmap(identityKey, packageName, userHandle) ?: return null
+        val bitmap = appIconRepository.resolveMaskedAppBitmap(identityKey, packageName, userHandle) ?: return null
         return BitmapDrawable(activity.resources, bitmap).apply {
             setBounds(0, 0, sizePx, sizePx)
         }
-    }
-
-    private fun resolveAppBitmap(
-        identityKey: String,
-        packageName: String,
-        userHandle: UserHandle?,
-    ): Bitmap? {
-        return iconCache.getOrPut(identityKey) {
-            loadCachedIcon("unmasked", identityKey)?.let { return@getOrPut it }
-            val profileIcon = userHandle?.let { user ->
-                runCatching {
-                    launcherApps?.getActivityList(packageName, user)
-                        ?.firstOrNull()
-                        ?.getIcon(0)
-                        ?.toUnmaskedIconBitmap()
-                }.getOrNull()
-            }
-            val generated = profileIcon ?: runCatching {
-                activity.packageManager.getApplicationIcon(packageName).toUnmaskedIconBitmap()
-            }.getOrNull() ?: return null
-            cacheIcon("unmasked", identityKey, generated)
-            generated
-        }
-    }
-
-    private fun resolveMaskedAppBitmap(
-        identityKey: String,
-        packageName: String,
-        userHandle: UserHandle?,
-    ): Bitmap? {
-        return maskedIconCache.getOrPut(identityKey) {
-            loadCachedIcon("masked", identityKey)?.let { return@getOrPut it }
-            val profileIcon = userHandle?.let { user ->
-                runCatching {
-                    launcherApps?.getActivityList(packageName, user)
-                        ?.firstOrNull()
-                        ?.getBadgedIcon(0)
-                        ?.toBitmap()
-                }.getOrNull()
-            }
-            val generated = profileIcon ?: runCatching {
-                activity.packageManager.getApplicationIcon(packageName).toBitmap()
-            }.getOrNull() ?: return null
-            cacheIcon("masked", identityKey, generated)
-            generated
-        }
-    }
-
-    private fun loadCachedIcon(kind: String, identityKey: String): Bitmap? {
-        val file = iconCacheFile(kind, identityKey)
-        if (!file.exists()) return null
-        return runCatching { BitmapFactory.decodeFile(file.absolutePath) }.getOrNull()
-    }
-
-    private fun cacheIcon(kind: String, identityKey: String, bitmap: Bitmap) {
-        runCatching {
-            iconCacheFile(kind, identityKey).outputStream().use { output ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
-            }
-        }
-    }
-
-    private fun iconCacheFile(kind: String, identityKey: String): File {
-        return File(iconDiskCacheDir, "$kind-${identityKey.sha256()}.png")
     }
 
     private fun resolvePackageManagerLabel(packageName: String): String {
@@ -382,58 +311,7 @@ class NotificationChapterRepository(
 
     fun invalidateAppCaches() {
         launchableAppsCache.invalidate()
-        hueCache.clear()
-        iconCache.clear()
-        maskedIconCache.clear()
-        pendingHueKeys.clear()
-    }
-
-    private fun resolveAppHue(
-        identityKey: String,
-        packageName: String,
-        userHandle: UserHandle?,
-    ): Int {
-        hueCache[identityKey]?.let { return it }
-        val persistedHue = settings.cachedAppHue(identityKey)
-        if (persistedHue != 0) {
-            hueCache[identityKey] = persistedHue
-            return persistedHue
-        }
-        val legacyHue = settings.cachedAppHue(packageName)
-        if (legacyHue != 0) {
-            hueCache[identityKey] = legacyHue
-            return legacyHue
-        }
-        scheduleHueResolution(identityKey, packageName, userHandle)
-        return 0
-    }
-
-    private fun scheduleHueResolution(
-        identityKey: String,
-        packageName: String,
-        userHandle: UserHandle?,
-    ) {
-        if (!pendingHueKeys.add(identityKey)) return
-        hueExecutor.execute {
-            val hue = computeAppHue(identityKey, packageName, userHandle)
-            if (hue != 0) {
-                hueCache[identityKey] = hue
-                settings.cacheAppHue(identityKey, hue)
-            }
-            pendingHueKeys.remove(identityKey)
-            if (hue != 0) {
-                onHueResolved?.run()
-            }
-        }
-    }
-
-    private fun computeAppHue(
-        identityKey: String,
-        packageName: String,
-        userHandle: UserHandle?,
-    ): Int {
-        val icon = resolveAppBitmap(identityKey, packageName, userHandle) ?: return 0
-        return CalmColor.dominant(icon, CalmTheme.ACCENT)
+        appIconRepository.invalidate()
     }
 
     fun getAppShortcuts(chapter: AppChapter): List<AppShortcutEntry> {
@@ -447,7 +325,7 @@ class NotificationChapterRepository(
             setPackage(chapter.packageName)
         }
         return runCatching { launcher.getShortcuts(query, userHandle).orEmpty() }
-            .getOrDefault(emptyList())
+            .getOrNull().orEmpty()
             .mapNotNull { info ->
                 val label = info.shortLabel?.toString()?.takeIf { it.isNotBlank() }
                     ?: info.longLabel?.toString()?.takeIf { it.isNotBlank() }
@@ -473,12 +351,7 @@ class NotificationChapterRepository(
     private fun profileSerial(user: UserHandle): Long {
         return runCatching {
             userManager?.getSerialNumberForUser(user) ?: AppIdentity.LEGACY_USER_SERIAL
-        }.getOrDefault(AppIdentity.LEGACY_USER_SERIAL)
-    }
-
-    private fun String.sha256(): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(toByteArray(Charsets.UTF_8))
-        return digest.joinToString("") { byte -> "%02x".format(byte) }
+        }.getOrNull() ?: AppIdentity.LEGACY_USER_SERIAL
     }
 }
 

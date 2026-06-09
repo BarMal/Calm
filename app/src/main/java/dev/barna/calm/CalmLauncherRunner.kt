@@ -470,6 +470,7 @@ class CalmLauncherRunner(
                 notificationChapters = notifications.get(),
                 appEntries = appEntries,
                 pinnedKeys = pinnedKeys,
+                pinnedChapterPackages = settings.pinnedChapterPackages(),
                 hasCalendarPermission = calendarState.first,
                 calendarEvents = calendarState.second,
             )
@@ -518,6 +519,7 @@ class CalmLauncherRunner(
             notificationChapters = notificationChapters,
             appEntries = appEntries,
             pinnedKeys = pinnedKeys,
+            pinnedChapterPackages = settings.pinnedChapterPackages(),
             hasCalendarPermission = hasCalendarPermission,
             calendarEvents = if (hasCalendarPermission) calendarRepository.loadUpcomingEvents() else emptyList(),
         )

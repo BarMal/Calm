@@ -246,7 +246,7 @@ class CalmLauncherRunner(
 
     private var selectedPageKey = launcherStateViewModel.uiState.value.selectedPageKey
         ?: settings.lastSelectedPageKey()
-        ?: CalmTheme.OVERVIEW_KEY
+        ?: defaultHomeKey()
     private var currentPager: ViewPager2? = null
     private var currentScreen: View? = null
     private val currentUiState: LauncherRenderModel?
@@ -495,6 +495,17 @@ class CalmLauncherRunner(
         selectedPageKey = pageKey
         launcherStateViewModel.selectPage(pageKey)
         settings.setLastSelectedPageKey(pageKey)
+    }
+
+    // The fixed-key landing page for the configured default-home slot, used only when no page has
+    // been visited yet. NOTIFICATIONS has no fixed key, so it falls back to the overview.
+    private fun defaultHomeKey(): String = when (settings.pageLayout().defaultHome) {
+        PageSlot.OVERVIEW -> CalmTheme.OVERVIEW_KEY
+        PageSlot.WORK_OVERVIEW -> CalmTheme.WORK_OVERVIEW_KEY
+        PageSlot.PINNED -> CalmTheme.PINNED_KEY
+        PageSlot.CONTACTS -> CalmTheme.CONTACTS_KEY
+        PageSlot.APPS -> CalmTheme.APP_LIBRARY_KEY
+        PageSlot.NOTIFICATIONS -> CalmTheme.OVERVIEW_KEY
     }
 
     private fun schedulePagePrewarm(

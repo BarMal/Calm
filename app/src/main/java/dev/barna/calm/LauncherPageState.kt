@@ -20,7 +20,7 @@ class LauncherPageStateFactory(
             pinnedChapterPackages = pinnedChapterPackages,
         )
         return LauncherPageState(
-            pages = pages,
+            pages = PageArranger.arrange(pages, preferences.pageLayout),
             pinnedApps = pinnedApps,
         )
     }

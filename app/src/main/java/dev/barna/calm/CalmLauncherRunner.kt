@@ -191,6 +191,12 @@ class CalmLauncherRunner(
         barePagePanel = ::createBarePagePanel,
         label = ::label,
     )
+    private val dockController = DockController(
+        activity = activity,
+        drawables = drawables,
+        resolveIcon = { notificationRepository.resolveAppIconBitmap(it) },
+        openAppEntry = ::openAppEntry,
+    )
     private val pageFactory = LauncherPageFactory(
         activity = activity,
         overviewPageBuilder = overviewPageBuilder,
@@ -459,6 +465,16 @@ class CalmLauncherRunner(
             pager,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
         )
+        if (state.dockConfig.enabled && state.dockApps.isNotEmpty()) {
+            root.addView(
+                dockController.buildDock(state.dockApps, state.dockConfig),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    leftMargin = activity.dp(16)
+                    rightMargin = activity.dp(16)
+                    topMargin = activity.dp(10)
+                },
+            )
+        }
         carouselController.update(pages, initialPage)
         activity.setContentView(screen)
         if (animate) {

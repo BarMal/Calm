@@ -238,13 +238,26 @@ class CalmSettingsActivity : ComponentActivity() {
             max = DockConfig.MAX_HORIZONTAL_PADDING_DP,
             valueText = { "${it}dp padding" },
         ) { settings.setDockHorizontalPadding(it) })
+        content.addView(sliderRow(
+            title = "Dock icon size",
+            progress = dock.iconSizeDp - DockConfig.MIN_ICON_SIZE_DP,
+            max = DockConfig.MAX_ICON_SIZE_DP - DockConfig.MIN_ICON_SIZE_DP,
+            valueText = { "${it + DockConfig.MIN_ICON_SIZE_DP}dp" },
+        ) { settings.setDockIconSize(it + DockConfig.MIN_ICON_SIZE_DP) })
+        content.addView(sliderRow(
+            title = "Dock icon spacing",
+            progress = dock.iconSpacingDp,
+            max = DockConfig.MAX_ICON_SPACING_DP,
+            valueText = { "${it}dp" },
+        ) { settings.setDockIconSpacing(it) })
+        content.addView(sliderRow(
+            title = "Dock icon rounding",
+            progress = dock.iconCornerRadiusDp,
+            max = DockConfig.MAX_ICON_CORNER_DP,
+            valueText = { if (it == 0) "Square" else "${it}dp corners" },
+        ) { settings.setDockIconCornerRadius(it) })
 
         content.addView(section("Card stack"))
-        content.addView(actionRow("Apply Timescape preset", "Restore the curved stacked-card defaults.") {
-            settings.applyTimescapeStackPreset()
-            Toast.makeText(this, "Timescape preset applied", Toast.LENGTH_SHORT).show()
-            requestRender()
-        })
         val tuning = settings.cardStackTuning()
         content.addView(signedSliderRow(
             title = "Left / right path",

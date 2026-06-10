@@ -93,11 +93,35 @@ class LauncherSettings(private val preferences: SharedPreferences) {
                 .coerceIn(DockConfig.MIN_VERTICAL_PADDING_DP, DockConfig.MAX_VERTICAL_PADDING_DP),
             horizontalPaddingDp = preferences.getInt(PREF_DOCK_HORIZONTAL_PADDING, DockConfig.DEFAULT_HORIZONTAL_PADDING_DP)
                 .coerceIn(DockConfig.MIN_HORIZONTAL_PADDING_DP, DockConfig.MAX_HORIZONTAL_PADDING_DP),
+            iconSizeDp = preferences.getInt(PREF_DOCK_ICON_SIZE, DockConfig.DEFAULT_ICON_SIZE_DP)
+                .coerceIn(DockConfig.MIN_ICON_SIZE_DP, DockConfig.MAX_ICON_SIZE_DP),
+            iconSpacingDp = preferences.getInt(PREF_DOCK_ICON_SPACING, DockConfig.DEFAULT_ICON_SPACING_DP)
+                .coerceIn(DockConfig.MIN_ICON_SPACING_DP, DockConfig.MAX_ICON_SPACING_DP),
+            iconCornerRadiusDp = preferences.getInt(PREF_DOCK_ICON_CORNER, DockConfig.DEFAULT_ICON_CORNER_DP)
+                .coerceIn(DockConfig.MIN_ICON_CORNER_DP, DockConfig.MAX_ICON_CORNER_DP),
         )
     }
 
     fun setDockEnabled(enabled: Boolean) {
         preferences.edit().putBoolean(PREF_DOCK_ENABLED, enabled).apply()
+    }
+
+    fun setDockIconSize(dp: Int) {
+        preferences.edit()
+            .putInt(PREF_DOCK_ICON_SIZE, dp.coerceIn(DockConfig.MIN_ICON_SIZE_DP, DockConfig.MAX_ICON_SIZE_DP))
+            .apply()
+    }
+
+    fun setDockIconSpacing(dp: Int) {
+        preferences.edit()
+            .putInt(PREF_DOCK_ICON_SPACING, dp.coerceIn(DockConfig.MIN_ICON_SPACING_DP, DockConfig.MAX_ICON_SPACING_DP))
+            .apply()
+    }
+
+    fun setDockIconCornerRadius(dp: Int) {
+        preferences.edit()
+            .putInt(PREF_DOCK_ICON_CORNER, dp.coerceIn(DockConfig.MIN_ICON_CORNER_DP, DockConfig.MAX_ICON_CORNER_DP))
+            .apply()
     }
 
     fun setDockItemCount(count: Int) {
@@ -410,6 +434,10 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             pinnedPackages(),
             hiddenAppKeys(),
             splitNotificationPackages(),
+            dockConfig(),
+            dockKeys(),
+            homeGrid(),
+            widgetIds(),
         ).hashCode()
     }
 
@@ -667,6 +695,9 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_DOCK_ITEM_COUNT = "dock_item_count"
         private const val PREF_DOCK_VERTICAL_PADDING = "dock_vertical_padding"
         private const val PREF_DOCK_HORIZONTAL_PADDING = "dock_horizontal_padding"
+        private const val PREF_DOCK_ICON_SIZE = "dock_icon_size"
+        private const val PREF_DOCK_ICON_SPACING = "dock_icon_spacing"
+        private const val PREF_DOCK_ICON_CORNER = "dock_icon_corner"
         private const val PREF_DOCK_KEYS = "dock_keys"
     }
 }

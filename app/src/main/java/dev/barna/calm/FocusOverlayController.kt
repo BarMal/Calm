@@ -115,25 +115,32 @@ class FocusOverlayController(
         focusedCardOverlay = overlay
         container.addView(overlay, matchParentParams())
 
-        val actionsColumn = LinearLayout(activity).apply {
+        val horizontalPadding = activity.dp(22)
+        val body = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             clipChildren = false
             clipToPadding = false
+            setPadding(horizontalPadding, activity.dp(22), horizontalPadding, activity.dp(18))
+            addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                clipChildren = false
+                clipToPadding = false
+                actions.forEach { addView(contextActionButton(it)) }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = activity.dp(18)
+            })
         }
-        actions.forEach { actionsColumn.addView(contextActionButton(it)) }
-
-        val card = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            clipChildren = false
+        // Scroll the body so tall content (e.g. media + long text + many actions) never clips the actions.
+        val card = ScrollView(activity).apply {
+            isFillViewport = false
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
             clipToPadding = false
             background = sourceCard.background?.constantState?.newDrawable()?.mutate()
                 ?: drawables.glass(CalmTheme.GLASS, activity.dp(24))
             elevation = sourceCard.elevation + activity.dp(12)
-            setPadding(activity.dp(22), activity.dp(22), activity.dp(22), activity.dp(18))
-            addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            addView(actionsColumn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = activity.dp(18)
-            })
+            addView(body, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             setOnClickListener { }
         }
         focusedCardClone = card

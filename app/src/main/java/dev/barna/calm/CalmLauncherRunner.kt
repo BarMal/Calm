@@ -210,13 +210,16 @@ class CalmLauncherRunner(
         label = ::label,
     )
     private var pendingWidgetId = -1
+    private var addingWidgetToGrid = false
     private val customHomePageController = CustomHomePageController(
         activity = activity,
         settings = settings,
         drawables = drawables,
+        widgetHost = widgetHost,
         appEntries = { currentUiState?.appEntries.orEmpty() },
         resolveIcon = { notificationRepository.resolveAppIconBitmap(it) },
         openAppEntry = ::openAppEntry,
+        requestAddWidget = ::requestAddWidgetToGrid,
         onChanged = ::render,
         barePagePanel = ::createBarePagePanel,
         label = ::label,
@@ -351,18 +354,33 @@ class CalmLauncherRunner(
     }
 
     private fun requestAddWidget() {
+        addingWidgetToGrid = false
+        pendingWidgetId = widgetHost.allocateWidgetId()
+        launchWidgetPicker(widgetHost.pickIntent(pendingWidgetId))
+    }
+
+    private fun requestAddWidgetToGrid() {
+        addingWidgetToGrid = true
         pendingWidgetId = widgetHost.allocateWidgetId()
         launchWidgetPicker(widgetHost.pickIntent(pendingWidgetId))
     }
 
     fun onWidgetPickResult(granted: Boolean) {
         if (pendingWidgetId == -1) return
-        if (granted) {
+        if (granted && addingWidgetToGrid) {
+            val grid = settings.homeGrid()
+            settings.setHomeGrid(
+                grid.withItem(
+                    HomeGridItem(GridItemType.WIDGET, pendingWidgetId.toString(), 0, grid.nextFreeRow(), grid.columns, 2),
+                ),
+            )
+        } else if (granted) {
             settings.addWidgetId(pendingWidgetId)
         } else {
             widgetHost.deleteWidgetId(pendingWidgetId)
         }
         pendingWidgetId = -1
+        addingWidgetToGrid = false
         render()
     }
 

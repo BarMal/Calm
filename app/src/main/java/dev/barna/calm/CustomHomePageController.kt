@@ -6,24 +6,29 @@ import android.graphics.Typeface
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 
-/** Renders a custom home page: a fixed-column grid of app icons placed by the user. */
+/** Renders a custom home page: a fixed-column grid of app icons and widgets placed by the user. */
 class CustomHomePageController(
     private val activity: MainActivity,
     private val settings: LauncherSettings,
     private val drawables: CalmDrawables,
+    private val widgetHost: WidgetHostController,
     private val appEntries: () -> List<AppEntry>,
     private val resolveIcon: (AppEntry) -> Bitmap?,
     private val openAppEntry: (AppEntry) -> Unit,
+    private val requestAddWidget: () -> Unit,
     private val onChanged: () -> Unit,
     private val barePagePanel: (Int) -> LinearLayout,
     private val label: (String, Int, Int, Int) -> TextView,
 ) {
+    private val cellHeight get() = activity.dp(92)
+
     fun buildPage(): LinearLayout {
         val grid = settings.homeGrid()
         val page = barePagePanel(activity.dp(20))
@@ -36,7 +41,12 @@ class CustomHomePageController(
         }
         val byApp = appEntries().associateBy { it.identityKey }
         grid.items.forEach { item ->
-            byApp[item.ref]?.let { app -> gridView.addView(cell(grid, item, app)) }
+            when (item.type) {
+                GridItemType.APP -> byApp[item.ref]?.let { app -> gridView.addView(appCell(grid, item, app)) }
+                GridItemType.WIDGET -> item.ref.toIntOrNull()?.let { id ->
+                    widgetHost.createView(id)?.let { hostView -> gridView.addView(widgetCell(grid, item, id, hostView)) }
+                }
+            }
         }
         page.addView(
             ScrollView(activity).apply {
@@ -60,19 +70,25 @@ class CustomHomePageController(
                 label("Home", 30, CalmTheme.INK, Typeface.NORMAL),
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
             )
-            addView(
-                label("＋  Add app", 14, CalmTheme.INK, Typeface.NORMAL).apply {
-                    setPadding(activity.dp(14), activity.dp(10), activity.dp(14), activity.dp(10))
-                    background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(14))
-                    isClickable = true
-                    setOnClickListener { showAddAppDialog(grid) }
-                },
-            )
+            addView(pillButton("＋ App") { showAddAppDialog(grid) })
+            addView(pillButton("＋ Widget") { requestAddWidget() }.apply {
+                (layoutParams as LinearLayout.LayoutParams).leftMargin = activity.dp(8)
+            })
         }
     }
 
-    private fun cell(grid: HomeGrid, item: HomeGridItem, app: AppEntry): View {
-        val content = LinearLayout(activity).apply {
+    private fun pillButton(text: String, onClick: () -> Unit): TextView {
+        return label(text, 14, CalmTheme.INK, Typeface.NORMAL).apply {
+            setPadding(activity.dp(14), activity.dp(10), activity.dp(14), activity.dp(10))
+            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(14))
+            isClickable = true
+            setOnClickListener { onClick() }
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+    }
+
+    private fun appCell(grid: HomeGrid, item: HomeGridItem, app: AppEntry): View {
+        return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(activity.dp(4), activity.dp(10), activity.dp(4), activity.dp(10))
@@ -96,15 +112,33 @@ class CustomHomePageController(
                 onChanged()
                 true
             }
+            layoutParams = cellParams(item)
         }
-        return content.apply {
-            layoutParams = GridLayout.LayoutParams(
-                GridLayout.spec(item.row),
-                GridLayout.spec(item.column, GridLayout.FILL, 1f),
-            ).apply {
-                width = 0
-                height = activity.dp(92)
+    }
+
+    private fun widgetCell(grid: HomeGrid, item: HomeGridItem, widgetId: Int, hostView: View): View {
+        return FrameLayout(activity).apply {
+            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(14))
+            setPadding(activity.dp(4), activity.dp(4), activity.dp(4), activity.dp(4))
+            addView(hostView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            setOnLongClickListener {
+                widgetHost.deleteWidgetId(widgetId)
+                settings.setHomeGrid(grid.withoutItem(item.column, item.row))
+                onChanged()
+                true
             }
+            layoutParams = cellParams(item)
+        }
+    }
+
+    private fun cellParams(item: HomeGridItem): GridLayout.LayoutParams {
+        return GridLayout.LayoutParams(
+            GridLayout.spec(item.row, item.rowSpan),
+            GridLayout.spec(item.column, item.columnSpan, GridLayout.FILL, 1f),
+        ).apply {
+            width = 0
+            height = cellHeight * item.rowSpan
+            setMargins(activity.dp(2), activity.dp(2), activity.dp(2), activity.dp(2))
         }
     }
 

@@ -1,10 +1,13 @@
 package dev.barna.calm
 
+import android.graphics.Typeface
 import android.os.Handler
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.viewpager2.widget.ViewPager2
@@ -172,9 +175,52 @@ class LauncherAppLibraryController(
             maxLines = 4
             setOnClickListener { openAppEntry(app) }
             setOnLongClickListener {
-                focusOverlay.show(this, contextActionFactory.appActions(data.app, data.isPinned), data.app.label)
+                val actions = contextActionFactory.appActions(data.app, data.isPinned)
+                if (activePreferences().expandedCardsEnabled) {
+                    focusOverlay.showExpandedCard(this, expandedAppContent(data), actions)
+                } else {
+                    focusOverlay.show(this, actions, data.app.label)
+                }
                 true
             }
+        }
+    }
+
+    private fun expandedAppContent(data: AppCardDisplayData): View {
+        val row = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        data.icon?.let { icon ->
+            row.addView(
+                ImageView(activity).apply {
+                    setImageBitmap(icon)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                },
+                LinearLayout.LayoutParams(activity.dp(64), activity.dp(64)).apply { rightMargin = activity.dp(18) },
+            )
+        }
+        row.addView(
+            LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(expandedText(data.app.label, 22, CalmTheme.INK, Typeface.BOLD))
+                if (data.app.profileLabel.isNotBlank()) {
+                    addView(expandedText(data.app.profileLabel, 13, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
+                        setPadding(0, activity.dp(4), 0, 0)
+                    })
+                }
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        return row
+    }
+
+    private fun expandedText(text: String, sp: Int, color: Int, style: Int): TextView {
+        return TextView(activity).apply {
+            this.text = text
+            setTextColor(color)
+            textSize = sp.toFloat()
+            setTypeface(Typeface.DEFAULT, style)
         }
     }
 

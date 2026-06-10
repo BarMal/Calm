@@ -14,4 +14,5 @@ data class LauncherUiPreferences(
     val showAdvancedStackControls: Boolean,
     val cardVibrancy: Int,
     val pageSortOrder: PageSortOrder = PageSortOrder.DEFAULT,
+    val expandedCardsEnabled: Boolean = true,
 )

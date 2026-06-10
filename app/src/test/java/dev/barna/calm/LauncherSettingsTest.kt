@@ -257,6 +257,18 @@ class LauncherSettingsTest {
         assertEquals(toggled, settings.useCardIconBackgrounds())
     }
 
+    @Test
+    fun expandedCardsEnabledByDefault() {
+        assertTrue(settings.expandedCardsEnabled())
+    }
+
+    @Test
+    fun toggleExpandedCardsReturnsNewValue() {
+        val toggled = settings.toggleExpandedCards()
+        assertFalse(toggled)
+        assertEquals(toggled, settings.expandedCardsEnabled())
+    }
+
     // ---- pinned / hidden apps ----
 
     @Test

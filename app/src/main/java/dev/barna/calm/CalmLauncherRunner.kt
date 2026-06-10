@@ -220,6 +220,7 @@ class CalmLauncherRunner(
     private var activePreferences: LauncherUiPreferences = settings.uiPreferences()
     private var appCardSettingsSnapshot: LauncherUiPreferences = activePreferences
     private var settingsChangeToken = settings.launcherChangeToken()
+    private var renderedNotificationRevision = CalmNotificationListenerService.revision()
     private var packageChangeReceiverRegistered = false
     private var pagePrewarmGeneration = 0
     private var suppressedPageEntryKey: String? = null
@@ -248,10 +249,15 @@ class CalmLauncherRunner(
         val hasCurrentScreen = currentScreen != null
         val hasCurrentState = currentUiState != null
         val launcherSettingsChanged = settingsChangeToken != settings.launcherChangeToken()
+        // Notifications can be dismissed while paused (e.g. opening an app clears its notifications).
+        // The listener service tracks the live snapshot regardless of foreground state, so compare
+        // its revision against what we last rendered to drop stale cards on resume.
+        val notificationsChanged = renderedNotificationRevision != CalmNotificationListenerService.revision()
         if (resumeRefreshPolicy.shouldRefreshImmediately(
                 hasCurrentScreen = hasCurrentScreen,
                 hasCurrentState = hasCurrentState,
                 launcherSettingsChanged = launcherSettingsChanged,
+                notificationsChanged = notificationsChanged,
             )
         ) {
             if (hasCurrentScreen && hasCurrentState) {
@@ -303,6 +309,7 @@ class CalmLauncherRunner(
         )
         activePreferences = state.preferences
         settingsChangeToken = settings.launcherChangeToken()
+        renderedNotificationRevision = CalmNotificationListenerService.revision()
         val pages = state.pages
         val initialPage = resolveInitialPage(pages)
 

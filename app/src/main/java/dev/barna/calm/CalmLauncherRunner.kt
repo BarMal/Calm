@@ -210,6 +210,17 @@ class CalmLauncherRunner(
         label = ::label,
     )
     private var pendingWidgetId = -1
+    private val customHomePageController = CustomHomePageController(
+        activity = activity,
+        settings = settings,
+        drawables = drawables,
+        appEntries = { currentUiState?.appEntries.orEmpty() },
+        resolveIcon = { notificationRepository.resolveAppIconBitmap(it) },
+        openAppEntry = ::openAppEntry,
+        onChanged = ::render,
+        barePagePanel = ::createBarePagePanel,
+        label = ::label,
+    )
     private val pageFactory = LauncherPageFactory(
         activity = activity,
         overviewPageBuilder = overviewPageBuilder,
@@ -220,6 +231,7 @@ class CalmLauncherRunner(
         appLibraryStore = appLibraryStore,
         contactsPageController = contactsPageController,
         widgetsPageController = widgetsPageController,
+        customHomePageController = customHomePageController,
         barePagePanel = ::createBarePagePanel,
         label = ::label,
     )
@@ -548,6 +560,7 @@ class CalmLauncherRunner(
     // The fixed-key landing page for the configured default-home slot, used only when no page has
     // been visited yet. NOTIFICATIONS has no fixed key, so it falls back to the overview.
     private fun defaultHomeKey(): String = when (settings.pageLayout().defaultHome) {
+        PageSlot.CUSTOM_HOME -> CalmTheme.CUSTOM_HOME_KEY
         PageSlot.OVERVIEW -> CalmTheme.OVERVIEW_KEY
         PageSlot.WORK_OVERVIEW -> CalmTheme.WORK_OVERVIEW_KEY
         PageSlot.PINNED -> CalmTheme.PINNED_KEY

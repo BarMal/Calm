@@ -242,6 +242,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             expandedCardsEnabled = expandedCardsEnabled(),
             contactsPageEnabled = contactsPageEnabled(),
             widgetsPageEnabled = widgetsPageEnabled(),
+            customHomeEnabled = customHomeEnabled(),
             cardAppearance = cardAppearance(),
             pageLayout = pageLayout(),
             chrome = chrome(),
@@ -256,6 +257,32 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         val nextValue = !widgetsPageEnabled()
         preferences.edit().putBoolean(PREF_WIDGETS_PAGE, nextValue).apply()
         return nextValue
+    }
+
+    fun customHomeEnabled(): Boolean {
+        return preferences.getBoolean(PREF_CUSTOM_HOME, false)
+    }
+
+    fun toggleCustomHome(): Boolean {
+        val nextValue = !customHomeEnabled()
+        preferences.edit().putBoolean(PREF_CUSTOM_HOME, nextValue).apply()
+        return nextValue
+    }
+
+    fun homeGrid(): HomeGrid {
+        val columns = preferences.getInt(PREF_HOME_GRID_COLUMNS, HomeGrid.DEFAULT_COLUMNS)
+        return HomeGrid.decode(preferences.getString(PREF_HOME_GRID_ITEMS, null), columns)
+    }
+
+    fun setHomeGrid(grid: HomeGrid) {
+        preferences.edit()
+            .putInt(PREF_HOME_GRID_COLUMNS, grid.columns.coerceIn(HomeGrid.MIN_COLUMNS, HomeGrid.MAX_COLUMNS))
+            .putString(PREF_HOME_GRID_ITEMS, grid.encode())
+            .apply()
+    }
+
+    fun setHomeGridColumns(columns: Int) {
+        preferences.edit().putInt(PREF_HOME_GRID_COLUMNS, columns.coerceIn(HomeGrid.MIN_COLUMNS, HomeGrid.MAX_COLUMNS)).apply()
     }
 
     fun widgetIds(): List<Int> {
@@ -632,6 +659,9 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_CONTACTS_PAGE = "contacts_page"
         private const val PREF_WIDGETS_PAGE = "widgets_page"
         private const val PREF_WIDGET_IDS = "widget_ids"
+        private const val PREF_CUSTOM_HOME = "custom_home_enabled"
+        private const val PREF_HOME_GRID_COLUMNS = "home_grid_columns"
+        private const val PREF_HOME_GRID_ITEMS = "home_grid_items"
         private const val PREF_LAST_PAGE_KEY = "last_page_key"
         private const val PREF_DOCK_ENABLED = "dock_enabled"
         private const val PREF_DOCK_ITEM_COUNT = "dock_item_count"

@@ -48,6 +48,11 @@ class ChapterPage private constructor(
         }
 
         @JvmStatic
+        fun customHome(customHomeKey: String, marker: String): ChapterPage {
+            return ChapterPage(customHomeKey, marker, "Home", null, null)
+        }
+
+        @JvmStatic
         fun workOverview(workOverviewKey: String, marker: String): ChapterPage {
             return ChapterPage(workOverviewKey, marker, "Work", null, null)
         }

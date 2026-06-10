@@ -13,6 +13,11 @@ class ChapterPagePlanner {
         val pages = ArrayList<ChapterPage>()
         var chapterNumber = 1
 
+        if (preferences.customHomeEnabled) {
+            pages.add(ChapterPage.customHome(CalmTheme.CUSTOM_HOME_KEY, roman(chapterNumber)))
+            chapterNumber++
+        }
+
         val chapterByPackage = notificationChapters.associateBy { it.packageName }
         val appEntryByPackage = appEntries.associateBy { it.packageName }
 

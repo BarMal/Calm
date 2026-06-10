@@ -152,6 +152,11 @@ class CalmSettingsActivity : ComponentActivity() {
             valueText = { "Very light / ${it + 1} of 5" },
         ) { settings.setCardHapticStrength(it + 1) })
 
+        content.addView(section("Pages"))
+        content.addView(actionRow("Page layout", "Reorder pages, toggle presets, and set the home page.") {
+            showPageLayoutDialog()
+        })
+
         content.addView(section("Apps"))
         content.addView(switchRow(
             title = "Split personal and work apps",
@@ -360,6 +365,72 @@ class CalmSettingsActivity : ComponentActivity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun pageSlotLabel(slot: PageSlot): String = when (slot) {
+        PageSlot.APPS -> "Apps"
+        PageSlot.PINNED -> "Pinned"
+        PageSlot.CONTACTS -> "People"
+        PageSlot.OVERVIEW -> "Overview"
+        PageSlot.WORK_OVERVIEW -> "Work overview"
+        PageSlot.NOTIFICATIONS -> "Notifications"
+    }
+
+    private fun showPageLayoutDialog() {
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
+        lateinit var rebuild: () -> Unit
+        rebuild = {
+            list.removeAllViews()
+            val layout = settings.pageLayout()
+            layout.order.forEachIndexed { index, slot ->
+                list.addView(pageLayoutRow(layout, slot, index, rebuild))
+            }
+        }
+        rebuild()
+        AlertDialog.Builder(this)
+            .setTitle("Page layout")
+            .setView(ScrollView(this).apply { addView(list) })
+            .setPositiveButton("Done") { _, _ -> requestRender() }
+            .show()
+    }
+
+    private fun pageLayoutRow(layout: LauncherPageLayout, slot: PageSlot, index: Int, rebuild: () -> Unit): View {
+        val isHome = layout.defaultHome == slot
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(6), 0, dp(6))
+            addView(
+                label(if (isHome) "${pageSlotLabel(slot)}  ·  Home" else pageSlotLabel(slot), 16, CalmTheme.INK, Typeface.NORMAL),
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            addView(miniButton(if (isHome) "Home" else "Set home") { settings.setDefaultHomeSlot(slot); rebuild() })
+            addView(Switch(this@CalmSettingsActivity).apply {
+                isChecked = slot !in layout.disabled
+                setOnClickListener { settings.setPageSlotEnabled(slot, isChecked); rebuild() }
+            })
+            addView(miniButton("↑") {
+                if (index > 0) { settings.setPageLayoutOrder(movedSlot(layout.order, index, index - 1)); rebuild() }
+            })
+            addView(miniButton("↓") {
+                if (index < layout.order.lastIndex) { settings.setPageLayoutOrder(movedSlot(layout.order, index, index + 1)); rebuild() }
+            })
+        }
+    }
+
+    private fun miniButton(text: String, onClick: () -> Unit): TextView {
+        return label(text, 13, CalmTheme.INK, Typeface.NORMAL).apply {
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            isClickable = true
+            setOnClickListener { onClick() }
+        }
+    }
+
+    private fun movedSlot(order: List<PageSlot>, from: Int, to: Int): List<PageSlot> {
+        return order.toMutableList().apply { add(to, removeAt(from)) }
     }
 
     private fun hiddenAppsSummary(): String {

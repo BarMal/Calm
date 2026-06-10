@@ -242,7 +242,40 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             expandedCardsEnabled = expandedCardsEnabled(),
             contactsPageEnabled = contactsPageEnabled(),
             cardAppearance = cardAppearance(),
+            pageLayout = pageLayout(),
         )
+    }
+
+    fun pageLayout(): LauncherPageLayout {
+        val storedOrder = preferences.getString(PREF_PAGE_LAYOUT_ORDER, null)
+            ?.split(',')
+            ?.mapNotNull { name -> runCatching { PageSlot.valueOf(name) }.getOrNull() }
+            ?.distinct()
+            .orEmpty()
+        // Append any slots missing from the stored order (e.g. added in a later version).
+        val order = storedOrder + LauncherPageLayout.DEFAULT_ORDER.filter { it !in storedOrder }
+        val disabled = preferences.getStringSet(PREF_PAGE_LAYOUT_DISABLED, emptySet())
+            .orEmpty()
+            .mapNotNull { name -> runCatching { PageSlot.valueOf(name) }.getOrNull() }
+            .toSet()
+        val home = preferences.getString(PREF_PAGE_LAYOUT_HOME, null)
+            ?.let { name -> runCatching { PageSlot.valueOf(name) }.getOrNull() }
+            ?: PageSlot.OVERVIEW
+        return LauncherPageLayout(order, disabled, home)
+    }
+
+    fun setPageLayoutOrder(order: List<PageSlot>) {
+        preferences.edit().putString(PREF_PAGE_LAYOUT_ORDER, order.joinToString(",") { it.name }).apply()
+    }
+
+    fun setPageSlotEnabled(slot: PageSlot, enabled: Boolean) {
+        val disabled = pageLayout().disabled.toMutableSet()
+        if (enabled) disabled.remove(slot) else disabled.add(slot)
+        preferences.edit().putStringSet(PREF_PAGE_LAYOUT_DISABLED, disabled.map { it.name }.toSet()).apply()
+    }
+
+    fun setDefaultHomeSlot(slot: PageSlot) {
+        preferences.edit().putString(PREF_PAGE_LAYOUT_HOME, slot.name).apply()
     }
 
     fun cardAppearance(): CardAppearance {
@@ -538,6 +571,9 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_CARD_STACK_ADVANCED = "card_stack_advanced"
         private const val PREF_CARD_STACK_PEAK_POSITION = "card_stack_peak_position"
         private const val PREF_CARD_STACK_NON_TOP_OPACITY = "card_stack_non_top_opacity"
+        private const val PREF_PAGE_LAYOUT_ORDER = "page_layout_order"
+        private const val PREF_PAGE_LAYOUT_DISABLED = "page_layout_disabled"
+        private const val PREF_PAGE_LAYOUT_HOME = "page_layout_home"
         private const val PREF_CARD_EFFECT = "card_effect"
         private const val PREF_CARD_EFFECT_STRENGTH = "card_effect_strength"
         private const val PREF_CARD_TINT_STRENGTH = "card_tint_strength"

@@ -177,6 +177,17 @@ class CalmLauncherRunner(
         openPackage = ::openPackage,
         toggleNotificationGrouping = settingsToggleHandler::toggleNotificationGrouping,
     )
+    private val pageFactory = LauncherPageFactory(
+        activity = activity,
+        overviewPageBuilder = overviewPageBuilder,
+        chapterPageBuilder = chapterPageBuilder,
+        appLibraryController = appLibraryController,
+        appSearchController = appSearchController,
+        appLibraryPageModelFactory = appLibraryPageModelFactory,
+        appLibraryStore = appLibraryStore,
+        barePagePanel = ::createBarePagePanel,
+        label = ::label,
+    )
     private val stateExecutor = Executors.newFixedThreadPool(4)
     private val appLibraryDataManager = LauncherAppLibraryDataManager(
         notificationRepository = notificationRepository,
@@ -328,7 +339,7 @@ class CalmLauncherRunner(
         screen.addView(root, matchParentParams())
         root.addView(createHeader())
 
-        val pagerAdapter = ChapterPagerAdapter(pages) { page -> createPage(page, state) }
+        val pagerAdapter = ChapterPagerAdapter(pages) { page -> pageFactory.createPage(page, state) }
         val pager = ViewPager2(activity).apply {
             currentPager = this
             adapter = pagerAdapter
@@ -441,15 +452,6 @@ class CalmLauncherRunner(
         launcherStateViewModel.selectPage(pageKey)
     }
 
-    private fun createPage(page: ChapterPage, state: LauncherRenderModel): View {
-        return when {
-            page.appScope != null -> createAppLibraryPage(page, state.appEntries)
-            page.key == CalmTheme.PINNED_KEY -> createPinnedPage(state.pinnedApps)
-            page.chapter == null -> createOverviewPage(state)
-            else -> createChapterPage(page.chapter)
-        }
-    }
-
     private fun schedulePagePrewarm(
         pager: ViewPager2,
         adapter: ChapterPagerAdapter,
@@ -512,59 +514,6 @@ class CalmLauncherRunner(
             })
         }
     }
-
-    private fun createOverviewPage(state: LauncherRenderModel): LinearLayout =
-        overviewPageBuilder.buildPage(state)
-
-    private fun createPinnedPage(pinnedApps: List<AppEntry>): LinearLayout {
-        return createBarePagePanel(activity.dp(20)).apply {
-            addView(animatedChrome(label("Pinned", 30, CalmTheme.INK, Typeface.NORMAL).apply {
-                setPadding(0, activity.dp(8), 0, activity.dp(24))
-            }))
-            addView(
-                appLibraryController.appStack(pinnedApps, stackKey = CardStackStateKey.appEntries("pinned", pinnedApps)),
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
-            )
-        }
-    }
-
-    private fun createAppLibraryPage(pageModel: ChapterPage, appEntries: List<AppEntry>): LinearLayout {
-        val scope = pageModel.appScope ?: AppLibraryScope.ALL
-        val model = appLibraryPageModelFactory.create(
-            page = pageModel,
-            appEntries = appEntries,
-            query = appSearchController.queryFor(scope),
-            loading = appLibraryStore.state().loading,
-        )
-        val page = createBarePagePanel(activity.dp(20))
-        val header = LinearLayout(activity).apply {
-            tag = CalmAnimationTags.CHROME
-            orientation = LinearLayout.VERTICAL
-            clipToPadding = false
-            clipChildren = false
-            addView(label(model.title, 30, CalmTheme.INK, Typeface.NORMAL).apply {
-                setPadding(0, activity.dp(8), 0, 0)
-            })
-            model.subtitle?.let { subtitle ->
-                addView(label(subtitle, 15, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
-                    setPadding(0, activity.dp(6), 0, activity.dp(18))
-                })
-            }
-        }
-        page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        val stackHost = FrameLayout(activity).apply {
-            clipChildren = false
-            clipToPadding = false
-        }
-        page.addView(stackHost, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        val searchBox = appSearchController.registerPage(pageModel, page, header, stackHost, model)
-        page.addView(animatedChrome(searchBox), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = activity.dp(12)
-        })
-        return page
-    }
-
-    private fun createChapterPage(chapter: AppChapter): LinearLayout = chapterPageBuilder.buildPage(chapter)
 
     private fun createPagePanel(backgroundImage: android.graphics.Bitmap?, hueColor: Int): LinearLayout {
         return LinearLayout(activity).apply {
@@ -634,10 +583,6 @@ class CalmLauncherRunner(
                 bottomMargin = activity.dp(12)
             }
         }
-    }
-
-    private fun animatedChrome(view: View): View {
-        return view.apply { tag = CalmAnimationTags.CHROME }
     }
 
     private fun label(text: String, sp: Int, color: Int, style: Int): TextView {

@@ -145,6 +145,12 @@ class CalmSettingsActivity : ComponentActivity() {
             checked = settings.placeWorkNotificationChaptersBeforeApps(),
         ) { settings.toggleWorkNotificationChaptersBeforeApps(); requestRender() })
         content.addView(actionRow(
+            "Page order",
+            "Sorted by ${pageSortLabel(settings.pageSortOrder())}.",
+        ) {
+            showPageSortDialog()
+        })
+        content.addView(actionRow(
             "Hidden apps",
             hiddenAppsSummary(),
         ) {
@@ -252,6 +258,32 @@ class CalmSettingsActivity : ComponentActivity() {
             })
             setOnClickListener { action() }
         }
+    }
+
+    private fun pageSortLabel(order: PageSortOrder): String {
+        return when (order) {
+            PageSortOrder.APP_NAME_ASC -> "app name (A–Z)"
+            PageSortOrder.APP_NAME_DESC -> "app name (Z–A)"
+            PageSortOrder.NOTIFICATION_AGE_NEWEST -> "newest notification first"
+            PageSortOrder.NOTIFICATION_AGE_OLDEST -> "oldest notification first"
+        }
+    }
+
+    private fun showPageSortDialog() {
+        val options = PageSortOrder.entries.toTypedArray()
+        val current = options.indexOf(settings.pageSortOrder()).coerceAtLeast(0)
+        val labels = options.map { order ->
+            pageSortLabel(order).replaceFirstChar { it.titlecase(Locale.getDefault()) }
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Page order")
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                settings.setPageSortOrder(options[which])
+                requestRender()
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun hiddenAppsSummary(): String {

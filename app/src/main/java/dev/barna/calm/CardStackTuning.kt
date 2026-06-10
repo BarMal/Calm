@@ -12,7 +12,9 @@ data class CardStackTuning(
     val focusedCardScale: Int = 32,
     val magnetStrength: Int = 70,
     val stackPeakPosition: Int = 50,
+    val nonTopCardOpacity: Int = 100,
 ) {
+    val nonTopCardOpacityFactor: Float = nonTopCardOpacity.coerceIn(0, 100) / 100f
     val curveFactor: Float = curve / 50f
     val stackPeakFraction: Float = stackPeakPosition.coerceIn(0, 100) / 100f
     val horizontalCurveFactor: Float = horizontalCurve / 100f

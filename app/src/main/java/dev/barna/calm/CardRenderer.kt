@@ -77,6 +77,7 @@ class CardRenderer(
                 sideImageAlpha,
                 prefs.cardIconBlur,
                 iconRenderData,
+                prefs.cardAppearance,
             )
             if (sideImage != null && !showImageAsBackground) {
                 compoundDrawablePadding = activity.dp(14)

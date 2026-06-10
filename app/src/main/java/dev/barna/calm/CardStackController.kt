@@ -337,7 +337,9 @@ class CardStackController(
             return CalmColor.lerp(1f, 0f, CalmColor.clamp01(-visualDepth / tuning.outgoingVisibleRange))
         }
         val visibleTail = maxOf(1f, tuning.visibleCards - 1f)
-        val dimAmount = CalmColor.lerp(0.72f, 0.44f, tuning.curveFactor)
+        // The top card stays fully opaque; non-top cards fade toward dimAmount, scaled by the
+        // configurable non-top opacity so the focused card can be emphasised more strongly.
+        val dimAmount = CalmColor.lerp(0.72f, 0.44f, tuning.curveFactor) * tuning.nonTopCardOpacityFactor
         if (visualDepth <= tuning.visibleCards - 1f) {
             return CalmColor.lerp(1f, dimAmount, visualDepth / visibleTail)
         }

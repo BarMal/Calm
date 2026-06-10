@@ -237,7 +237,31 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             pageSortOrder = pageSortOrder(),
             expandedCardsEnabled = expandedCardsEnabled(),
             contactsPageEnabled = contactsPageEnabled(),
+            cardAppearance = cardAppearance(),
         )
+    }
+
+    fun cardAppearance(): CardAppearance {
+        val effect = runCatching {
+            CardEffect.valueOf(preferences.getString(PREF_CARD_EFFECT, CardEffect.GLASS.name) ?: CardEffect.GLASS.name)
+        }.getOrDefault(CardEffect.GLASS)
+        return CardAppearance(
+            effect = effect,
+            effectStrength = preferences.getInt(PREF_CARD_EFFECT_STRENGTH, 100).coerceIn(0, 100),
+            tintStrength = preferences.getInt(PREF_CARD_TINT_STRENGTH, 100).coerceIn(0, 100),
+        )
+    }
+
+    fun setCardEffect(effect: CardEffect) {
+        preferences.edit().putString(PREF_CARD_EFFECT, effect.name).apply()
+    }
+
+    fun setCardEffectStrength(strength: Int) {
+        preferences.edit().putInt(PREF_CARD_EFFECT_STRENGTH, strength.coerceIn(0, 100)).apply()
+    }
+
+    fun setCardTintStrength(strength: Int) {
+        preferences.edit().putInt(PREF_CARD_TINT_STRENGTH, strength.coerceIn(0, 100)).apply()
     }
 
     fun expandedCardsEnabled(): Boolean {
@@ -370,7 +394,12 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             focusedCardScale = preferences.getInt(PREF_CARD_STACK_FOCUSED_SCALE, 32).coerceIn(0, 100),
             magnetStrength = preferences.getInt(PREF_CARD_STACK_MAGNET_STRENGTH, 70).coerceIn(0, 100),
             stackPeakPosition = preferences.getInt(PREF_CARD_STACK_PEAK_POSITION, 20).coerceIn(0, 100),
+            nonTopCardOpacity = preferences.getInt(PREF_CARD_STACK_NON_TOP_OPACITY, 100).coerceIn(0, 100),
         )
+    }
+
+    fun setNonTopCardOpacity(opacity: Int) {
+        preferences.edit().putInt(PREF_CARD_STACK_NON_TOP_OPACITY, opacity.coerceIn(0, 100)).apply()
     }
 
     fun setCardStackCurve(curve: Int) {
@@ -504,6 +533,10 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_CARD_STACK_MAGNET_STRENGTH = "card_stack_magnet_strength"
         private const val PREF_CARD_STACK_ADVANCED = "card_stack_advanced"
         private const val PREF_CARD_STACK_PEAK_POSITION = "card_stack_peak_position"
+        private const val PREF_CARD_STACK_NON_TOP_OPACITY = "card_stack_non_top_opacity"
+        private const val PREF_CARD_EFFECT = "card_effect"
+        private const val PREF_CARD_EFFECT_STRENGTH = "card_effect_strength"
+        private const val PREF_CARD_TINT_STRENGTH = "card_tint_strength"
         private const val PREF_CARD_VIBRANCY = "card_vibrancy"
         private const val PREF_PAGE_SORT_ORDER = "page_sort_order"
         private const val PREF_EXPANDED_CARDS = "expanded_cards"

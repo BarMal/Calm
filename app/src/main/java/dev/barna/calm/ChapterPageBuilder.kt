@@ -204,6 +204,12 @@ class ChapterPageBuilder(
                     setPadding(0, activity.dp(14), 0, 0)
                 })
             }
+            val media = MediaNotificationControls.from(item.notifications)
+            if (media.hasAnyAction) {
+                addView(mediaControlsRow(media), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = activity.dp(16)
+                })
+            }
         }
     }
 

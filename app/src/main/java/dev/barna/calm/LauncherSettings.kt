@@ -241,10 +241,35 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             pageSortOrder = pageSortOrder(),
             expandedCardsEnabled = expandedCardsEnabled(),
             contactsPageEnabled = contactsPageEnabled(),
+            widgetsPageEnabled = widgetsPageEnabled(),
             cardAppearance = cardAppearance(),
             pageLayout = pageLayout(),
             chrome = chrome(),
         )
+    }
+
+    fun widgetsPageEnabled(): Boolean {
+        return preferences.getBoolean(PREF_WIDGETS_PAGE, false)
+    }
+
+    fun toggleWidgetsPage(): Boolean {
+        val nextValue = !widgetsPageEnabled()
+        preferences.edit().putBoolean(PREF_WIDGETS_PAGE, nextValue).apply()
+        return nextValue
+    }
+
+    fun widgetIds(): List<Int> {
+        val raw = preferences.getString(PREF_WIDGET_IDS, "") ?: ""
+        return raw.split(',').mapNotNull { it.trim().toIntOrNull() }
+    }
+
+    fun addWidgetId(widgetId: Int) {
+        if (widgetId in widgetIds()) return
+        preferences.edit().putString(PREF_WIDGET_IDS, (widgetIds() + widgetId).joinToString(",")).apply()
+    }
+
+    fun removeWidgetId(widgetId: Int) {
+        preferences.edit().putString(PREF_WIDGET_IDS, (widgetIds() - widgetId).joinToString(",")).apply()
     }
 
     fun chrome(): LauncherChrome {
@@ -605,6 +630,8 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_PAGE_SORT_ORDER = "page_sort_order"
         private const val PREF_EXPANDED_CARDS = "expanded_cards"
         private const val PREF_CONTACTS_PAGE = "contacts_page"
+        private const val PREF_WIDGETS_PAGE = "widgets_page"
+        private const val PREF_WIDGET_IDS = "widget_ids"
         private const val PREF_LAST_PAGE_KEY = "last_page_key"
         private const val PREF_DOCK_ENABLED = "dock_enabled"
         private const val PREF_DOCK_ITEM_COUNT = "dock_item_count"

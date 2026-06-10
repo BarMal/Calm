@@ -32,11 +32,13 @@ class CalmLauncherRunner(
     private val activity: MainActivity,
     private val launcherStateViewModel: LauncherStateViewModel,
     requestCalendarPermission: () -> Unit,
+    requestContactsPermission: () -> Unit,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val settings = LauncherSettings(activity)
     private val notificationRepository = NotificationChapterRepository(activity, settings)
     private val calendarRepository = CalendarRepository(activity, requestCalendarPermission)
+    private val contactsRepository = ContactsRepository(activity, requestContactsPermission)
     private val drawables = CalmDrawables(activity)
     private val cardSpec = CalmCardSpec()
     private val pinnedAppResolver = PinnedAppResolver()
@@ -177,6 +179,18 @@ class CalmLauncherRunner(
         openPackage = ::openPackage,
         toggleNotificationGrouping = settingsToggleHandler::toggleNotificationGrouping,
     )
+    private val contactsPageController = ContactsPageController(
+        activity = activity,
+        contactsRepository = contactsRepository,
+        drawables = drawables,
+        cardRenderer = cardRenderer,
+        cardStackController = cardStackController,
+        focusOverlay = focusOverlay,
+        mainHandler = mainHandler,
+        activePreferences = { activePreferences },
+        barePagePanel = ::createBarePagePanel,
+        label = ::label,
+    )
     private val pageFactory = LauncherPageFactory(
         activity = activity,
         overviewPageBuilder = overviewPageBuilder,
@@ -185,6 +199,7 @@ class CalmLauncherRunner(
         appSearchController = appSearchController,
         appLibraryPageModelFactory = appLibraryPageModelFactory,
         appLibraryStore = appLibraryStore,
+        contactsPageController = contactsPageController,
         barePagePanel = ::createBarePagePanel,
         label = ::label,
     )
@@ -293,6 +308,10 @@ class CalmLauncherRunner(
 
     fun onCalendarPermissionResult() {
         stateManager.refreshAsync()
+    }
+
+    fun onContactsPermissionResult() {
+        render()
     }
 
     private fun configureWindow() {

@@ -38,6 +38,11 @@ class ChapterPage private constructor(
         }
 
         @JvmStatic
+        fun contacts(contactsKey: String, marker: String): ChapterPage {
+            return ChapterPage(contactsKey, marker, "People", null, null)
+        }
+
+        @JvmStatic
         fun notifications(chapter: AppChapter, marker: String): ChapterPage {
             return ChapterPage(chapter.identityKey, marker, chapter.label, chapter, null)
         }

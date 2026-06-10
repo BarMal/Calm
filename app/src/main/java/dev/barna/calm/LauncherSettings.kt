@@ -236,6 +236,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             cardVibrancy = cardVibrancy(),
             pageSortOrder = pageSortOrder(),
             expandedCardsEnabled = expandedCardsEnabled(),
+            contactsPageEnabled = contactsPageEnabled(),
         )
     }
 
@@ -246,6 +247,16 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     fun toggleExpandedCards(): Boolean {
         val nextValue = !expandedCardsEnabled()
         preferences.edit().putBoolean(PREF_EXPANDED_CARDS, nextValue).apply()
+        return nextValue
+    }
+
+    fun contactsPageEnabled(): Boolean {
+        return preferences.getBoolean(PREF_CONTACTS_PAGE, false)
+    }
+
+    fun toggleContactsPage(): Boolean {
+        val nextValue = !contactsPageEnabled()
+        preferences.edit().putBoolean(PREF_CONTACTS_PAGE, nextValue).apply()
         return nextValue
     }
 
@@ -488,6 +499,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_CARD_VIBRANCY = "card_vibrancy"
         private const val PREF_PAGE_SORT_ORDER = "page_sort_order"
         private const val PREF_EXPANDED_CARDS = "expanded_cards"
+        private const val PREF_CONTACTS_PAGE = "contacts_page"
         private const val PREF_DOCK_ENABLED = "dock_enabled"
         private const val PREF_DOCK_ITEM_COUNT = "dock_item_count"
         private const val PREF_DOCK_VERTICAL_PADDING = "dock_vertical_padding"

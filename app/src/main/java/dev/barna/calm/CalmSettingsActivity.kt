@@ -145,6 +145,11 @@ class CalmSettingsActivity : ComponentActivity() {
             checked = settings.splitAppsByProfile(),
         ) { settings.toggleSplitAppsByProfile(); requestRender() })
         content.addView(switchRow(
+            title = "Favourite contacts page",
+            summary = "Add a People page with your starred contacts and ways to reach them.",
+            checked = settings.contactsPageEnabled(),
+        ) { settings.toggleContactsPage(); requestRender() })
+        content.addView(switchRow(
             title = "Work notifications on the left",
             summary = "Place work notification chapters before the app chapters.",
             checked = settings.placeWorkNotificationChaptersBeforeApps(),

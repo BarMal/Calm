@@ -56,6 +56,10 @@ class ChapterPagePlanner {
             pages.add(ChapterPage.pinned(CalmTheme.PINNED_KEY, roman(chapterNumber)))
             chapterNumber++
         }
+        if (preferences.contactsPageEnabled) {
+            pages.add(ChapterPage.contacts(CalmTheme.CONTACTS_KEY, roman(chapterNumber)))
+            chapterNumber++
+        }
         pages.add(ChapterPage.overview(CalmTheme.OVERVIEW_KEY).withMarker(roman(chapterNumber)))
         chapterNumber++
         standardChapters.forEach { chapter ->

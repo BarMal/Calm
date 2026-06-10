@@ -190,6 +190,11 @@ class CalmSettingsActivity : ComponentActivity() {
             checked = settings.widgetsPageEnabled(),
         ) { settings.toggleWidgetsPage(); requestRender() })
         content.addView(switchRow(
+            title = "Custom home page",
+            summary = "Add a grid home page where you place app icons.",
+            checked = settings.customHomeEnabled(),
+        ) { settings.toggleCustomHome(); requestRender() })
+        content.addView(switchRow(
             title = "Work notifications on the left",
             summary = "Place work notification chapters before the app chapters.",
             checked = settings.placeWorkNotificationChaptersBeforeApps(),

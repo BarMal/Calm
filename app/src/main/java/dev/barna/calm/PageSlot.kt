@@ -5,6 +5,7 @@ package dev.barna.calm
  * Notification pages collapse into a single movable NOTIFICATIONS "cluster".
  */
 enum class PageSlot {
+    CUSTOM_HOME,
     APPS,
     PINNED,
     CONTACTS,
@@ -15,6 +16,7 @@ enum class PageSlot {
 }
 
 fun PageSlot.displayName(): String = when (this) {
+    PageSlot.CUSTOM_HOME -> "Home"
     PageSlot.APPS -> "Apps"
     PageSlot.PINNED -> "Pinned"
     PageSlot.CONTACTS -> "People"
@@ -38,6 +40,7 @@ data class LauncherPageLayout(
 
     companion object {
         val DEFAULT_ORDER: List<PageSlot> = listOf(
+            PageSlot.CUSTOM_HOME,
             PageSlot.APPS,
             PageSlot.PINNED,
             PageSlot.CONTACTS,
@@ -53,6 +56,7 @@ data class LauncherPageLayout(
 /** Classifies built pages into slots and rearranges them to honour a [LauncherPageLayout]. */
 object PageArranger {
     fun slotOf(page: ChapterPage): PageSlot = when {
+        page.key == CalmTheme.CUSTOM_HOME_KEY -> PageSlot.CUSTOM_HOME
         page.appScope != null -> PageSlot.APPS
         page.key == CalmTheme.PINNED_KEY -> PageSlot.PINNED
         page.key == CalmTheme.CONTACTS_KEY -> PageSlot.CONTACTS

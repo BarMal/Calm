@@ -156,6 +156,7 @@ class ChapterPageBuilder(
                     data.mediaBackgroundImage,
                     chapter.hueColor,
                     tintCards,
+                    activePreferences().cardAppearance,
                 )
             }
             maxLines = 4

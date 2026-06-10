@@ -108,6 +108,20 @@ class CalmSettingsActivity : ComponentActivity() {
             summary = "Long-press a card to expand it with its actions. Tap still opens the app.",
             checked = settings.expandedCardsEnabled(),
         ) { settings.toggleExpandedCards(); requestRender() })
+        val appearance = settings.cardAppearance()
+        content.addView(actionRow("Card effect", cardEffectLabel(appearance.effect)) { showCardEffectDialog() })
+        content.addView(sliderRow(
+            title = "Effect strength",
+            progress = appearance.effectStrength,
+            max = 100,
+            valueText = { if (it == 0) "Flat cards" else "${it}% effect" },
+        ) { settings.setCardEffectStrength(it) })
+        content.addView(sliderRow(
+            title = "Card tint",
+            progress = appearance.tintStrength,
+            max = 100,
+            valueText = { if (it == 0) "No tint" else "${it}% tint" },
+        ) { settings.setCardTintStrength(it) })
         content.addView(sliderRow(
             title = "Card rounding",
             progress = settings.cardCornerRadiusDp(),
@@ -213,6 +227,8 @@ class CalmSettingsActivity : ComponentActivity() {
             },
         ) { settings.setCardStackHorizontalCurve(it) })
         content.addView(sliderRow("Arc width", tuning.arcWidth, 100, { "${it}% broadness" }) { settings.setCardStackArcWidth(it) })
+        content.addView(sliderRow("Magnet strength", tuning.magnetStrength, 100, { if (it == 0) "No snap" else "${it}% snap" }) { settings.setMagnetStrength(it) })
+        content.addView(sliderRow("Background card fade", tuning.nonTopCardOpacity, 100, { if (it == 100) "Default fade" else "${it}% visible" }) { settings.setNonTopCardOpacity(it) })
         content.addView(stepperRow("Cards above focus", tuning.aboveFocusCards, 0, 4) { settings.setAboveFocusCardCount(it); requestRender() })
         content.addView(sliderRow("Card fan rotation", tuning.rotation, 100, { if (it == 0) "Cards stay flat" else "${it}% tilt" }) { settings.setCardStackRotation(it) })
         content.addView(switchRow(
@@ -304,6 +320,29 @@ class CalmSettingsActivity : ComponentActivity() {
             PageSortOrder.NOTIFICATION_AGE_NEWEST -> "newest notification first"
             PageSortOrder.NOTIFICATION_AGE_OLDEST -> "oldest notification first"
         }
+    }
+
+    private fun cardEffectLabel(effect: CardEffect): String {
+        return when (effect) {
+            CardEffect.NONE -> "Solid"
+            CardEffect.FROSTED -> "Frosted"
+            CardEffect.GLASS -> "Glass"
+        }
+    }
+
+    private fun showCardEffectDialog() {
+        val options = CardEffect.entries.toTypedArray()
+        val current = options.indexOf(settings.cardAppearance().effect).coerceAtLeast(0)
+        val labels = options.map(::cardEffectLabel).toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Card effect")
+            .setSingleChoiceItems(labels, current) { dialog, which ->
+                settings.setCardEffect(options[which])
+                requestRender()
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun showPageSortDialog() {

@@ -156,6 +156,22 @@ class CalmSettingsActivity : ComponentActivity() {
         content.addView(actionRow("Page layout", "Reorder pages, toggle presets, and set the home page.") {
             showPageLayoutDialog()
         })
+        val chrome = settings.chrome()
+        content.addView(switchRow(
+            title = "Show clock",
+            summary = "The clock and date at the top of every page.",
+            checked = chrome.showClock,
+        ) { settings.setShowClock(!settings.chrome().showClock); requestRender() })
+        content.addView(switchRow(
+            title = "Show spine",
+            summary = "The page navigation strip.",
+            checked = chrome.showSpine,
+        ) { settings.setShowSpine(!settings.chrome().showSpine); requestRender() })
+        content.addView(switchRow(
+            title = "Spine at bottom",
+            summary = "Move the navigation strip below the pages instead of the top.",
+            checked = chrome.spineAtBottom,
+        ) { settings.setSpineAtBottom(!settings.chrome().spineAtBottom); requestRender() })
 
         content.addView(section("Apps"))
         content.addView(switchRow(

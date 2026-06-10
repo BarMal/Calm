@@ -243,7 +243,28 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             contactsPageEnabled = contactsPageEnabled(),
             cardAppearance = cardAppearance(),
             pageLayout = pageLayout(),
+            chrome = chrome(),
         )
+    }
+
+    fun chrome(): LauncherChrome {
+        return LauncherChrome(
+            showClock = preferences.getBoolean(PREF_CHROME_SHOW_CLOCK, true),
+            showSpine = preferences.getBoolean(PREF_CHROME_SHOW_SPINE, true),
+            spineAtBottom = preferences.getBoolean(PREF_CHROME_SPINE_BOTTOM, false),
+        )
+    }
+
+    fun setShowClock(show: Boolean) {
+        preferences.edit().putBoolean(PREF_CHROME_SHOW_CLOCK, show).apply()
+    }
+
+    fun setShowSpine(show: Boolean) {
+        preferences.edit().putBoolean(PREF_CHROME_SHOW_SPINE, show).apply()
+    }
+
+    fun setSpineAtBottom(atBottom: Boolean) {
+        preferences.edit().putBoolean(PREF_CHROME_SPINE_BOTTOM, atBottom).apply()
     }
 
     fun pageLayout(): LauncherPageLayout {
@@ -571,6 +592,9 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_CARD_STACK_ADVANCED = "card_stack_advanced"
         private const val PREF_CARD_STACK_PEAK_POSITION = "card_stack_peak_position"
         private const val PREF_CARD_STACK_NON_TOP_OPACITY = "card_stack_non_top_opacity"
+        private const val PREF_CHROME_SHOW_CLOCK = "chrome_show_clock"
+        private const val PREF_CHROME_SHOW_SPINE = "chrome_show_spine"
+        private const val PREF_CHROME_SPINE_BOTTOM = "chrome_spine_bottom"
         private const val PREF_PAGE_LAYOUT_ORDER = "page_layout_order"
         private const val PREF_PAGE_LAYOUT_DISABLED = "page_layout_disabled"
         private const val PREF_PAGE_LAYOUT_HOME = "page_layout_home"

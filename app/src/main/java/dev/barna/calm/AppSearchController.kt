@@ -201,16 +201,13 @@ class AppSearchController(
     }
 
     private fun animatePage(page: View, keyboardHeight: Int) {
-        val target = if (keyboardHeight > 0) {
-            -(keyboardHeight - activity.dp(34)).coerceAtLeast(0).toFloat()
-        } else {
-            0f
-        }
-        if (kotlin.math.abs(page.translationY - target) < 1f) return
-        page.animate()
-            .translationY(target)
-            .setDuration(220L)
-            .start()
+        // Raise the page's bottom inset for the keyboard instead of translating the whole page up.
+        // The weighted card stack shrinks to stay fully on-screen above the (lifted) search bar,
+        // rather than being pushed off the top.
+        val extra = if (keyboardHeight > 0) (keyboardHeight - activity.dp(34)).coerceAtLeast(0) else 0
+        val targetBottom = activity.dp(PAGE_BASE_BOTTOM_PADDING_DP) + extra
+        if (page.paddingBottom == targetBottom) return
+        page.setPadding(page.paddingLeft, page.paddingTop, page.paddingRight, targetBottom)
     }
 
     private fun resetPage(state: PageState) {
@@ -237,5 +234,8 @@ class AppSearchController(
 
     private companion object {
         const val APP_SEARCH_REFRESH_DELAY_MS = 90L
+
+        // Matches the bottom padding createBarePagePanel applies to app-library pages.
+        const val PAGE_BASE_BOTTOM_PADDING_DP = 30
     }
 }

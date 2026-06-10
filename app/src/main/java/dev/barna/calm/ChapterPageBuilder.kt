@@ -1,12 +1,14 @@
 package dev.barna.calm
 
 import android.graphics.Bitmap
+import android.graphics.Outline
 import android.graphics.Typeface
 import android.text.TextUtils
 import android.text.format.DateFormat
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -161,8 +163,66 @@ class ChapterPageBuilder(
                 focusOverlay.show(this, contextActionFactory.notificationActions(item, chapter), data.fullText)
             }
             setOnLongClickListener {
-                notificationActionController.showNotificationHideOptions(item, chapter)
+                if (activePreferences().expandedCardsEnabled) {
+                    focusOverlay.showExpandedCard(this, expandedNotificationContent(item), expandedNotificationActions(item, chapter))
+                } else {
+                    notificationActionController.showNotificationHideOptions(item, chapter)
+                }
                 true
+            }
+        }
+    }
+
+    private fun expandedNotificationActions(item: NotificationCardItem, chapter: AppChapter): List<ContextAction> {
+        // Keep the long-press hide-options reachable now that long-press opens the expanded card.
+        return contextActionFactory.notificationActions(item, chapter) +
+            ContextAction("Hide", Runnable { notificationActionController.showNotificationHideOptions(item, chapter) })
+    }
+
+    private fun expandedNotificationContent(item: NotificationCardItem): View {
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+            addView(label(item.title(), 20, CalmTheme.INK, Typeface.BOLD).apply {
+                maxLines = 2
+                ellipsize = TextUtils.TruncateAt.END
+            })
+            addView(label(formatNotificationTime(item.primary.postTime), 13, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
+                setPadding(0, activity.dp(2), 0, 0)
+            })
+            item.notifications.firstNotNullOfOrNull { it.backgroundImage }?.let { media ->
+                addView(expandedMediaImage(media), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(184)).apply {
+                    topMargin = activity.dp(14)
+                })
+            }
+            val body = item.fullText()
+            if (body.isNotBlank()) {
+                addView(label(body, 15, CalmTheme.INK, Typeface.NORMAL).apply {
+                    maxLines = 10
+                    ellipsize = TextUtils.TruncateAt.END
+                    setPadding(0, activity.dp(14), 0, 0)
+                })
+            }
+            val media = MediaNotificationControls.from(item.notifications)
+            if (media.hasAnyAction) {
+                addView(mediaControlsRow(media), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = activity.dp(16)
+                })
+            }
+        }
+    }
+
+    private fun expandedMediaImage(media: Bitmap): ImageView {
+        val radius = activity.dp(16).toFloat()
+        return ImageView(activity).apply {
+            setImageBitmap(media)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            clipToOutline = true
+            outlineProvider = object : ViewOutlineProvider() {
+                override fun getOutline(view: View, outline: Outline) {
+                    outline.setRoundRect(0, 0, view.width, view.height, radius)
+                }
             }
         }
     }

@@ -1,6 +1,7 @@
 package dev.barna.calm
 
 import android.Manifest
+import android.app.Activity
 import android.os.Bundle
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,6 +17,9 @@ class MainActivity : ComponentActivity() {
     private val contactsPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
         if (::runner.isInitialized) runner.onContactsPermissionResult()
     }
+    private val addWidgetLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (::runner.isInitialized) runner.onWidgetPickResult(result.resultCode == Activity.RESULT_OK)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,6 +28,7 @@ class MainActivity : ComponentActivity() {
             launcherStateViewModel = launcherStateViewModel,
             requestCalendarPermission = { calendarPermissionLauncher.launch(Manifest.permission.READ_CALENDAR) },
             requestContactsPermission = { contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS) },
+            launchWidgetPicker = { intent -> addWidgetLauncher.launch(intent) },
         )
         // Back dismisses the expanded card (returning to the current page); otherwise it is a no-op,
         // as expected for a home launcher, instead of finishing and reopening on the overview page.

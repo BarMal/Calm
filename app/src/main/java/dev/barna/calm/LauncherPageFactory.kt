@@ -21,6 +21,7 @@ class LauncherPageFactory(
     private val appLibraryPageModelFactory: AppLibraryPageModelFactory,
     private val appLibraryStore: AppLibraryRenderStore,
     private val contactsPageController: ContactsPageController,
+    private val widgetsPageController: WidgetsPageController,
     private val barePagePanel: (Int) -> LinearLayout,
     private val label: (String, Int, Int, Int) -> TextView,
 ) {
@@ -29,6 +30,7 @@ class LauncherPageFactory(
             page.appScope != null -> createAppLibraryPage(page, state.appEntries)
             page.key == CalmTheme.PINNED_KEY -> createPinnedPage(state.pinnedApps)
             page.key == CalmTheme.CONTACTS_KEY -> contactsPageController.buildPage()
+            page.key == CalmTheme.WIDGETS_KEY -> widgetsPageController.buildPage()
             page.key == CalmTheme.WORK_OVERVIEW_KEY -> overviewPageBuilder.buildPage(state, workProfile = true)
             page.chapter == null -> overviewPageBuilder.buildPage(state)
             else -> chapterPageBuilder.buildPage(page.chapter)

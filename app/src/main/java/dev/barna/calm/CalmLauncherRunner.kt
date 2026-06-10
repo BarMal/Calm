@@ -33,6 +33,7 @@ class CalmLauncherRunner(
     private val launcherStateViewModel: LauncherStateViewModel,
     requestCalendarPermission: () -> Unit,
     requestContactsPermission: () -> Unit,
+    private val launchWidgetPicker: (Intent) -> Unit,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val settings = LauncherSettings(activity)
@@ -197,6 +198,18 @@ class CalmLauncherRunner(
         resolveIcon = { notificationRepository.resolveAppIconBitmap(it) },
         openAppEntry = ::openAppEntry,
     )
+    private val widgetHost = WidgetHostController(activity)
+    private val widgetsPageController = WidgetsPageController(
+        activity = activity,
+        widgetHost = widgetHost,
+        drawables = drawables,
+        widgetIds = { settings.widgetIds() },
+        requestAddWidget = ::requestAddWidget,
+        removeWidget = ::removeWidget,
+        barePagePanel = ::createBarePagePanel,
+        label = ::label,
+    )
+    private var pendingWidgetId = -1
     private val pageFactory = LauncherPageFactory(
         activity = activity,
         overviewPageBuilder = overviewPageBuilder,
@@ -206,6 +219,7 @@ class CalmLauncherRunner(
         appLibraryPageModelFactory = appLibraryPageModelFactory,
         appLibraryStore = appLibraryStore,
         contactsPageController = contactsPageController,
+        widgetsPageController = widgetsPageController,
         barePagePanel = ::createBarePagePanel,
         label = ::label,
     )
@@ -279,6 +293,7 @@ class CalmLauncherRunner(
     }
 
     fun onResume() {
+        widgetHost.startListening()
         CalmNotificationListenerService.addListener(notificationRefresh)
         val hasCurrentScreen = currentScreen != null
         val hasCurrentState = currentUiState != null
@@ -303,6 +318,7 @@ class CalmLauncherRunner(
     }
 
     fun onPause() {
+        widgetHost.stopListening()
         CalmNotificationListenerService.removeListener(notificationRefresh)
     }
 
@@ -319,6 +335,28 @@ class CalmLauncherRunner(
     }
 
     fun onContactsPermissionResult() {
+        render()
+    }
+
+    private fun requestAddWidget() {
+        pendingWidgetId = widgetHost.allocateWidgetId()
+        launchWidgetPicker(widgetHost.pickIntent(pendingWidgetId))
+    }
+
+    fun onWidgetPickResult(granted: Boolean) {
+        if (pendingWidgetId == -1) return
+        if (granted) {
+            settings.addWidgetId(pendingWidgetId)
+        } else {
+            widgetHost.deleteWidgetId(pendingWidgetId)
+        }
+        pendingWidgetId = -1
+        render()
+    }
+
+    private fun removeWidget(widgetId: Int) {
+        widgetHost.deleteWidgetId(widgetId)
+        settings.removeWidgetId(widgetId)
         render()
     }
 
@@ -514,6 +552,7 @@ class CalmLauncherRunner(
         PageSlot.WORK_OVERVIEW -> CalmTheme.WORK_OVERVIEW_KEY
         PageSlot.PINNED -> CalmTheme.PINNED_KEY
         PageSlot.CONTACTS -> CalmTheme.CONTACTS_KEY
+        PageSlot.WIDGETS -> CalmTheme.WIDGETS_KEY
         PageSlot.APPS -> CalmTheme.APP_LIBRARY_KEY
         PageSlot.NOTIFICATIONS -> CalmTheme.OVERVIEW_KEY
     }

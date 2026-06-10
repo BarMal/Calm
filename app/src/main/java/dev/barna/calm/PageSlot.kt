@@ -8,6 +8,7 @@ enum class PageSlot {
     APPS,
     PINNED,
     CONTACTS,
+    WIDGETS,
     OVERVIEW,
     WORK_OVERVIEW,
     NOTIFICATIONS,
@@ -17,6 +18,7 @@ fun PageSlot.displayName(): String = when (this) {
     PageSlot.APPS -> "Apps"
     PageSlot.PINNED -> "Pinned"
     PageSlot.CONTACTS -> "People"
+    PageSlot.WIDGETS -> "Widgets"
     PageSlot.OVERVIEW -> "Overview"
     PageSlot.WORK_OVERVIEW -> "Work overview"
     PageSlot.NOTIFICATIONS -> "Notifications"
@@ -39,6 +41,7 @@ data class LauncherPageLayout(
             PageSlot.APPS,
             PageSlot.PINNED,
             PageSlot.CONTACTS,
+            PageSlot.WIDGETS,
             PageSlot.OVERVIEW,
             PageSlot.WORK_OVERVIEW,
             PageSlot.NOTIFICATIONS,
@@ -53,6 +56,7 @@ object PageArranger {
         page.appScope != null -> PageSlot.APPS
         page.key == CalmTheme.PINNED_KEY -> PageSlot.PINNED
         page.key == CalmTheme.CONTACTS_KEY -> PageSlot.CONTACTS
+        page.key == CalmTheme.WIDGETS_KEY -> PageSlot.WIDGETS
         page.key == CalmTheme.WORK_OVERVIEW_KEY -> PageSlot.WORK_OVERVIEW
         page.key == CalmTheme.OVERVIEW_KEY -> PageSlot.OVERVIEW
         page.chapter != null -> PageSlot.NOTIFICATIONS

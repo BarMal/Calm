@@ -12,6 +12,9 @@ class MainActivity : ComponentActivity() {
     private val calendarPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
         if (::runner.isInitialized) runner.onCalendarPermissionResult()
     }
+    private val contactsPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        if (::runner.isInitialized) runner.onContactsPermissionResult()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -19,6 +22,7 @@ class MainActivity : ComponentActivity() {
             activity = this,
             launcherStateViewModel = launcherStateViewModel,
             requestCalendarPermission = { calendarPermissionLauncher.launch(Manifest.permission.READ_CALENDAR) },
+            requestContactsPermission = { contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS) },
         )
         runner.onCreate()
     }

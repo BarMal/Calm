@@ -135,6 +135,10 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         preferences.edit().putString(PREF_DOCK_KEYS, (dockKeys() - identityKey).joinToString("\n")).apply()
     }
 
+    fun setDockKeys(identityKeys: List<String>) {
+        preferences.edit().putString(PREF_DOCK_KEYS, identityKeys.joinToString("\n")).apply()
+    }
+
     fun moveDockKey(identityKey: String, toIndex: Int) {
         val current = dockKeys().toMutableList()
         val from = current.indexOf(identityKey)

@@ -167,6 +167,33 @@ class CalmSettingsActivity : ComponentActivity() {
             showHiddenAppsDialog()
         })
 
+        content.addView(section("Dock"))
+        val dock = settings.dockConfig()
+        content.addView(switchRow(
+            title = "Show dock",
+            summary = "A row of favourite apps shown on every page.",
+            checked = dock.enabled,
+        ) { settings.setDockEnabled(!settings.dockConfig().enabled); requestRender() })
+        content.addView(actionRow("Dock apps", dockAppsSummary()) { showDockAppsDialog() })
+        content.addView(sliderRow(
+            title = "Dock app count",
+            progress = dock.itemCount - DockConfig.MIN_ITEM_COUNT,
+            max = DockConfig.MAX_ITEM_COUNT - DockConfig.MIN_ITEM_COUNT,
+            valueText = { "${it + DockConfig.MIN_ITEM_COUNT} apps" },
+        ) { settings.setDockItemCount(it + DockConfig.MIN_ITEM_COUNT) })
+        content.addView(sliderRow(
+            title = "Dock height",
+            progress = dock.verticalPaddingDp,
+            max = DockConfig.MAX_VERTICAL_PADDING_DP,
+            valueText = { "${it}dp padding" },
+        ) { settings.setDockVerticalPadding(it) })
+        content.addView(sliderRow(
+            title = "Dock side margin",
+            progress = dock.horizontalPaddingDp,
+            max = DockConfig.MAX_HORIZONTAL_PADDING_DP,
+            valueText = { "${it}dp padding" },
+        ) { settings.setDockHorizontalPadding(it) })
+
         content.addView(section("Card stack"))
         content.addView(actionRow("Apply Timescape preset", "Restore the curved stacked-card defaults.") {
             settings.applyTimescapeStackPreset()
@@ -328,6 +355,41 @@ class CalmSettingsActivity : ComponentActivity() {
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Done") { _, _ ->
                 settings.setHiddenAppKeys(apps.filterIndexed { index, _ -> selected[index] }.map { it.identityKey }.toSet())
+                requestRender()
+            }
+            .show()
+    }
+
+    private fun dockAppsSummary(): String {
+        val count = settings.dockKeys().size
+        if (count == 0) return "Choose apps to show in the dock."
+        return "$count dock ${if (count == 1) "app" else "apps"}."
+    }
+
+    private fun showDockAppsDialog() {
+        val apps = cachedAppEntries ?: run {
+            Toast.makeText(this, "App list is loading, try again shortly", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (apps.isEmpty()) {
+            Toast.makeText(this, "No apps are available for the dock", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val dockKeys = settings.dockKeys()
+        val selected = BooleanArray(apps.size) { index -> apps[index].identityKey in dockKeys }
+        val labels = apps.map(::hiddenAppLabel).toTypedArray()
+        val maxItems = settings.dockConfig().itemCount
+        AlertDialog.Builder(this)
+            .setTitle("Dock apps (up to $maxItems)")
+            .setMultiChoiceItems(labels, selected) { _, which, isChecked ->
+                selected[which] = isChecked
+            }
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Done") { _, _ ->
+                val chosen = apps.filterIndexed { index, _ -> selected[index] }
+                    .map { it.identityKey }
+                    .take(maxItems)
+                settings.setDockKeys(chosen)
                 requestRender()
             }
             .show()

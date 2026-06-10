@@ -371,7 +371,9 @@ class CalmLauncherRunner(
             setPadding(0, activity.statusBarHeightFallback() + activity.dp(28), 0, activity.dp(34))
         }
         screen.addView(root, matchParentParams())
-        root.addView(createHeader())
+        if (state.preferences.chrome.showClock) {
+            root.addView(createHeader())
+        }
 
         val pagerAdapter = ChapterPagerAdapter(pages) { page -> pageFactory.createPage(page, state) }
         val pager = ViewPager2(activity).apply {
@@ -460,11 +462,19 @@ class CalmLauncherRunner(
             }
         })
 
-        root.addView(carouselController.create(pages, initialPage))
+        // The spine (carousel) is always created so the carousel controller has its view, but its
+        // visibility and top/bottom placement follow the chrome config.
+        val chrome = state.preferences.chrome
+        val spine = carouselController.create(pages, initialPage).apply {
+            visibility = if (chrome.showSpine) View.VISIBLE else View.GONE
+        }
+        val spineAtBottom = chrome.showSpine && chrome.spineAtBottom
+        if (!spineAtBottom) root.addView(spine)
         root.addView(
             pager,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
         )
+        if (spineAtBottom) root.addView(spine)
         if (state.dockConfig.enabled && state.dockApps.isNotEmpty()) {
             root.addView(
                 dockController.buildDock(state.dockApps, state.dockConfig),

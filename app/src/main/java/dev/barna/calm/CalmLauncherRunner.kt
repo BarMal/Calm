@@ -316,6 +316,13 @@ class CalmLauncherRunner(
         render()
     }
 
+    /** Dismisses the expanded/focus card on back so it returns to the current page, not overview. */
+    fun onBackPressed() {
+        if (focusOverlay.isShowing()) {
+            focusOverlay.dismiss(true)
+        }
+    }
+
     private fun configureWindow() {
         CalmSystemBars.applyTransparentWallpaper(activity)
     }

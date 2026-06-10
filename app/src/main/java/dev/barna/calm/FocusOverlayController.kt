@@ -175,6 +175,8 @@ class FocusOverlayController(
             .start()
     }
 
+    fun isShowing(): Boolean = focusedCardOverlay != null
+
     fun dismiss(animate: Boolean) {
         dismissWithAction(animate, removeFocusedCard = false, afterDismiss = null)
     }

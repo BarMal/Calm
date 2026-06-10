@@ -250,6 +250,14 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         return nextValue
     }
 
+    fun lastSelectedPageKey(): String? {
+        return preferences.getString(PREF_LAST_PAGE_KEY, null)
+    }
+
+    fun setLastSelectedPageKey(pageKey: String) {
+        preferences.edit().putString(PREF_LAST_PAGE_KEY, pageKey).apply()
+    }
+
     fun contactsPageEnabled(): Boolean {
         return preferences.getBoolean(PREF_CONTACTS_PAGE, false)
     }
@@ -500,6 +508,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_PAGE_SORT_ORDER = "page_sort_order"
         private const val PREF_EXPANDED_CARDS = "expanded_cards"
         private const val PREF_CONTACTS_PAGE = "contacts_page"
+        private const val PREF_LAST_PAGE_KEY = "last_page_key"
         private const val PREF_DOCK_ENABLED = "dock_enabled"
         private const val PREF_DOCK_ITEM_COUNT = "dock_item_count"
         private const val PREF_DOCK_VERTICAL_PADDING = "dock_vertical_padding"

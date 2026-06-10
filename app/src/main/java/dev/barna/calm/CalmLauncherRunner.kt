@@ -238,7 +238,9 @@ class CalmLauncherRunner(
         }
     }
 
-    private var selectedPageKey = launcherStateViewModel.uiState.value.selectedPageKey ?: CalmTheme.OVERVIEW_KEY
+    private var selectedPageKey = launcherStateViewModel.uiState.value.selectedPageKey
+        ?: settings.lastSelectedPageKey()
+        ?: CalmTheme.OVERVIEW_KEY
     private var currentPager: ViewPager2? = null
     private var currentScreen: View? = null
     private val currentUiState: LauncherRenderModel?
@@ -469,6 +471,7 @@ class CalmLauncherRunner(
     private fun selectPage(pageKey: String) {
         selectedPageKey = pageKey
         launcherStateViewModel.selectPage(pageKey)
+        settings.setLastSelectedPageKey(pageKey)
     }
 
     private fun schedulePagePrewarm(

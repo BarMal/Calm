@@ -60,6 +60,7 @@ class CalmNotificationListenerService : NotificationListenerService() {
             if (currentService === this) {
                 currentService = null
                 currentNotifications = emptyList()
+                revision++
             }
         }
         mainHandler.removeCallbacks(refreshRunnable)
@@ -79,6 +80,7 @@ class CalmNotificationListenerService : NotificationListenerService() {
         }
         synchronized(lock) {
             currentNotifications = next
+            revision++
         }
         notifyListeners()
     }
@@ -187,6 +189,10 @@ class CalmNotificationListenerService : NotificationListenerService() {
         private val listeners = CopyOnWriteArraySet<Runnable>()
         private var currentService: CalmNotificationListenerService? = null
         private var currentNotifications: List<CalmNotification> = emptyList()
+        // Bumped whenever the snapshot changes (post/remove/disconnect). Lets the launcher detect
+        // notifications that were dismissed while it was paused — e.g. opening an app clears its
+        // notifications — and reconcile on resume instead of showing stale cards.
+        private var revision = 0
         private const val SNAPSHOT_REFRESH_DELAY_MS = 80L
 
         @JvmStatic
@@ -203,6 +209,13 @@ class CalmNotificationListenerService : NotificationListenerService() {
         fun snapshot(): List<CalmNotification> {
             synchronized(lock) {
                 return ArrayList(currentNotifications)
+            }
+        }
+
+        @JvmStatic
+        fun revision(): Int {
+            synchronized(lock) {
+                return revision
             }
         }
 

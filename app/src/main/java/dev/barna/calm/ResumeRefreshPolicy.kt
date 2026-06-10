@@ -5,7 +5,8 @@ class ResumeRefreshPolicy {
         hasCurrentScreen: Boolean,
         hasCurrentState: Boolean,
         launcherSettingsChanged: Boolean,
+        notificationsChanged: Boolean,
     ): Boolean {
-        return launcherSettingsChanged || !hasCurrentScreen || !hasCurrentState
+        return launcherSettingsChanged || notificationsChanged || !hasCurrentScreen || !hasCurrentState
     }
 }

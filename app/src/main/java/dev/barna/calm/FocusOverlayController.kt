@@ -122,12 +122,7 @@ class FocusOverlayController(
             clipToPadding = false
             setPadding(horizontalPadding, activity.dp(22), horizontalPadding, activity.dp(18))
             addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            addView(LinearLayout(activity).apply {
-                orientation = LinearLayout.VERTICAL
-                clipChildren = false
-                clipToPadding = false
-                actions.forEach { addView(contextActionButton(it)) }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            addView(actionsGrid(actions), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = activity.dp(18)
             })
         }
@@ -179,6 +174,8 @@ class FocusOverlayController(
             .setInterpolator(DecelerateInterpolator())
             .start()
     }
+
+    fun isShowing(): Boolean = focusedCardOverlay != null
 
     fun dismiss(animate: Boolean) {
         dismissWithAction(animate, removeFocusedCard = false, afterDismiss = null)
@@ -432,6 +429,37 @@ class FocusOverlayController(
             if (containsView(container.getChildAt(index), target)) return true
         }
         return false
+    }
+
+    /** Lays the expanded-card actions out in a two-column grid (a lone trailing action spans full width). */
+    private fun actionsGrid(actions: List<ContextAction>): LinearLayout {
+        val gap = activity.dp(4)
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+            actions.chunked(2).forEach { rowActions ->
+                addView(
+                    LinearLayout(activity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        clipChildren = false
+                        clipToPadding = false
+                        rowActions.forEachIndexed { index, action ->
+                            val isFirst = index == 0
+                            val isLast = index == rowActions.lastIndex
+                            addView(
+                                contextActionButton(action).apply {
+                                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                                        setMargins(if (isFirst) 0 else gap, gap, if (isLast) 0 else gap, gap)
+                                    }
+                                },
+                            )
+                        }
+                    },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+                )
+            }
+        }
     }
 
     private fun contextActionButton(action: ContextAction): TextView {

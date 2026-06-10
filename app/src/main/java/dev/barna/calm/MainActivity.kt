@@ -2,6 +2,7 @@ package dev.barna.calm
 
 import android.Manifest
 import android.os.Bundle
+import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.viewModels
@@ -24,6 +25,9 @@ class MainActivity : ComponentActivity() {
             requestCalendarPermission = { calendarPermissionLauncher.launch(Manifest.permission.READ_CALENDAR) },
             requestContactsPermission = { contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS) },
         )
+        // Back dismisses the expanded card (returning to the current page); otherwise it is a no-op,
+        // as expected for a home launcher, instead of finishing and reopening on the overview page.
+        onBackPressedDispatcher.addCallback(this) { runner.onBackPressed() }
         runner.onCreate()
     }
 

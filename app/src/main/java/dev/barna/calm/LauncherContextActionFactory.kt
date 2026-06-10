@@ -45,9 +45,6 @@ class LauncherContextActionFactory(
         item.allActions().forEach { action ->
             actions.add(ContextAction(action.label, Runnable { callbacks.performNotificationAction(action) }))
         }
-        callbacks.appShortcuts(chapter).take(MAX_SHORTCUTS).forEach { shortcut ->
-            actions.add(ContextAction(shortcut.label, Runnable { callbacks.launchShortcut(shortcut) }))
-        }
         return actions
     }
 

@@ -29,6 +29,7 @@ class LauncherPageFactory(
             page.appScope != null -> createAppLibraryPage(page, state.appEntries)
             page.key == CalmTheme.PINNED_KEY -> createPinnedPage(state.pinnedApps)
             page.key == CalmTheme.CONTACTS_KEY -> contactsPageController.buildPage()
+            page.key == CalmTheme.WORK_OVERVIEW_KEY -> overviewPageBuilder.buildPage(state, workProfile = true)
             page.chapter == null -> overviewPageBuilder.buildPage(state)
             else -> chapterPageBuilder.buildPage(page.chapter)
         }

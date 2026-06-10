@@ -62,6 +62,10 @@ class ChapterPagePlanner {
         }
         pages.add(ChapterPage.overview(CalmTheme.OVERVIEW_KEY).withMarker(roman(chapterNumber)))
         chapterNumber++
+        if (preferences.splitAppsByProfile && notificationChapters.any { it.isWorkProfile }) {
+            pages.add(ChapterPage.workOverview(CalmTheme.WORK_OVERVIEW_KEY, roman(chapterNumber)))
+            chapterNumber++
+        }
         standardChapters.forEach { chapter ->
             pages.add(ChapterPage.notifications(chapter, roman(chapterNumber)))
             chapterNumber++

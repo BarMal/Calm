@@ -160,7 +160,7 @@ class ChapterPageBuilder(
             }
             maxLines = 4
             setOnClickListener {
-                focusOverlay.show(this, contextActionFactory.notificationActions(item, chapter), data.fullText)
+                notificationActionController.openNotification(item.primary)
             }
             setOnLongClickListener {
                 if (activePreferences().expandedCardsEnabled) {

@@ -13,6 +13,15 @@ enum class PageSlot {
     NOTIFICATIONS,
 }
 
+fun PageSlot.displayName(): String = when (this) {
+    PageSlot.APPS -> "Apps"
+    PageSlot.PINNED -> "Pinned"
+    PageSlot.CONTACTS -> "People"
+    PageSlot.OVERVIEW -> "Overview"
+    PageSlot.WORK_OVERVIEW -> "Work overview"
+    PageSlot.NOTIFICATIONS -> "Notifications"
+}
+
 /**
  * The user's page layout: slot order, disabled slots, and the default home slot. The defaults
  * reproduce the planner's current ordering exactly, so an unconfigured layout changes nothing.

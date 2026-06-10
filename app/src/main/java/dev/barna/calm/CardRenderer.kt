@@ -33,15 +33,18 @@ class CardRenderer(
         hueColor: Int,
         tinted: Boolean,
         sideImage: Bitmap? = null,
-        sideImageAlpha: Int = 64,
+        sideImageAlpha: Int = DEFAULT_ICON_BACKGROUND_ALPHA,
         sideImageRenderKey: String? = null,
+        precomputedIconRenderData: AppIconCardRenderData? = null,
     ): TextView {
         val prefs = activePreferences()
         val cornerRadius = cardCornerRadius()
         return label(text).apply {
             val showImageAsBackground = sideImage != null && prefs.useCardIconBackgrounds
             val iconRenderData = if (showImageAsBackground) {
-                cardRenderAssetCache.iconRenderData(
+                // Prefer render data precomputed off the main thread (during background preload); only
+                // sample on the UI thread as a fallback when none was supplied.
+                precomputedIconRenderData ?: cardRenderAssetCache.iconRenderData(
                     imageKey = sideImageRenderKey ?: "bitmap-${sideImage.generationId}",
                     image = sideImage,
                     style = CardRenderStyleKey(
@@ -99,5 +102,11 @@ class CardRenderer(
             setBounds(0, 0, size, size)
             alpha = 214
         }
+    }
+
+    companion object {
+        // Alpha at which app-card icon backgrounds are drawn. Precomputed render data must use the
+        // same value so it matches what stackCard would otherwise compute on the main thread.
+        const val DEFAULT_ICON_BACKGROUND_ALPHA = 64
     }
 }

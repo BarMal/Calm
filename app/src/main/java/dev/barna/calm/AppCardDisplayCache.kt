@@ -63,13 +63,17 @@ class AppCardDisplayCache(
 
     private fun create(app: AppEntry, pinnedKeys: Set<String>): AppCardDisplayData {
         val model = modelFactory.create(app, pinnedKeys)
+        val icon = notificationRepository.resolveAppIconBitmap(app)
         return AppCardDisplayData(
             app = model.app,
             text = model.text,
             hueColor = model.hueColor,
             isPinned = model.isPinned,
-            icon = notificationRepository.resolveAppIconBitmap(app),
+            icon = icon,
             iconRenderKey = app.identityKey,
+            // Sample the icon's render colours here, on the preload executor, so the card can be
+            // bound on the main thread without any per-icon sampling.
+            iconRenderData = icon?.let { AppIconCardRenderData.from(it, CardRenderer.DEFAULT_ICON_BACKGROUND_ALPHA) },
         )
     }
 
@@ -104,4 +108,5 @@ data class AppCardDisplayData(
     val isPinned: Boolean,
     val icon: Bitmap?,
     val iconRenderKey: String,
+    val iconRenderData: AppIconCardRenderData? = null,
 )

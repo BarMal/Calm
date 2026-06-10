@@ -2,6 +2,7 @@ package dev.barna.calm
 
 object CalmTheme {
     const val OVERVIEW_KEY = "dev.barna.calm.OVERVIEW"
+    const val WORK_OVERVIEW_KEY = "dev.barna.calm.OVERVIEW.WORK"
     const val APP_LIBRARY_KEY = "dev.barna.calm.APPS"
     const val PERSONAL_APP_LIBRARY_KEY = "dev.barna.calm.APPS.PERSONAL"
     const val WORK_APP_LIBRARY_KEY = "dev.barna.calm.APPS.WORK"

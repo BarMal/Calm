@@ -37,9 +37,10 @@ class OverviewPageBuilder(
 ) {
     private val expandedOverviewGroups = mutableSetOf<String>()
 
-    fun buildPage(state: LauncherRenderModel): LinearLayout {
+    fun buildPage(state: LauncherRenderModel, workProfile: Boolean = false): LinearLayout {
+        val chapters = overviewChapters(state, workProfile)
         return createBarePagePanel().apply {
-            addView(overviewHeader())
+            addView(overviewHeader(if (workProfile) "Work" else "Overview"))
             addView(sectionTitle("Notifications"))
             addView(
                 stackToolbarSpacer(),
@@ -53,7 +54,7 @@ class OverviewPageBuilder(
             rebuild = {
                 notifContainer.removeAllViews()
                 notifContainer.addView(
-                    overviewNotificationsStack(state.notificationChapters) { rebuild() },
+                    overviewNotificationsStack(chapters) { rebuild() },
                     matchParentParams(),
                 )
             }
@@ -62,7 +63,16 @@ class OverviewPageBuilder(
         }
     }
 
-    private fun overviewHeader(): View {
+    /**
+     * When profile split is on, the overview shows only personal notifications and the dedicated
+     * work overview shows only work notifications; otherwise the overview shows everything.
+     */
+    private fun overviewChapters(state: LauncherRenderModel, workProfile: Boolean): List<AppChapter> {
+        if (!state.preferences.splitAppsByProfile) return state.notificationChapters
+        return state.notificationChapters.filter { it.isWorkProfile == workProfile }
+    }
+
+    private fun overviewHeader(title: String): View {
         val nextAlarm = nextAlarmClock()
         return LinearLayout(activity).apply {
             tag = CalmAnimationTags.CHROME
@@ -75,7 +85,7 @@ class OverviewPageBuilder(
             addView(
                 LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
-                    addView(label("Overview", 30, CalmTheme.INK, Typeface.NORMAL).apply {
+                    addView(label(title, 30, CalmTheme.INK, Typeface.NORMAL).apply {
                         setSingleLine(true)
                         ellipsize = TextUtils.TruncateAt.END
                         setPadding(0, activity.dp(8), 0, 0)

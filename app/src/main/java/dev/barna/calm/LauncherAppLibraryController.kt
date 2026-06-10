@@ -161,7 +161,14 @@ class LauncherAppLibraryController(
 
     private fun appCard(app: AppEntry): TextView {
         val data = appCardDisplayCache.getCachedOrCreateLightweight(app, pinnedKeys())
-        return cardRenderer.stackCard(data.text, data.hueColor, true, data.icon, sideImageRenderKey = data.iconRenderKey).apply {
+        return cardRenderer.stackCard(
+            data.text,
+            data.hueColor,
+            true,
+            data.icon,
+            sideImageRenderKey = data.iconRenderKey,
+            precomputedIconRenderData = data.iconRenderData,
+        ).apply {
             maxLines = 4
             setOnClickListener { openAppEntry(app) }
             setOnLongClickListener {

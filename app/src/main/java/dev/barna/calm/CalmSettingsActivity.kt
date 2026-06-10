@@ -103,6 +103,11 @@ class CalmSettingsActivity : ComponentActivity() {
             summary = "Use large faded icons inside cards instead of small right-side icons.",
             checked = settings.useCardIconBackgrounds(),
         ) { settings.toggleCardIconBackgrounds(); requestRender() })
+        content.addView(switchRow(
+            title = "Expanded cards on long-press",
+            summary = "Long-press a card to expand it with its actions. Tap still opens the app.",
+            checked = settings.expandedCardsEnabled(),
+        ) { settings.toggleExpandedCards(); requestRender() })
         content.addView(sliderRow(
             title = "Card rounding",
             progress = settings.cardCornerRadiusDp(),

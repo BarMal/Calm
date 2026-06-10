@@ -25,14 +25,16 @@ class FocusOverlayController(
     private val focusBlurRadius: () -> Int,
 ) {
     private var focusedCardOverlay: FrameLayout? = null
-    private var focusedCardClone: TextView? = null
+    private var focusedCardClone: View? = null
     private var focusedMenu: LinearLayout? = null
     private var focusedSourceCard: View? = null
     private var focusedStartBounds: CardBounds? = null
+    private var focusedExpanded = false
     private val displacedFocusViews = ArrayList<FocusDisplacement>()
 
     fun show(sourceCard: TextView, actions: List<ContextAction>, focusedText: String = sourceCard.text.toString()) {
         dismiss(false)
+        focusedExpanded = false
         val content = activity.findViewById<FrameLayout>(android.R.id.content) ?: return
         val startBounds = sourceBoundsInContent(content, sourceCard)
         val targetBounds = CardBounds(
@@ -88,6 +90,89 @@ class FocusOverlayController(
             .start()
     }
 
+    /**
+     * Grows the [sourceCard] into a large themed card holding [content] (rich, card-type specific)
+     * with the [actions] embedded as buttons. The card animates out from the source card's actual
+     * on-screen bounds.
+     */
+    fun showExpandedCard(sourceCard: View, content: View, actions: List<ContextAction>) {
+        dismiss(false)
+        val container = activity.findViewById<FrameLayout>(android.R.id.content) ?: return
+        if (container.width <= 0 || container.height <= 0) return
+        val startBounds = sourceBoundsInContent(container, sourceCard)
+
+        focusedSourceCard = sourceCard
+        focusedStartBounds = startBounds
+        focusedExpanded = true
+        animatePageElementsAway(sourceCard, true)
+        applyBackdropFocus()
+
+        val overlay = FrameLayout(activity).apply {
+            alpha = 0f
+            setBackgroundColor(Color.argb(120, 0, 0, 0))
+            setOnClickListener { dismiss(true) }
+        }
+        focusedCardOverlay = overlay
+        container.addView(overlay, matchParentParams())
+
+        val actionsColumn = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+        }
+        actions.forEach { actionsColumn.addView(contextActionButton(it)) }
+
+        val card = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+            background = sourceCard.background?.constantState?.newDrawable()?.mutate()
+                ?: drawables.glass(CalmTheme.GLASS, activity.dp(24))
+            elevation = sourceCard.elevation + activity.dp(12)
+            setPadding(activity.dp(22), activity.dp(22), activity.dp(22), activity.dp(18))
+            addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(actionsColumn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = activity.dp(18)
+            })
+            setOnClickListener { }
+        }
+        focusedCardClone = card
+
+        val margin = activity.dp(18)
+        val targetWidth = (container.width - margin * 2).coerceAtLeast(startBounds.width)
+        card.measure(
+            View.MeasureSpec.makeMeasureSpec(targetWidth, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(container.height, View.MeasureSpec.AT_MOST),
+        )
+        val maxHeight = (container.height - activity.dp(40)).coerceAtLeast(activity.dp(1))
+        val targetHeight = card.measuredHeight.coerceIn(startBounds.height.coerceAtMost(maxHeight), maxHeight)
+        val targetLeft = margin
+        val targetTop = ((container.height - targetHeight) / 2).coerceAtLeast(activity.dp(24))
+        overlay.addView(card, FrameLayout.LayoutParams(targetWidth, targetHeight).apply {
+            leftMargin = targetLeft
+            topMargin = targetTop
+        })
+
+        card.pivotX = 0f
+        card.pivotY = 0f
+        card.translationX = (startBounds.left - targetLeft).toFloat()
+        card.translationY = (startBounds.top - targetTop).toFloat()
+        card.scaleX = startBounds.width.toFloat() / targetWidth
+        card.scaleY = startBounds.height.toFloat() / targetHeight
+        card.alpha = 0.4f
+
+        overlay.animate().alpha(1f).setDuration(170).start()
+        card.animate()
+            .translationX(0f)
+            .translationY(0f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .alpha(1f)
+            .setDuration(280)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+    }
+
     fun dismiss(animate: Boolean) {
         dismissWithAction(animate, removeFocusedCard = false, afterDismiss = null)
     }
@@ -107,10 +192,12 @@ class FocusOverlayController(
         val focusedCard = focusedCardClone
         val menu = focusedMenu
         val startBounds = focusedStartBounds
+        val expanded = focusedExpanded
         focusedCardOverlay = null
         focusedCardClone = null
         focusedMenu = null
         focusedStartBounds = null
+        focusedExpanded = false
 
         val cleanup = Runnable {
             (overlay.parent as? ViewGroup)?.removeView(overlay)
@@ -127,6 +214,24 @@ class FocusOverlayController(
         animateMenuOut(menu)
         overlay.animate().alpha(0f).setDuration(190).setStartDelay(90).start()
         when {
+            focusedCard != null && expanded -> {
+                // Reverse the grow: shrink the expanded card back toward the source card's bounds.
+                val targetWidth = focusedCard.width.coerceAtLeast(1)
+                val targetHeight = focusedCard.height.coerceAtLeast(1)
+                val animator = focusedCard.animate()
+                    .alpha(0f)
+                    .setDuration(220)
+                    .setInterpolator(DecelerateInterpolator())
+                    .withEndAction(cleanup)
+                if (startBounds != null) {
+                    animator
+                        .translationX((startBounds.left - focusedCard.left).toFloat())
+                        .translationY((startBounds.top - focusedCard.top).toFloat())
+                        .scaleX(startBounds.width.toFloat() / targetWidth)
+                        .scaleY(startBounds.height.toFloat() / targetHeight)
+                }
+                animator.start()
+            }
             focusedCard != null && startBounds != null && !removeFocusedCard -> {
                 focusedCard.animate()
                     .x(startBounds.left.toFloat())

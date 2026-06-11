@@ -6,7 +6,9 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.text.TextUtils
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -460,13 +462,13 @@ class LauncherPageFactory(
         state: LauncherRenderModel,
         editing: Boolean,
     ): View {
-        val tile = FrameLayout(activity).apply {
+        lateinit var tile: FrameLayout
+        val showActions = {
+            showClassicItemActions(tile, classicPage, item, "Widget", state)
+        }
+        tile = classicLongPressFrame(showActions).apply {
             clipChildren = false
             clipToPadding = false
-            val showActions = View.OnLongClickListener {
-                showClassicItemActions(this, classicPage, item, "Widget", state)
-                true
-            }
             val widgetView = createWidgetView(item)
             if (widgetView == null) {
                 addView(
@@ -480,13 +482,11 @@ class LauncherPageFactory(
                     FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
                 )
             } else {
-                widgetView.setOnLongClickListener(showActions)
                 addView(
                     widgetView,
                     FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
                 )
             }
-            setOnLongClickListener(showActions)
         }
         return if (editing) {
             editableClassicTile(tile, "Widget") { source ->
@@ -494,6 +494,51 @@ class LauncherPageFactory(
             }
         } else {
             tile
+        }
+    }
+
+    private fun classicLongPressFrame(showActions: () -> Unit): FrameLayout {
+        val longPressTimeout = ViewConfiguration.getLongPressTimeout().toLong()
+        val touchSlop = ViewConfiguration.get(activity).scaledTouchSlop
+        return object : FrameLayout(activity) {
+            private var downX = 0f
+            private var downY = 0f
+            private var longPressTriggered = false
+            private val longPressRunnable = Runnable {
+                longPressTriggered = true
+                performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                showActions()
+            }
+
+            override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downX = event.x
+                        downY = event.y
+                        longPressTriggered = false
+                        removeCallbacks(longPressRunnable)
+                        postDelayed(longPressRunnable, longPressTimeout)
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        if (kotlin.math.abs(event.x - downX) > touchSlop || kotlin.math.abs(event.y - downY) > touchSlop) {
+                            removeCallbacks(longPressRunnable)
+                        }
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        removeCallbacks(longPressRunnable)
+                        if (longPressTriggered) {
+                            longPressTriggered = false
+                            return true
+                        }
+                    }
+                }
+                return super.dispatchTouchEvent(event)
+            }
+
+            override fun onDetachedFromWindow() {
+                removeCallbacks(longPressRunnable)
+                super.onDetachedFromWindow()
+            }
         }
     }
 

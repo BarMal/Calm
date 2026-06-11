@@ -13,13 +13,13 @@ class LauncherContextActionFactoryTest {
         val pinActions = factory.appActions(app, pinned = false)
         val unpinActions = factory.appActions(app, pinned = true)
 
-        assertEquals(listOf("Open", "Pin", "Info", "Hide"), pinActions.labels())
-        assertEquals(listOf("Open", "Unpin", "Info", "Hide"), unpinActions.labels())
+        assertEquals(listOf("Open", "Pin", "Add to dock", "Info", "Hide"), pinActions.labels())
+        assertEquals(listOf("Open", "Unpin", "Add to dock", "Info", "Hide"), unpinActions.labels())
 
         pinActions[1].action.run()
         unpinActions[1].action.run()
-        pinActions[2].action.run()
         pinActions[3].action.run()
+        pinActions[4].action.run()
 
         assertEquals(listOf("pin:maps.pkg", "unpin:maps.pkg", "info:maps.pkg", "hide:maps.pkg"), events)
     }
@@ -52,11 +52,24 @@ class LauncherContextActionFactoryTest {
 
         val actions = factory.appActions(app, pinned = false)
 
-        assertEquals(listOf("Open", "Pin", "Compose", "Search", "Scan", "Info", "Hide"), actions.labels())
-        actions[2].action.run()
-        actions[4].action.run()
+        assertEquals(listOf("Open", "Pin", "Add to dock", "Compose", "Search", "Scan", "Info", "Hide"), actions.labels())
+        actions[3].action.run()
+        actions[5].action.run()
 
         assertEquals(listOf("shortcut:compose", "shortcut:scan"), events)
+    }
+
+    @Test
+    fun appActionsRemoveFromDockWhenAlreadyDocked() {
+        val events = ArrayList<String>()
+        val factory = LauncherContextActionFactory(callbacks(events, dockedKeys = setOf("maps.pkg")))
+        val app = app("maps.pkg")
+
+        val actions = factory.appActions(app, pinned = false)
+
+        assertEquals("Remove from dock", actions[2].label)
+        actions[2].action.run()
+        assertEquals(listOf("removeDock:maps.pkg:Maps"), events)
     }
 
     @Test
@@ -89,12 +102,13 @@ class LauncherContextActionFactoryTest {
 
         val actions = factory.notificationActions(item, chapter)
 
-        assertEquals(listOf("Open", "Open app", "Dismiss", "Clear", "Reply"), actions.labels())
+        assertEquals(listOf("Open", "Open app", "Add to dock", "Dismiss", "Clear", "Reply"), actions.labels())
         assertEquals(ContextActionCloseBehavior.RETURN_TO_STACK, actions[0].closeBehavior)
         assertEquals(ContextActionCloseBehavior.RETURN_TO_STACK, actions[1].closeBehavior)
-        assertEquals(ContextActionCloseBehavior.REMOVE_CARD, actions[2].closeBehavior)
+        assertEquals(ContextActionCloseBehavior.RETURN_TO_STACK, actions[2].closeBehavior)
         assertEquals(ContextActionCloseBehavior.REMOVE_CARD, actions[3].closeBehavior)
-        assertEquals(ContextActionCloseBehavior.RETURN_TO_STACK, actions[4].closeBehavior)
+        assertEquals(ContextActionCloseBehavior.REMOVE_CARD, actions[4].closeBehavior)
+        assertEquals(ContextActionCloseBehavior.RETURN_TO_STACK, actions[5].closeBehavior)
 
         actions.forEach { it.action.run() }
 
@@ -102,6 +116,7 @@ class LauncherContextActionFactoryTest {
             listOf(
                 "openNotification:note-1",
                 "openPackage:chat.pkg",
+                "addDock:chat.pkg:Chat",
                 "dismiss:note-1",
                 "clear:chat.pkg",
                 "notificationAction:Reply",
@@ -113,6 +128,7 @@ class LauncherContextActionFactoryTest {
     private fun callbacks(
         events: MutableList<String>,
         shortcuts: List<AppShortcutEntry> = emptyList(),
+        dockedKeys: Set<String> = emptySet(),
     ): LauncherContextActionCallbacks {
         return LauncherContextActionCallbacks(
             openNotification = { events.add("openNotification:${it.key}") },
@@ -130,7 +146,23 @@ class LauncherContextActionFactoryTest {
             hideApp = { events.add("hide:${it.packageName}") },
             appShortcuts = { shortcuts },
             launchShortcut = { events.add("shortcut:${it.id}") },
+            isDockItem = { it in dockedKeys },
+            addDockItem = { key, label -> events.add("addDock:$key:$label") },
+            removeDockItem = { key, label -> events.add("removeDock:$key:$label") },
         )
+    }
+
+    @Test
+    fun notificationActionsSkipDockForNonLaunchableChapters() {
+        val events = ArrayList<String>()
+        val factory = LauncherContextActionFactory(callbacks(events))
+        val notification = notification("note-1", NotificationAction("Reply", intent = null, remoteInputs = emptyList()))
+        val item = NotificationCardItem(listOf(notification))
+        val chapter = chapter("chat.pkg", launchable = false)
+
+        val actions = factory.notificationActions(item, chapter)
+
+        assertEquals(listOf("Open", "Open app", "Dismiss", "Clear", "Reply"), actions.labels())
     }
 
     private fun List<ContextAction>.labels(): List<String> {
@@ -145,12 +177,12 @@ class LauncherContextActionFactoryTest {
         return AppShortcutEntry(label, id, "maps.pkg", null)
     }
 
-    private fun chapter(packageName: String): AppChapter {
+    private fun chapter(packageName: String, launchable: Boolean = true): AppChapter {
         return AppChapter(
             packageName = packageName,
             label = "Chat",
             notifications = emptyList(),
-            launchable = true,
+            launchable = launchable,
             hueColor = 0xff123456.toInt(),
         )
     }

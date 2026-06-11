@@ -83,6 +83,9 @@ class CalmLauncherRunner(
                     Toast.makeText(activity, "Shortcut unavailable", Toast.LENGTH_SHORT).show()
                 }
             },
+            isDockItem = appMutationHandler::isDockItem,
+            addDockItem = appMutationHandler::addDockItem,
+            removeDockItem = appMutationHandler::removeDockItem,
         ),
     )
     private val cardStackController = CardStackController(activity, mainHandler, ::performCardScrollHaptic)

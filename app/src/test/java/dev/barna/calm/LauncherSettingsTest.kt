@@ -513,6 +513,43 @@ class LauncherSettingsTest {
     }
 
     @Test
+    fun resizeClassicGridItemUpdatesItemSpan() {
+        val app = ClassicGridItem.app("com.example", x = 1, y = 1)
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default().copy(items = listOf(app))))
+
+        assertTrue(settings.resizeClassicGridItem("classic-1", app.id, width = 2, height = 2))
+
+        val resized = settings.classicPages().single().items.single()
+        assertEquals(app.id, resized.id)
+        assertEquals(1, resized.x)
+        assertEquals(1, resized.y)
+        assertEquals(2, resized.width)
+        assertEquals(2, resized.height)
+    }
+
+    @Test
+    fun resizeClassicGridItemReturnsFalseWhenNoAreaFitsAndKeepsItem() {
+        val app = ClassicGridItem.app("com.example", x = 0, y = 0)
+        val blockers = (0 until ClassicGridItem.DEFAULT_GRID_ROWS).flatMap { row ->
+            (0 until ClassicGridItem.GRID_COLUMNS).mapNotNull { column ->
+                if (row == 0 && column == 0) null else ClassicGridItem.app("com.$row.$column", column, row)
+            }
+        }
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default().copy(items = listOf(app) + blockers)))
+
+        assertFalse(settings.resizeClassicGridItem("classic-1", app.id, width = 2, height = 2))
+
+        assertEquals(listOf(app) + blockers, settings.classicPages().single().items)
+    }
+
+    @Test
+    fun resizeClassicGridItemReturnsFalseForMissingItem() {
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default()))
+
+        assertFalse(settings.resizeClassicGridItem("classic-1", "missing", width = 2, height = 2))
+    }
+
+    @Test
     fun cardStackCurveRoundTrips() {
         settings.setCardStackCurve(75)
         assertEquals(75, settings.cardStackTuning().curve)

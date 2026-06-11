@@ -38,6 +38,7 @@ class LauncherPageFactory(
     private val addWidgetToClassicPage: (ClassicLauncherPageDefinition) -> Unit,
     private val removeClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem) -> Unit,
     private val moveClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem, ClassicLauncherPageDefinition) -> Unit,
+    private val resizeClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem, Int, Int) -> Unit,
     private val barePagePanel: (Int) -> LinearLayout,
     private val label: (String, Int, Int, Int) -> TextView,
 ) {
@@ -192,10 +193,8 @@ class LauncherPageFactory(
         state: LauncherRenderModel,
     ): View {
         return FrameLayout(activity).apply {
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(18))
-            clipChildren = true
-            clipToPadding = true
-            setPadding(activity.dp(6), activity.dp(6), activity.dp(6), activity.dp(6))
+            clipChildren = false
+            clipToPadding = false
             val showActions = View.OnLongClickListener {
                 showClassicItemActions(this, classicPage, item, "Widget", state)
                 true
@@ -285,6 +284,13 @@ class LauncherPageFactory(
         }
         val actions = mutableListOf<ContextAction>()
         val moveTargets = state.classicPages.filter { page -> page.id != classicPage.id }
+        actions.add(
+            ContextAction(
+                "Resize",
+                Runnable { showClassicResizeDialog(classicPage, item) },
+                ContextActionCloseBehavior.REMOVE_CARD,
+            ),
+        )
         if (moveTargets.isNotEmpty()) {
             actions.add(
                 ContextAction(
@@ -317,6 +323,18 @@ class LauncherPageFactory(
             .setTitle("Move to")
             .setItems(moveTargets.map { page -> page.title }.toTypedArray()) { _, which ->
                 moveClassicGridItem(classicPage, item, moveTargets[which])
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showClassicResizeDialog(classicPage: ClassicLauncherPageDefinition, item: ClassicGridItem) {
+        val options = CLASSIC_ITEM_SIZE_OPTIONS
+        AlertDialog.Builder(activity)
+            .setTitle("Resize")
+            .setItems(options.map { option -> option.label(item) }.toTypedArray()) { _, which ->
+                val option = options[which]
+                resizeClassicGridItem(classicPage, item, option.width, option.height)
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -372,5 +390,26 @@ class LauncherPageFactory(
 
     private fun animatedChrome(view: View): View {
         return view.apply { tag = CalmAnimationTags.CHROME }
+    }
+
+    private data class ClassicItemSizeOption(
+        val title: String,
+        val width: Int,
+        val height: Int,
+    ) {
+        fun label(item: ClassicGridItem): String {
+            val current = if (item.width == width && item.height == height) " (current)" else ""
+            return "$title - ${width}x$height$current"
+        }
+    }
+
+    private companion object {
+        val CLASSIC_ITEM_SIZE_OPTIONS = listOf(
+            ClassicItemSizeOption("Icon", 1, 1),
+            ClassicItemSizeOption("Wide", 2, 1),
+            ClassicItemSizeOption("Large", 2, 2),
+            ClassicItemSizeOption("Full-width", ClassicGridItem.GRID_COLUMNS, 2),
+            ClassicItemSizeOption("Tall full-width", ClassicGridItem.GRID_COLUMNS, 3),
+        )
     }
 }

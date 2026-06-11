@@ -40,12 +40,14 @@ class DockController(
 
     private fun dockIcon(app: AppEntry): View {
         return ImageButton(activity).apply {
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            background = null
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(18))
             setPadding(activity.dp(6), activity.dp(6), activity.dp(6), activity.dp(6))
             contentDescription = app.label
             tooltipText = app.label
-            resolveIcon(app)?.let { setImageBitmap(it) }
+            resolveIcon(app)?.let { icon ->
+                setImageDrawable(RoundedBitmapDrawable(icon, activity.dp(14).toFloat()))
+            }
             layoutParams = ViewGroup.LayoutParams(activity.dp(56), activity.dp(56))
             setOnClickListener { openAppEntry(app) }
         }

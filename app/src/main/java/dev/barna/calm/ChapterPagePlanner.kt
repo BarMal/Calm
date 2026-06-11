@@ -29,7 +29,8 @@ class ChapterPagePlanner {
 
         val allChapters = pinnedChapters + unpinnedChapters
 
-        val (workChapters, standardChapters) = if (preferences.placeWorkNotificationChaptersBeforeApps) {
+        val splitWorkChapters = preferences.splitAppsByProfile || preferences.placeWorkNotificationChaptersBeforeApps
+        val (workChapters, standardChapters) = if (splitWorkChapters) {
             allChapters.partition { it.isWorkProfile }
         } else {
             emptyList<AppChapter>() to allChapters

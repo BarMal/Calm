@@ -58,7 +58,7 @@ class AppQuickScrollController(
             if (target == null) return
             if (lastTarget[0] == target) return
             lastTarget[0] = target
-            cardStackController.stopScroll(stack)
+            if (smooth) cardStackController.stopScroll(stack)
             ensureCardRendered(target.cardIndex)
             cardStackController.scrollToCard(stack, target.cardIndex, smooth)
             popup.text = target.label

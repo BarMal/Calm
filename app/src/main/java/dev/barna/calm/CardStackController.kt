@@ -71,42 +71,58 @@ class CardStackController(
                 mainHandler.postDelayed(magneticSnap, tuning.magnetDelayMillis)
             }
         }
+        var lastAppliedViewportHeight = -1
         val applyLayout: () -> Unit = {
-            val stackTopPadding = CardStackLayout.activeTopPadding(
-                viewportHeight = scroller.height,
-                cardHeight = cardHeight,
-                minimumTopPadding = minimumTopPadding,
-                peakFraction = tuning.stackPeakFraction,
-            )
-            val trailingPadding = CardStackLayout.trailingPadding(
-                viewportHeight = scroller.height,
-                activeTopPadding = stackTopPadding,
-                cardHeight = cardHeight,
-                minimumBottomPadding = minimumBottomPadding,
-            )
-            layoutCache.remember(stackKey, stackTopPadding)
-            stack.setPadding(0, stackTopPadding, 0, trailingPadding)
-            // Apply the first style on the next frame via a one-shot pre-draw listener rather than a
-            // layout-change listener: setPadding only triggers a layout pass (and onLayoutChange) when
-            // the bounds actually change, so on page revisits where the cached top padding already
-            // matches the computed value the listener would never fire — leaving every card stuck at
-            // alpha 0 (and the entry animator dropping the stack) until the first manual scroll.
-            // OnPreDrawListener runs after measure+layout regardless, so card positions are final and
-            // style() is guaranteed to run promptly. invalidate() guarantees a draw traversal even when
-            // setPadding was a no-op.
-            stack.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
-                override fun onPreDraw(): Boolean {
-                    stack.viewTreeObserver.removeOnPreDrawListener(this)
-                    val maxScroll = maxOf(0, (cards.lastOrNull()?.top ?: stackTopPadding) - stackTopPadding)
-                    stack.minimumHeight = scroller.height + maxScroll
-                    val restore = scrollMemory.initialRestore(stackKey, maxScroll)
-                    if (restore.pendingTarget != null) suppressedRestoreScrolls[scroller] = restore.scrollY
-                    if (restore.scrollY != scroller.scrollY) scroller.scrollTo(0, restore.scrollY)
-                    style(scroller, cards, tunedStep, tuning, false, runtimeState.lastHapticIndex, runtimeState.styledRange)
-                    return true
-                }
-            })
-            stack.invalidate()
+            if (scroller.height > 0) {
+                lastAppliedViewportHeight = scroller.height
+                val stackTopPadding = CardStackLayout.activeTopPadding(
+                    viewportHeight = scroller.height,
+                    cardHeight = cardHeight,
+                    minimumTopPadding = minimumTopPadding,
+                    peakFraction = tuning.stackPeakFraction,
+                )
+                val trailingPadding = CardStackLayout.trailingPadding(
+                    viewportHeight = scroller.height,
+                    activeTopPadding = stackTopPadding,
+                    cardHeight = cardHeight,
+                    minimumBottomPadding = minimumBottomPadding,
+                )
+                layoutCache.remember(stackKey, stackTopPadding)
+                stack.setPadding(0, stackTopPadding, 0, trailingPadding)
+                // Apply the first style on the next frame via a one-shot pre-draw listener rather than a
+                // layout-change listener: setPadding only triggers a layout pass (and onLayoutChange) when
+                // the bounds actually change, so on page revisits where the cached top padding already
+                // matches the computed value the listener would never fire — leaving every card stuck at
+                // alpha 0 (and the entry animator dropping the stack) until the first manual scroll.
+                // OnPreDrawListener runs after measure+layout regardless, so card positions are final and
+                // style() is guaranteed to run promptly. invalidate() guarantees a draw traversal even when
+                // setPadding was a no-op.
+                stack.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+                    override fun onPreDraw(): Boolean {
+                        stack.viewTreeObserver.removeOnPreDrawListener(this)
+                        val maxScroll = maxOf(0, (cards.lastOrNull()?.top ?: stackTopPadding) - stackTopPadding)
+                        stack.minimumHeight = scroller.height + maxScroll
+                        val restore = scrollMemory.initialRestore(stackKey, maxScroll)
+                        if (restore.pendingTarget != null) suppressedRestoreScrolls[scroller] = restore.scrollY
+                        if (restore.scrollY != scroller.scrollY) scroller.scrollTo(0, restore.scrollY)
+                        style(scroller, cards, tunedStep, tuning, false, runtimeState.lastHapticIndex, runtimeState.styledRange)
+                        scroller.post {
+                            if (scroller.parent != null) {
+                                style(scroller, cards, tunedStep, tuning, false, runtimeState.lastHapticIndex, runtimeState.styledRange)
+                            }
+                        }
+                        return true
+                    }
+                })
+                stack.invalidate()
+            }
+        }
+        scroller.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            val nextHeight = bottom - top
+            val oldHeight = oldBottom - oldTop
+            if (nextHeight > 0 && nextHeight != oldHeight && nextHeight != lastAppliedViewportHeight) {
+                applyLayout()
+            }
         }
         scroller.post {
             if (scroller.height > 0) {
@@ -261,7 +277,7 @@ class CardStackController(
             card.scaleY = scale
             card.alpha = alpha(visualDepth, tuning)
             card.setTextColor(textColor(visualDepth))
-            card.isEnabled = visualDepth >= -0.05f && visualDepth <= tuning.visibleCards - 0.95f
+            card.isEnabled = card.alpha > 0.08f
         }
 
         if (lastHapticIndex[0] == -1) {

@@ -188,14 +188,15 @@ class ClassicWidgetHostController(
         }
     }
 
-    fun onWidgetConfigureResult(resultCode: Int, data: Intent?) {
-        val request = pendingRequest ?: return
+    fun onWidgetConfigureResult(resultCode: Int, data: Intent?): Boolean {
+        val request = pendingRequest ?: return false
         val appWidgetId = data.appWidgetIdOr(request.appWidgetId)
         if (resultCode == Activity.RESULT_OK) {
             finishWidget(appWidgetId)
         } else {
             deletePending(appWidgetId)
         }
+        return true
     }
 
     fun createWidgetView(item: ClassicGridItem): View? {
@@ -206,6 +207,27 @@ class ClassicWidgetHostController(
                 setAppWidget(appWidgetId, info)
             }
         }.getOrNull()
+    }
+
+    fun canConfigureWidget(item: ClassicGridItem): Boolean {
+        val appWidgetId = item.target.toIntOrNull() ?: return false
+        return appWidgetManager.getAppWidgetInfo(appWidgetId)?.configure != null
+    }
+
+    fun requestConfigureWidget(item: ClassicGridItem) {
+        val appWidgetId = item.target.toIntOrNull() ?: return
+        val configure = appWidgetManager.getAppWidgetInfo(appWidgetId)?.configure
+        if (configure == null) {
+            Toast.makeText(activity, "Widget has no settings", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
+            component = configure
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+        }
+        launchOrToast("Widget settings unavailable") {
+            requestWidgetConfigure(intent)
+        }
     }
 
     fun deleteWidget(item: ClassicGridItem) {
@@ -226,6 +248,16 @@ class ClassicWidgetHostController(
         } else {
             appWidgetHost.deleteAppWidgetId(appWidgetId)
             Toast.makeText(activity, "Classic page is full", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun launchOrToast(failureMessage: String, launch: () -> Unit) {
+        try {
+            launch()
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(activity, failureMessage, Toast.LENGTH_SHORT).show()
+        } catch (_: RuntimeException) {
+            Toast.makeText(activity, failureMessage, Toast.LENGTH_SHORT).show()
         }
     }
 

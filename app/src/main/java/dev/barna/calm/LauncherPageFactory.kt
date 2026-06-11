@@ -40,6 +40,8 @@ class LauncherPageFactory(
     private val createWidgetView: (ClassicGridItem) -> View?,
     private val addAppToClassicPage: (ClassicLauncherPageDefinition, AppEntry) -> Unit,
     private val addWidgetToClassicPage: (ClassicLauncherPageDefinition) -> Unit,
+    private val configureClassicWidget: (ClassicGridItem) -> Unit,
+    private val canConfigureClassicWidget: (ClassicGridItem) -> Boolean,
     private val removeClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem) -> Unit,
     private val moveClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem, ClassicLauncherPageDefinition) -> Unit,
     private val moveClassicGridItemWithinPage: (ClassicLauncherPageDefinition, ClassicGridItem, Int, Int) -> Unit,
@@ -676,6 +678,15 @@ class LauncherPageFactory(
         }
         val actions = mutableListOf<ContextAction>()
         val moveTargets = state.classicPages.filter { page -> page.id != classicPage.id }
+        if (item.type == ClassicGridItemType.WIDGET && canConfigureClassicWidget(item)) {
+            actions.add(
+                ContextAction(
+                    "Configure",
+                    Runnable { configureClassicWidget(item) },
+                    ContextActionCloseBehavior.REMOVE_CARD,
+                ),
+            )
+        }
         actions.add(
             ContextAction(
                 "Position",

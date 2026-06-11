@@ -18,6 +18,7 @@ data class LauncherUiPreferences(
     val contactsPageEnabled: Boolean = false,
     val widgetsPageEnabled: Boolean = false,
     val customHomeEnabled: Boolean = false,
+    val persistentWidgetsEnabled: Boolean = false,
     val cardAppearance: CardAppearance = CardAppearance.DEFAULT,
     val pageLayout: LauncherPageLayout = LauncherPageLayout.DEFAULT,
     val chrome: LauncherChrome = LauncherChrome(),

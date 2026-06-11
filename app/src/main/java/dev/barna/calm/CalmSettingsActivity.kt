@@ -195,6 +195,11 @@ class CalmSettingsActivity : ComponentActivity() {
             checked = settings.customHomeEnabled(),
         ) { settings.toggleCustomHome(); requestRender() })
         content.addView(switchRow(
+            title = "Persistent widgets",
+            summary = "Show a band of widgets on every page.",
+            checked = settings.persistentWidgetsEnabled(),
+        ) { settings.togglePersistentWidgets(); requestRender() })
+        content.addView(switchRow(
             title = "Work notifications on the left",
             summary = "Place work notification chapters before the app chapters.",
             checked = settings.placeWorkNotificationChaptersBeforeApps(),

@@ -204,13 +204,22 @@ class CalmLauncherRunner(
         widgetHost = widgetHost,
         drawables = drawables,
         widgetIds = { settings.widgetIds() },
-        requestAddWidget = ::requestAddWidget,
+        requestAddWidget = { requestAddWidget(WidgetTarget.PAGE) },
         removeWidget = ::removeWidget,
         barePagePanel = ::createBarePagePanel,
         label = ::label,
     )
     private var pendingWidgetId = -1
-    private var addingWidgetToGrid = false
+    private var pendingWidgetTarget = WidgetTarget.PAGE
+    private val persistentWidgetsController = PersistentWidgetsController(
+        activity = activity,
+        widgetHost = widgetHost,
+        drawables = drawables,
+        widgetIds = { settings.persistentWidgetIds() },
+        requestAddWidget = { requestAddWidget(WidgetTarget.PERSISTENT) },
+        removeWidget = ::removePersistentWidget,
+        label = ::label,
+    )
     private val customHomePageController = CustomHomePageController(
         activity = activity,
         settings = settings,
@@ -219,7 +228,7 @@ class CalmLauncherRunner(
         appEntries = { currentUiState?.appEntries.orEmpty() },
         resolveIcon = { notificationRepository.resolveAppIconBitmap(it) },
         openAppEntry = ::openAppEntry,
-        requestAddWidget = ::requestAddWidgetToGrid,
+        requestAddWidget = { requestAddWidget(WidgetTarget.GRID) },
         onChanged = ::render,
         barePagePanel = ::createBarePagePanel,
         label = ::label,
@@ -353,34 +362,30 @@ class CalmLauncherRunner(
         render()
     }
 
-    private fun requestAddWidget() {
-        addingWidgetToGrid = false
-        pendingWidgetId = widgetHost.allocateWidgetId()
-        launchWidgetPicker(widgetHost.pickIntent(pendingWidgetId))
-    }
-
-    private fun requestAddWidgetToGrid() {
-        addingWidgetToGrid = true
+    private fun requestAddWidget(target: WidgetTarget) {
+        pendingWidgetTarget = target
         pendingWidgetId = widgetHost.allocateWidgetId()
         launchWidgetPicker(widgetHost.pickIntent(pendingWidgetId))
     }
 
     fun onWidgetPickResult(granted: Boolean) {
         if (pendingWidgetId == -1) return
-        if (granted && addingWidgetToGrid) {
-            val grid = settings.homeGrid()
-            settings.setHomeGrid(
-                grid.withItem(
-                    HomeGridItem(GridItemType.WIDGET, pendingWidgetId.toString(), 0, grid.nextFreeRow(), grid.columns, 2),
-                ),
-            )
-        } else if (granted) {
-            settings.addWidgetId(pendingWidgetId)
-        } else {
+        if (!granted) {
             widgetHost.deleteWidgetId(pendingWidgetId)
+        } else when (pendingWidgetTarget) {
+            WidgetTarget.PAGE -> settings.addWidgetId(pendingWidgetId)
+            WidgetTarget.PERSISTENT -> settings.addPersistentWidgetId(pendingWidgetId)
+            WidgetTarget.GRID -> {
+                val grid = settings.homeGrid()
+                settings.setHomeGrid(
+                    grid.withItem(
+                        HomeGridItem(GridItemType.WIDGET, pendingWidgetId.toString(), 0, grid.nextFreeRow(), grid.columns, 2),
+                    ),
+                )
+            }
         }
         pendingWidgetId = -1
-        addingWidgetToGrid = false
+        pendingWidgetTarget = WidgetTarget.PAGE
         render()
     }
 
@@ -389,6 +394,14 @@ class CalmLauncherRunner(
         settings.removeWidgetId(widgetId)
         render()
     }
+
+    private fun removePersistentWidget(widgetId: Int) {
+        widgetHost.deleteWidgetId(widgetId)
+        settings.removePersistentWidgetId(widgetId)
+        render()
+    }
+
+    private enum class WidgetTarget { PAGE, GRID, PERSISTENT }
 
     /** Dismisses the expanded/focus card on back so it returns to the current page, not overview. */
     fun onBackPressed() {
@@ -543,6 +556,16 @@ class CalmLauncherRunner(
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
         )
         if (spineAtBottom) root.addView(spine)
+        if (state.preferences.persistentWidgetsEnabled) {
+            root.addView(
+                persistentWidgetsController.buildBand(),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    leftMargin = activity.dp(16)
+                    rightMargin = activity.dp(16)
+                    topMargin = activity.dp(10)
+                },
+            )
+        }
         if (state.dockConfig.enabled && state.dockApps.isNotEmpty()) {
             root.addView(
                 dockController.buildDock(state.dockApps, state.dockConfig),

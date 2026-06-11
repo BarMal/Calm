@@ -267,6 +267,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             contactsPageEnabled = contactsPageEnabled(),
             widgetsPageEnabled = widgetsPageEnabled(),
             customHomeEnabled = customHomeEnabled(),
+            persistentWidgetsEnabled = persistentWidgetsEnabled(),
             cardAppearance = cardAppearance(),
             pageLayout = pageLayout(),
             chrome = chrome(),
@@ -321,6 +322,30 @@ class LauncherSettings(private val preferences: SharedPreferences) {
 
     fun removeWidgetId(widgetId: Int) {
         preferences.edit().putString(PREF_WIDGET_IDS, (widgetIds() - widgetId).joinToString(",")).apply()
+    }
+
+    fun persistentWidgetsEnabled(): Boolean {
+        return preferences.getBoolean(PREF_PERSISTENT_WIDGETS, false)
+    }
+
+    fun togglePersistentWidgets(): Boolean {
+        val nextValue = !persistentWidgetsEnabled()
+        preferences.edit().putBoolean(PREF_PERSISTENT_WIDGETS, nextValue).apply()
+        return nextValue
+    }
+
+    fun persistentWidgetIds(): List<Int> {
+        val raw = preferences.getString(PREF_PERSISTENT_WIDGET_IDS, "") ?: ""
+        return raw.split(',').mapNotNull { it.trim().toIntOrNull() }
+    }
+
+    fun addPersistentWidgetId(widgetId: Int) {
+        if (widgetId in persistentWidgetIds()) return
+        preferences.edit().putString(PREF_PERSISTENT_WIDGET_IDS, (persistentWidgetIds() + widgetId).joinToString(",")).apply()
+    }
+
+    fun removePersistentWidgetId(widgetId: Int) {
+        preferences.edit().putString(PREF_PERSISTENT_WIDGET_IDS, (persistentWidgetIds() - widgetId).joinToString(",")).apply()
     }
 
     fun chrome(): LauncherChrome {
@@ -438,6 +463,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             dockKeys(),
             homeGrid(),
             widgetIds(),
+            persistentWidgetIds(),
         ).hashCode()
     }
 
@@ -687,6 +713,8 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_CONTACTS_PAGE = "contacts_page"
         private const val PREF_WIDGETS_PAGE = "widgets_page"
         private const val PREF_WIDGET_IDS = "widget_ids"
+        private const val PREF_PERSISTENT_WIDGETS = "persistent_widgets_enabled"
+        private const val PREF_PERSISTENT_WIDGET_IDS = "persistent_widget_ids"
         private const val PREF_CUSTOM_HOME = "custom_home_enabled"
         private const val PREF_HOME_GRID_COLUMNS = "home_grid_columns"
         private const val PREF_HOME_GRID_ITEMS = "home_grid_items"

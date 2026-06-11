@@ -72,7 +72,7 @@ data class ClassicLauncherPageDefinition(
         private const val FIELD_ITEMS = "items"
 
         fun default(index: Int = 1): ClassicLauncherPageDefinition {
-            return ClassicLauncherPageDefinition(id = "classic-$index", title = "Classic")
+            return ClassicLauncherPageDefinition(id = "classic-$index", title = if (index == 1) "Classic" else "Classic $index")
         }
 
         fun decode(json: JSONObject): ClassicLauncherPageDefinition? {

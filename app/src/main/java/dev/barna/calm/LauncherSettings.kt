@@ -96,6 +96,13 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         return classicPages().firstOrNull { it.enabled }
     }
 
+    fun homeClassicPage(): ClassicLauncherPageDefinition? {
+        val pages = classicPages()
+        val preferredId = preferences.getString(PREF_CLASSIC_HOME_PAGE_ID, null)
+        return pages.firstOrNull { page -> page.id == preferredId && page.enabled }
+            ?: pages.firstOrNull { it.enabled }
+    }
+
     fun setClassicPagesEnabled(enabled: Boolean) {
         val pages = classicPages()
         val nextPages = if (pages.isEmpty() && enabled) {
@@ -110,6 +117,80 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         preferences.edit()
             .putString(PREF_CLASSIC_PAGES, ClassicLauncherPageDefinition.encodeList(pages.distinctBy { it.id }))
             .apply()
+    }
+
+    fun addClassicPage(): ClassicLauncherPageDefinition {
+        val pages = classicPages()
+        val index = nextClassicPageIndex(pages)
+        val page = ClassicLauncherPageDefinition.default(index)
+        setClassicPages(pages + page)
+        return page
+    }
+
+    fun renameClassicPage(pageId: String, title: String): Boolean {
+        val cleanTitle = title.trim().takeIf { it.isNotBlank() } ?: return false
+        val pages = classicPages()
+        var changed = false
+        val updatedPages = pages.map { page ->
+            if (page.id == pageId) {
+                changed = true
+                page.copy(title = cleanTitle)
+            } else {
+                page
+            }
+        }
+        if (!changed) return false
+        setClassicPages(updatedPages)
+        return true
+    }
+
+    fun setClassicPageEnabled(pageId: String, enabled: Boolean): Boolean {
+        val pages = classicPages()
+        var changed = false
+        val updatedPages = pages.map { page ->
+            if (page.id == pageId) {
+                changed = true
+                page.copy(enabled = enabled)
+            } else {
+                page
+            }
+        }
+        if (!changed) return false
+        setClassicPages(updatedPages)
+        return true
+    }
+
+    fun setDefaultClassicPage(pageId: String): Boolean {
+        val pages = classicPages()
+        if (pages.none { it.id == pageId }) return false
+        setClassicPages(pages.map { page -> if (page.id == pageId) page.copy(enabled = true) else page })
+        preferences.edit().putString(PREF_CLASSIC_HOME_PAGE_ID, pageId).apply()
+        return true
+    }
+
+    fun moveClassicPage(pageId: String, targetIndex: Int): Boolean {
+        val pages = classicPages()
+        val fromIndex = pages.indexOfFirst { it.id == pageId }
+        if (fromIndex == -1) return false
+        val toIndex = targetIndex.coerceIn(0, pages.lastIndex)
+        if (fromIndex == toIndex) return false
+        val updatedPages = pages.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
+        setClassicPages(updatedPages)
+        return true
+    }
+
+    fun removeClassicPage(pageId: String): ClassicLauncherPageDefinition? {
+        val pages = classicPages()
+        val removed = pages.firstOrNull { it.id == pageId } ?: return null
+        val updatedPages = pages.filterNot { it.id == pageId }
+        setClassicPages(updatedPages)
+        if (preferences.getString(PREF_CLASSIC_HOME_PAGE_ID, null) == pageId) {
+            val nextHomeId = updatedPages.firstOrNull { it.enabled }?.id
+            preferences.edit().apply {
+                if (nextHomeId == null) remove(PREF_CLASSIC_HOME_PAGE_ID) else putString(PREF_CLASSIC_HOME_PAGE_ID, nextHomeId)
+            }.apply()
+        }
+        return removed
     }
 
     fun isClassicPageApp(identityKey: String): Boolean {
@@ -632,6 +713,15 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         return HashSet(preferences.getStringSet(PREF_SPLIT_NOTIFICATION_PACKAGES, emptySet()) ?: emptySet())
     }
 
+    private fun nextClassicPageIndex(pages: List<ClassicLauncherPageDefinition>): Int {
+        val used = pages.mapNotNull { page ->
+            page.id.removePrefix("classic-").toIntOrNull()
+        }.toSet()
+        var index = 1
+        while (index in used) index += 1
+        return index
+    }
+
     companion object {
         private const val PREFS_NAME = "calm_preferences"
         private const val PREF_EXCLUDED_PACKAGES = "excluded_notification_packages"
@@ -677,6 +767,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_EXPANDED_CARDS = "expanded_cards"
         private const val PREF_CONTACTS_PAGE = "contacts_page"
         private const val PREF_CLASSIC_PAGES = "classic_pages"
+        private const val PREF_CLASSIC_HOME_PAGE_ID = "classic_home_page_id"
         private const val PREF_LAST_PAGE_KEY = "last_page_key"
         private const val PREF_DOCK_ENABLED = "dock_enabled"
         private const val PREF_DOCK_ITEM_COUNT = "dock_item_count"

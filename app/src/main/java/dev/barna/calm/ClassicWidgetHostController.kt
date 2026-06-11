@@ -125,7 +125,7 @@ class ClassicWidgetHostController(
         val appWidgetId: Int,
     )
 
-    private companion object {
+    companion object {
         const val HOST_ID = 1017
     }
 }

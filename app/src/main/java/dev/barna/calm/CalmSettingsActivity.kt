@@ -1,6 +1,7 @@
 package dev.barna.calm
 
 import android.app.AlertDialog
+import android.appwidget.AppWidgetHost
 import android.Manifest
 import android.content.ComponentName
 import android.content.Intent
@@ -18,6 +19,7 @@ import android.widget.SeekBar
 import android.graphics.drawable.GradientDrawable
 import android.content.res.ColorStateList
 import android.widget.HorizontalScrollView
+import android.widget.EditText
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
@@ -247,6 +249,9 @@ class CalmSettingsActivity : ComponentActivity() {
             summary = classicPagesSummary(),
             checked = settings.classicPagesEnabled(),
         ) { settings.setClassicPagesEnabled(!settings.classicPagesEnabled()); requestRender() })
+        content.addView(actionRow("Classic pages", classicPagesManagementSummary()) {
+            showClassicPagesDialog()
+        })
         content.addView(actionRow(
             "Page order",
             "Sorted by ${pageSortLabel(settings.pageSortOrder())}.",
@@ -605,6 +610,146 @@ class CalmSettingsActivity : ComponentActivity() {
         return order.toMutableList().apply { add(to, removeAt(from)) }
     }
 
+    private fun showClassicPagesDialog() {
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
+        lateinit var rebuild: () -> Unit
+        rebuild = {
+            list.removeAllViews()
+            list.addView(miniButton("Add page") {
+                settings.addClassicPage()
+                settings.setPageSlotEnabled(PageSlot.CLASSIC_PAGES, true)
+                rebuild()
+            }.apply {
+                gravity = Gravity.CENTER
+                background = drawables.glass(CalmTheme.QUIET_GLASS, dp(14))
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    bottomMargin = dp(8)
+                }
+            })
+            val pages = settings.classicPages()
+            if (pages.isEmpty()) {
+                list.addView(label("No Classic pages yet.", 14, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
+                    gravity = Gravity.CENTER
+                    setPadding(0, dp(12), 0, dp(12))
+                })
+            } else {
+                pages.forEachIndexed { index, page ->
+                    list.addView(classicPageRow(page, index, pages.lastIndex, rebuild))
+                }
+            }
+        }
+        rebuild()
+        AlertDialog.Builder(this)
+            .setTitle("Classic pages")
+            .setView(ScrollView(this).apply { addView(list) })
+            .setPositiveButton("Done") { _, _ -> requestRender() }
+            .show()
+            .setOnDismissListener { requestRender() }
+    }
+
+    private fun classicPageRow(
+        page: ClassicLauncherPageDefinition,
+        index: Int,
+        lastIndex: Int,
+        rebuild: () -> Unit,
+    ): View {
+        val layout = settings.pageLayout()
+        val home = layout.defaultHome == PageSlot.CLASSIC_PAGES && settings.homeClassicPage()?.id == page.id
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(8), 0, dp(8))
+            addView(
+                LinearLayout(this@CalmSettingsActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(
+                        label(if (home) "${page.title}  -  Home" else page.title, 16, CalmTheme.INK, Typeface.BOLD),
+                        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+                    )
+                    addView(Switch(this@CalmSettingsActivity).apply {
+                        isChecked = page.enabled
+                        setOnClickListener {
+                            settings.setClassicPageEnabled(page.id, isChecked)
+                            rebuild()
+                        }
+                    })
+                },
+            )
+            addView(label(classicPageDetail(page), 13, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
+                setPadding(0, dp(3), 0, dp(6))
+            })
+            addView(
+                LinearLayout(this@CalmSettingsActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(miniButton("Rename") { showRenameClassicPageDialog(page, rebuild) })
+                    addView(miniButton(if (home) "Home" else "Set home") {
+                        settings.setDefaultClassicPage(page.id)
+                        settings.setDefaultHomeSlot(PageSlot.CLASSIC_PAGES)
+                        rebuild()
+                    })
+                    addView(miniButton("Up") {
+                        if (index > 0 && settings.moveClassicPage(page.id, index - 1)) rebuild()
+                    }.apply { isEnabled = index > 0; alpha = if (index > 0) 1f else 0.38f })
+                    addView(miniButton("Down") {
+                        if (index < lastIndex && settings.moveClassicPage(page.id, index + 1)) rebuild()
+                    }.apply { isEnabled = index < lastIndex; alpha = if (index < lastIndex) 1f else 0.38f })
+                    addView(miniButton("Remove") { confirmRemoveClassicPage(page, rebuild) })
+                },
+            )
+        }
+    }
+
+    private fun showRenameClassicPageDialog(page: ClassicLauncherPageDefinition, rebuild: () -> Unit) {
+        val input = EditText(this).apply {
+            setText(page.title)
+            setSingleLine(true)
+            setSelection(0, text.length)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Rename Classic page")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Save") { _, _ ->
+                if (!settings.renameClassicPage(page.id, input.text.toString())) {
+                    Toast.makeText(this, "Page name can't be empty", Toast.LENGTH_SHORT).show()
+                }
+                rebuild()
+            }
+            .show()
+    }
+
+    private fun confirmRemoveClassicPage(page: ClassicLauncherPageDefinition, rebuild: () -> Unit) {
+        val itemCount = page.items.size
+        val message = if (itemCount == 0) {
+            "Remove ${page.title}?"
+        } else {
+            "Remove ${page.title} and its $itemCount ${if (itemCount == 1) "item" else "items"}?"
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Remove Classic page")
+            .setMessage(message)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Remove") { _, _ ->
+                settings.removeClassicPage(page.id)?.let { removed ->
+                    cleanupClassicPageWidgets(removed)
+                }
+                rebuild()
+            }
+            .show()
+    }
+
+    private fun cleanupClassicPageWidgets(page: ClassicLauncherPageDefinition) {
+        val widgetIds = page.items
+            .filter { it.type == ClassicGridItemType.WIDGET }
+            .mapNotNull { it.target.toIntOrNull() }
+        if (widgetIds.isEmpty()) return
+        val host = AppWidgetHost(this, ClassicWidgetHostController.HOST_ID)
+        widgetIds.forEach { widgetId -> runCatching { host.deleteAppWidgetId(widgetId) } }
+    }
+
     private fun hiddenAppsSummary(): String {
         val hidden = settings.hiddenAppKeys()
         if (hidden.isEmpty()) return "Choose apps to remove from app lists."
@@ -653,6 +798,19 @@ class CalmSettingsActivity : ComponentActivity() {
         val enabled = pages.count { it.enabled }
         if (pages.isEmpty()) return "Create an empty classic page."
         return "$enabled of ${pages.size} classic ${if (pages.size == 1) "page" else "pages"} enabled."
+    }
+
+    private fun classicPagesManagementSummary(): String {
+        val pages = settings.classicPages()
+        if (pages.isEmpty()) return "Create and name your Classic launcher pages."
+        val home = settings.homeClassicPage()?.title ?: "no home page"
+        return "${pages.size} ${if (pages.size == 1) "page" else "pages"}; home is $home."
+    }
+
+    private fun classicPageDetail(page: ClassicLauncherPageDefinition): String {
+        val itemCount = page.items.size
+        val itemText = "$itemCount ${if (itemCount == 1) "item" else "items"}"
+        return "${if (page.enabled) "Enabled" else "Disabled"}; $itemText."
     }
 
     private fun dockItemSizeLabel(span: Int): String {

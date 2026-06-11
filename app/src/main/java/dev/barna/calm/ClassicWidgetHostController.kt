@@ -1,17 +1,31 @@
 package dev.barna.calm
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProviderInfo
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Intent
+import android.graphics.Typeface
+import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.GridLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
+import java.text.Collator
 
 class ClassicWidgetHostController(
     private val activity: MainActivity,
+    private val drawables: CalmDrawables,
     private val settings: LauncherSettings,
-    private val requestWidgetPick: (Intent) -> Unit,
+    private val requestWidgetBind: (Intent) -> Unit,
     private val requestWidgetConfigure: (Intent) -> Unit,
     private val render: () -> Unit,
     private val selectPage: (String) -> Unit,
@@ -29,24 +43,137 @@ class ClassicWidgetHostController(
     }
 
     fun requestAddWidget(page: ClassicLauncherPageDefinition) {
-        val appWidgetId = appWidgetHost.allocateAppWidgetId()
-        pendingRequest = PendingWidgetRequest(page.id, appWidgetId)
-        val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
-            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+        val providers = appWidgetManager.installedProviders
+            .sortedWith { left, right -> Collator.getInstance().compare(widgetLabel(left), widgetLabel(right)) }
+        if (providers.isEmpty()) {
+            Toast.makeText(activity, "No widgets available", Toast.LENGTH_SHORT).show()
+            return
         }
-        launchOrDelete(appWidgetId, "No widget picker available") {
-            requestWidgetPick(intent)
+        showWidgetPicker(page, providers)
+    }
+
+    fun onWidgetBindResult(resultCode: Int, data: Intent?) {
+        val request = pendingRequest ?: return
+        val appWidgetId = data.appWidgetIdOr(request.appWidgetId)
+        if (resultCode == Activity.RESULT_OK) {
+            continueWidgetSetup(appWidgetId)
+        } else {
+            deletePending(appWidgetId)
         }
     }
 
-    fun onWidgetPickResult(resultCode: Int, data: Intent?) {
-        val request = pendingRequest ?: return
-        val appWidgetId = data.appWidgetIdOr(request.appWidgetId)
-        if (resultCode != Activity.RESULT_OK) {
-            deletePending(appWidgetId)
+    private fun showWidgetPicker(
+        page: ClassicLauncherPageDefinition,
+        providers: List<AppWidgetProviderInfo>,
+    ) {
+        val grid = GridLayout(activity).apply {
+            columnCount = WIDGET_PICKER_COLUMNS
+            useDefaultMargins = false
+            setPadding(activity.dp(14), activity.dp(14), activity.dp(14), activity.dp(14))
+        }
+        var dialog: AlertDialog? = null
+        providers.forEachIndexed { index, provider ->
+            grid.addView(
+                widgetProviderCard(provider) {
+                    dialog?.dismiss()
+                    beginAddWidget(page, provider)
+                },
+                GridLayout.LayoutParams(
+                    GridLayout.spec(index / WIDGET_PICKER_COLUMNS),
+                    GridLayout.spec(index % WIDGET_PICKER_COLUMNS, GridLayout.FILL),
+                ).apply {
+                    width = 0
+                    height = ViewGroup.LayoutParams.WRAP_CONTENT
+                    columnSpec = GridLayout.spec(index % WIDGET_PICKER_COLUMNS, 1f)
+                    setMargins(activity.dp(6), activity.dp(6), activity.dp(6), activity.dp(6))
+                },
+            )
+        }
+        val scroll = ScrollView(activity).apply {
+            addView(grid, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        dialog = AlertDialog.Builder(activity)
+            .setTitle("Add widget")
+            .setView(scroll)
+            .setNegativeButton("Cancel", null)
+            .create()
+        dialog.show()
+    }
+
+    private fun widgetProviderCard(provider: AppWidgetProviderInfo, onClick: () -> Unit): View {
+        val label = widgetLabel(provider)
+        val span = ClassicWidgetSpanCalculator.spanFor(provider.minWidth, provider.minHeight)
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(16))
+            setPadding(activity.dp(10), activity.dp(10), activity.dp(10), activity.dp(10))
+            addView(
+                FrameLayout(activity).apply {
+                    foregroundGravity = Gravity.CENTER
+                    val image = ImageView(activity).apply {
+                        scaleType = ImageView.ScaleType.CENTER_INSIDE
+                        setImageDrawable(widgetPreview(provider))
+                    }
+                    addView(
+                        image,
+                        FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER),
+                    )
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(96)),
+            )
+            addView(
+                TextView(activity).apply {
+                    text = label
+                    setTextColor(CalmTheme.INK)
+                    textSize = 13f
+                    typeface = Typeface.DEFAULT
+                    setTypeface(typeface, Typeface.BOLD)
+                    gravity = Gravity.CENTER
+                    maxLines = 2
+                    includeFontPadding = false
+                    setPadding(0, activity.dp(8), 0, 0)
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+            )
+            addView(
+                TextView(activity).apply {
+                    text = "${span.first}x${span.second}"
+                    setTextColor(CalmTheme.MUTED_INK)
+                    textSize = 11f
+                    gravity = Gravity.CENTER
+                    includeFontPadding = false
+                    setPadding(0, activity.dp(5), 0, 0)
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+            )
+            minimumHeight = activity.dp(168)
+            setOnClickListener { onClick() }
+        }
+    }
+
+    private fun beginAddWidget(page: ClassicLauncherPageDefinition, provider: AppWidgetProviderInfo) {
+        val appWidgetId = appWidgetHost.allocateAppWidgetId()
+        pendingRequest = PendingWidgetRequest(page.id, appWidgetId)
+        val bound = runCatching {
+            appWidgetManager.bindAppWidgetIdIfAllowed(appWidgetId, provider.provider)
+        }.getOrDefault(false)
+        if (bound) {
+            continueWidgetSetup(appWidgetId)
             return
         }
-        pendingRequest = request.copy(appWidgetId = appWidgetId)
+        launchOrDelete(appWidgetId, "Widget permission unavailable") {
+            requestWidgetBind(
+                Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider.provider)
+                },
+            )
+        }
+    }
+
+    private fun continueWidgetSetup(appWidgetId: Int) {
+        pendingRequest = pendingRequest?.copy(appWidgetId = appWidgetId)
         val info = appWidgetManager.getAppWidgetInfo(appWidgetId)
         if (info?.configure == null) {
             finishWidget(appWidgetId)
@@ -89,7 +216,10 @@ class ClassicWidgetHostController(
     private fun finishWidget(appWidgetId: Int) {
         val request = pendingRequest ?: return
         pendingRequest = null
-        if (settings.addWidgetToClassicPage(request.pageId, appWidgetId)) {
+        val span = appWidgetManager.getAppWidgetInfo(appWidgetId)
+            ?.let { info -> ClassicWidgetSpanCalculator.spanFor(info.minWidth, info.minHeight) }
+            ?: (ClassicGridItem.GRID_COLUMNS to 2)
+        if (settings.addWidgetToClassicPage(request.pageId, appWidgetId, span.first, span.second)) {
             settings.classicPages().firstOrNull { it.id == request.pageId }?.let { page -> selectPage(page.key) }
             Toast.makeText(activity, "Added widget", Toast.LENGTH_SHORT).show()
             render()
@@ -120,6 +250,21 @@ class ClassicWidgetHostController(
         return this?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, fallback) ?: fallback
     }
 
+    private fun widgetLabel(provider: AppWidgetProviderInfo): String {
+        return provider.loadLabel(activity.packageManager).takeIf { it.isNotBlank() }
+            ?: provider.provider.shortName()
+    }
+
+    private fun widgetPreview(provider: AppWidgetProviderInfo): android.graphics.drawable.Drawable? {
+        val density = activity.resources.displayMetrics.densityDpi
+        return provider.loadPreviewImage(activity, density)
+            ?: provider.loadIcon(activity, density)
+    }
+
+    private fun ComponentName.shortName(): String {
+        return className.substringAfterLast('.').ifBlank { packageName }
+    }
+
     private data class PendingWidgetRequest(
         val pageId: String,
         val appWidgetId: Int,
@@ -127,5 +272,6 @@ class ClassicWidgetHostController(
 
     companion object {
         const val HOST_ID = 1017
+        private const val WIDGET_PICKER_COLUMNS = 2
     }
 }

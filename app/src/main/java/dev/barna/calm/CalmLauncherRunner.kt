@@ -33,7 +33,7 @@ class CalmLauncherRunner(
     private val launcherStateViewModel: LauncherStateViewModel,
     requestCalendarPermission: () -> Unit,
     requestContactsPermission: () -> Unit,
-    requestWidgetPick: (Intent) -> Unit,
+    requestWidgetBind: (Intent) -> Unit,
     requestWidgetConfigure: (Intent) -> Unit,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -208,8 +208,9 @@ class CalmLauncherRunner(
     )
     private val classicWidgetHostController = ClassicWidgetHostController(
         activity = activity,
+        drawables = drawables,
         settings = settings,
-        requestWidgetPick = requestWidgetPick,
+        requestWidgetBind = requestWidgetBind,
         requestWidgetConfigure = requestWidgetConfigure,
         render = ::render,
         selectPage = ::selectPage,
@@ -351,8 +352,8 @@ class CalmLauncherRunner(
         render()
     }
 
-    fun onWidgetPickResult(resultCode: Int, data: Intent?) {
-        classicWidgetHostController.onWidgetPickResult(resultCode, data)
+    fun onWidgetBindResult(resultCode: Int, data: Intent?) {
+        classicWidgetHostController.onWidgetBindResult(resultCode, data)
     }
 
     fun onWidgetConfigureResult(resultCode: Int, data: Intent?) {

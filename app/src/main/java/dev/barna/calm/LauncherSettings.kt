@@ -213,11 +213,16 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         return addAppToClassicPage(pageId, identityKey, classicPages())
     }
 
-    fun addWidgetToClassicPage(pageId: String, appWidgetId: Int): Boolean {
+    fun addWidgetToClassicPage(
+        pageId: String,
+        appWidgetId: Int,
+        width: Int = ClassicGridItem.GRID_COLUMNS,
+        height: Int = 2,
+    ): Boolean {
         if (isClassicPageWidget(appWidgetId)) return false
         val pages = classicPages()
         val updatedPages = pages.map { page ->
-            if (page.id == pageId) page.withWidget(appWidgetId) ?: return false else page
+            if (page.id == pageId) page.withWidget(appWidgetId, width, height) ?: return false else page
         }
         if (updatedPages == pages) return false
         setClassicPages(updatedPages)

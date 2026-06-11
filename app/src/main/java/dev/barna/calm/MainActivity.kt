@@ -17,8 +17,8 @@ class MainActivity : ComponentActivity() {
     private val contactsPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
         if (::runner.isInitialized) runner.onContactsPermissionResult()
     }
-    private val widgetPickLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (::runner.isInitialized) runner.onWidgetPickResult(result.resultCode, result.data)
+    private val widgetBindLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (::runner.isInitialized) runner.onWidgetBindResult(result.resultCode, result.data)
     }
     private val widgetConfigureLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (::runner.isInitialized) runner.onWidgetConfigureResult(result.resultCode, result.data)
@@ -31,7 +31,7 @@ class MainActivity : ComponentActivity() {
             launcherStateViewModel = launcherStateViewModel,
             requestCalendarPermission = { calendarPermissionLauncher.launch(Manifest.permission.READ_CALENDAR) },
             requestContactsPermission = { contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS) },
-            requestWidgetPick = { intent: Intent -> widgetPickLauncher.launch(intent) },
+            requestWidgetBind = { intent: Intent -> widgetBindLauncher.launch(intent) },
             requestWidgetConfigure = { intent: Intent -> widgetConfigureLauncher.launch(intent) },
         )
         // Back dismisses the expanded card (returning to the current page); otherwise it is a no-op,

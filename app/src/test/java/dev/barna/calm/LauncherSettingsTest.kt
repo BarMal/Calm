@@ -408,6 +408,17 @@ class LauncherSettingsTest {
     }
 
     @Test
+    fun addWidgetToClassicPageUsesRequestedSpan() {
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default()))
+
+        assertTrue(settings.addWidgetToClassicPage("classic-1", appWidgetId = 42, width = 2, height = 3))
+
+        val widget = settings.classicPages().single().items.single()
+        assertEquals(2, widget.width)
+        assertEquals(3, widget.height)
+    }
+
+    @Test
     fun addWidgetToClassicPageReturnsFalseForDuplicate() {
         settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default()))
         assertTrue(settings.addWidgetToClassicPage("classic-1", appWidgetId = 42))

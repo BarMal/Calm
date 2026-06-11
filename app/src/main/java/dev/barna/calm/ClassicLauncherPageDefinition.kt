@@ -42,6 +42,10 @@ data class ClassicLauncherPageDefinition(
         return copy(items = items + ClassicGridItem.widget(appWidgetId, position.first, position.second, boundedWidth, boundedHeight))
     }
 
+    fun withoutItem(itemId: String): ClassicLauncherPageDefinition {
+        return copy(items = items.filterNot { item -> item.id == itemId })
+    }
+
     private fun nextFreeArea(width: Int, height: Int): Pair<Int, Int>? {
         val occupied = items.flatMap { item ->
             (item.x until item.x + item.width).flatMap { x ->

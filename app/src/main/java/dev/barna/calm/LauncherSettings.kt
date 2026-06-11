@@ -145,6 +145,19 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         return true
     }
 
+    fun removeClassicGridItem(pageId: String, itemId: String): ClassicGridItem? {
+        val pages = classicPages()
+        var removed: ClassicGridItem? = null
+        val updatedPages = pages.map { page ->
+            if (page.id != pageId) return@map page
+            removed = page.items.firstOrNull { item -> item.id == itemId }
+            page.withoutItem(itemId)
+        }
+        val removedItem = removed ?: return null
+        setClassicPages(updatedPages)
+        return removedItem
+    }
+
     fun dockConfig(): DockConfig {
         return DockConfig(
             enabled = preferences.getBoolean(PREF_DOCK_ENABLED, false),

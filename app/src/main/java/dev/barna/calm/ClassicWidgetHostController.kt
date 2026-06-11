@@ -81,6 +81,11 @@ class ClassicWidgetHostController(
         }.getOrNull()
     }
 
+    fun deleteWidget(item: ClassicGridItem) {
+        val appWidgetId = item.target.toIntOrNull() ?: return
+        appWidgetHost.deleteAppWidgetId(appWidgetId)
+    }
+
     private fun finishWidget(appWidgetId: Int) {
         val request = pendingRequest ?: return
         pendingRequest = null

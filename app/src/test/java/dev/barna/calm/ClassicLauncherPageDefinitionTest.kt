@@ -90,4 +90,15 @@ class ClassicLauncherPageDefinitionTest {
 
         assertNull(page.withWidget(42))
     }
+
+    @Test
+    fun withoutItemRemovesOnlyMatchingItem() {
+        val app = ClassicGridItem.app("com.example", x = 0, y = 0)
+        val widget = ClassicGridItem.widget(appWidgetId = 42, x = 0, y = 1)
+        val page = ClassicLauncherPageDefinition.default().copy(items = listOf(app, widget))
+
+        val updated = page.withoutItem(app.id)
+
+        assertEquals(listOf(widget), updated.items)
+    }
 }

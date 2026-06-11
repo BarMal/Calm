@@ -231,6 +231,7 @@ class CalmLauncherRunner(
         addAppToClassicPage = appMutationHandler::addAppToClassicPage,
         addWidgetToClassicPage = classicWidgetHostController::requestAddWidget,
         removeClassicGridItem = ::removeClassicGridItem,
+        moveClassicGridItem = ::moveClassicGridItem,
         barePagePanel = ::createBarePagePanel,
         label = ::label,
     )
@@ -363,6 +364,21 @@ class CalmLauncherRunner(
             classicWidgetHostController.deleteWidget(removed)
         }
         Toast.makeText(activity, "Removed from ${page.title}", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun moveClassicGridItem(
+        sourcePage: ClassicLauncherPageDefinition,
+        item: ClassicGridItem,
+        targetPage: ClassicLauncherPageDefinition,
+    ) {
+        val moved = settings.moveClassicGridItem(sourcePage.id, item.id, targetPage.id)
+        if (!moved) {
+            Toast.makeText(activity, "${targetPage.title} is full", Toast.LENGTH_SHORT).show()
+            return
+        }
+        selectPage(targetPage.key)
+        Toast.makeText(activity, "Moved to ${targetPage.title}", Toast.LENGTH_SHORT).show()
         render()
     }
 

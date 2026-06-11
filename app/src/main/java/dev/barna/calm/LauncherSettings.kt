@@ -237,6 +237,28 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         return removedItem
     }
 
+    fun moveClassicGridItem(sourcePageId: String, itemId: String, targetPageId: String): Boolean {
+        if (sourcePageId == targetPageId) return false
+        val pages = classicPages()
+        val sourcePage = pages.firstOrNull { page -> page.id == sourcePageId } ?: return false
+        val item = sourcePage.items.firstOrNull { candidate -> candidate.id == itemId } ?: return false
+        val targetPage = pages.firstOrNull { page -> page.id == targetPageId } ?: return false
+        val updatedTarget = targetPage
+            .copy(enabled = true)
+            .withItemAtNextFreeArea(item)
+            ?: return false
+        setClassicPages(
+            pages.map { page ->
+                when (page.id) {
+                    sourcePageId -> page.withoutItem(itemId)
+                    targetPageId -> updatedTarget
+                    else -> page
+                }
+            },
+        )
+        return true
+    }
+
     private fun addAppToClassicPage(
         pageId: String,
         identityKey: String,

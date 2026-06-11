@@ -37,6 +37,7 @@ class LauncherPageFactory(
     private val addAppToClassicPage: (ClassicLauncherPageDefinition, AppEntry) -> Unit,
     private val addWidgetToClassicPage: (ClassicLauncherPageDefinition) -> Unit,
     private val removeClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem) -> Unit,
+    private val moveClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem, ClassicLauncherPageDefinition) -> Unit,
     private val barePagePanel: (Int) -> LinearLayout,
     private val label: (String, Int, Int, Int) -> TextView,
 ) {
@@ -60,8 +61,8 @@ class LauncherPageFactory(
         val appsByKey = appEntries.associateBy { it.identityKey }
         val gridItems = classicPage.items.mapNotNull { item ->
             when (item.type) {
-                ClassicGridItemType.APP -> appsByKey[item.target]?.let { app -> item to classicAppTile(classicPage, item, app) }
-                ClassicGridItemType.WIDGET -> item to classicWidgetTile(classicPage, item)
+                ClassicGridItemType.APP -> appsByKey[item.target]?.let { app -> item to classicAppTile(classicPage, item, app, state) }
+                ClassicGridItemType.WIDGET -> item to classicWidgetTile(classicPage, item, state)
             }
         }
         return barePagePanel(activity.dp(20)).apply {
@@ -185,14 +186,18 @@ class LauncherPageFactory(
         }
     }
 
-    private fun classicWidgetTile(classicPage: ClassicLauncherPageDefinition, item: ClassicGridItem): View {
+    private fun classicWidgetTile(
+        classicPage: ClassicLauncherPageDefinition,
+        item: ClassicGridItem,
+        state: LauncherRenderModel,
+    ): View {
         return FrameLayout(activity).apply {
             background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(18))
             clipChildren = true
             clipToPadding = true
             setPadding(activity.dp(6), activity.dp(6), activity.dp(6), activity.dp(6))
             val showActions = View.OnLongClickListener {
-                showClassicItemActions(this, classicPage, item, "Widget")
+                showClassicItemActions(this, classicPage, item, "Widget", state)
                 true
             }
             val widgetView = createWidgetView(item)
@@ -218,7 +223,12 @@ class LauncherPageFactory(
         }
     }
 
-    private fun classicAppTile(classicPage: ClassicLauncherPageDefinition, item: ClassicGridItem, app: AppEntry): View {
+    private fun classicAppTile(
+        classicPage: ClassicLauncherPageDefinition,
+        item: ClassicGridItem,
+        app: AppEntry,
+        state: LauncherRenderModel,
+    ): View {
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -251,7 +261,7 @@ class LauncherPageFactory(
             )
             setOnClickListener { openAppEntry(app) }
             setOnLongClickListener {
-                showClassicItemActions(this, classicPage, item, app.label)
+                showClassicItemActions(this, classicPage, item, app.label, state)
                 true
             }
         }
@@ -262,6 +272,7 @@ class LauncherPageFactory(
         classicPage: ClassicLauncherPageDefinition,
         item: ClassicGridItem,
         title: String,
+        state: LauncherRenderModel,
     ) {
         val content = TextView(activity).apply {
             text = title
@@ -272,17 +283,43 @@ class LauncherPageFactory(
             gravity = Gravity.CENTER
             includeFontPadding = false
         }
+        val actions = mutableListOf<ContextAction>()
+        val moveTargets = state.classicPages.filter { page -> page.id != classicPage.id }
+        if (moveTargets.isNotEmpty()) {
+            actions.add(
+                ContextAction(
+                    "Move",
+                    Runnable { showClassicMoveDialog(classicPage, item, moveTargets) },
+                    ContextActionCloseBehavior.REMOVE_CARD,
+                ),
+            )
+        }
+        actions.add(
+            ContextAction(
+                "Remove",
+                Runnable { removeClassicGridItem(classicPage, item) },
+                ContextActionCloseBehavior.REMOVE_CARD,
+            ),
+        )
         focusOverlay.showExpandedCard(
             source,
             content,
-            listOf(
-                ContextAction(
-                    "Remove",
-                    Runnable { removeClassicGridItem(classicPage, item) },
-                    ContextActionCloseBehavior.REMOVE_CARD,
-                ),
-            ),
+            actions,
         )
+    }
+
+    private fun showClassicMoveDialog(
+        classicPage: ClassicLauncherPageDefinition,
+        item: ClassicGridItem,
+        moveTargets: List<ClassicLauncherPageDefinition>,
+    ) {
+        AlertDialog.Builder(activity)
+            .setTitle("Move to")
+            .setItems(moveTargets.map { page -> page.title }.toTypedArray()) { _, which ->
+                moveClassicGridItem(classicPage, item, moveTargets[which])
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun createPinnedPage(pinnedApps: List<AppEntry>): LinearLayout {

@@ -273,6 +273,25 @@ class LauncherSettingsTest {
     }
 
     @Test
+    fun removeClassicGridItemReturnsAndRemovesItem() {
+        val app = ClassicGridItem.app("com.example", x = 0, y = 0)
+        val widget = ClassicGridItem.widget(appWidgetId = 42, x = 0, y = 1)
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default().copy(items = listOf(app, widget))))
+
+        val removed = settings.removeClassicGridItem("classic-1", app.id)
+
+        assertEquals(app, removed)
+        assertEquals(listOf(widget), settings.classicPages().single().items)
+    }
+
+    @Test
+    fun removeClassicGridItemReturnsNullForMissingItem() {
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default()))
+
+        assertNull(settings.removeClassicGridItem("classic-1", "missing"))
+    }
+
+    @Test
     fun cardStackCurveRoundTrips() {
         settings.setCardStackCurve(75)
         assertEquals(75, settings.cardStackTuning().curve)

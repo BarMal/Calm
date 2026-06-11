@@ -217,6 +217,7 @@ class CalmLauncherRunner(
     private val pageFactory = LauncherPageFactory(
         activity = activity,
         drawables = drawables,
+        focusOverlay = focusOverlay,
         overviewPageBuilder = overviewPageBuilder,
         chapterPageBuilder = chapterPageBuilder,
         appLibraryController = appLibraryController,
@@ -228,6 +229,7 @@ class CalmLauncherRunner(
         openAppEntry = ::openAppEntry,
         createWidgetView = classicWidgetHostController::createWidgetView,
         addWidgetToClassicPage = classicWidgetHostController::requestAddWidget,
+        removeClassicGridItem = ::removeClassicGridItem,
         barePagePanel = ::createBarePagePanel,
         label = ::label,
     )
@@ -352,6 +354,15 @@ class CalmLauncherRunner(
 
     fun onWidgetConfigureResult(resultCode: Int, data: Intent?) {
         classicWidgetHostController.onWidgetConfigureResult(resultCode, data)
+    }
+
+    private fun removeClassicGridItem(page: ClassicLauncherPageDefinition, item: ClassicGridItem) {
+        val removed = settings.removeClassicGridItem(page.id, item.id) ?: return
+        if (removed.type == ClassicGridItemType.WIDGET) {
+            classicWidgetHostController.deleteWidget(removed)
+        }
+        Toast.makeText(activity, "Removed from ${page.title}", Toast.LENGTH_SHORT).show()
+        render()
     }
 
     /** Dismisses the expanded/focus card on back so it returns to the current page, not overview. */

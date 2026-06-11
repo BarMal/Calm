@@ -20,6 +20,7 @@ import android.widget.TextView
 class LauncherPageFactory(
     private val activity: MainActivity,
     private val drawables: CalmDrawables,
+    private val focusOverlay: FocusOverlayController,
     private val overviewPageBuilder: OverviewPageBuilder,
     private val chapterPageBuilder: ChapterPageBuilder,
     private val appLibraryController: LauncherAppLibraryController,
@@ -31,6 +32,7 @@ class LauncherPageFactory(
     private val openAppEntry: (AppEntry) -> Unit,
     private val createWidgetView: (ClassicGridItem) -> View?,
     private val addWidgetToClassicPage: (ClassicLauncherPageDefinition) -> Unit,
+    private val removeClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem) -> Unit,
     private val barePagePanel: (Int) -> LinearLayout,
     private val label: (String, Int, Int, Int) -> TextView,
 ) {
@@ -53,8 +55,8 @@ class LauncherPageFactory(
         val appsByKey = appEntries.associateBy { it.identityKey }
         val gridItems = classicPage.items.mapNotNull { item ->
             when (item.type) {
-                ClassicGridItemType.APP -> appsByKey[item.target]?.let { app -> item to classicAppTile(app) }
-                ClassicGridItemType.WIDGET -> item to classicWidgetTile(item)
+                ClassicGridItemType.APP -> appsByKey[item.target]?.let { app -> item to classicAppTile(classicPage, item, app) }
+                ClassicGridItemType.WIDGET -> item to classicWidgetTile(classicPage, item)
             }
         }
         return barePagePanel(activity.dp(20)).apply {
@@ -145,12 +147,16 @@ class LauncherPageFactory(
         }
     }
 
-    private fun classicWidgetTile(item: ClassicGridItem): View {
+    private fun classicWidgetTile(classicPage: ClassicLauncherPageDefinition, item: ClassicGridItem): View {
         return FrameLayout(activity).apply {
             background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(18))
             clipChildren = true
             clipToPadding = true
             setPadding(activity.dp(6), activity.dp(6), activity.dp(6), activity.dp(6))
+            val showActions = View.OnLongClickListener {
+                showClassicItemActions(this, classicPage, item, "Widget")
+                true
+            }
             val widgetView = createWidgetView(item)
             if (widgetView == null) {
                 addView(
@@ -164,15 +170,17 @@ class LauncherPageFactory(
                     FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
                 )
             } else {
+                widgetView.setOnLongClickListener(showActions)
                 addView(
                     widgetView,
                     FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
                 )
             }
+            setOnLongClickListener(showActions)
         }
     }
 
-    private fun classicAppTile(app: AppEntry): View {
+    private fun classicAppTile(classicPage: ClassicLauncherPageDefinition, item: ClassicGridItem, app: AppEntry): View {
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -204,7 +212,39 @@ class LauncherPageFactory(
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
             )
             setOnClickListener { openAppEntry(app) }
+            setOnLongClickListener {
+                showClassicItemActions(this, classicPage, item, app.label)
+                true
+            }
         }
+    }
+
+    private fun showClassicItemActions(
+        source: View,
+        classicPage: ClassicLauncherPageDefinition,
+        item: ClassicGridItem,
+        title: String,
+    ) {
+        val content = TextView(activity).apply {
+            text = title
+            setTextColor(CalmTheme.INK)
+            textSize = 22f
+            typeface = Typeface.DEFAULT
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+        }
+        focusOverlay.showExpandedCard(
+            source,
+            content,
+            listOf(
+                ContextAction(
+                    "Remove",
+                    Runnable { removeClassicGridItem(classicPage, item) },
+                    ContextActionCloseBehavior.REMOVE_CARD,
+                ),
+            ),
+        )
     }
 
     private fun createPinnedPage(pinnedApps: List<AppEntry>): LinearLayout {

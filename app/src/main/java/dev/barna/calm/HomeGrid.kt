@@ -56,6 +56,30 @@ data class HomeGrid(
         "${it.type.name},${it.ref},${it.column},${it.row},${it.columnSpan},${it.rowSpan}"
     }
 
+    /** Whether [item] (identified by value) can occupy the block anchored at [column],[row]. */
+    fun canPlace(item: HomeGridItem, column: Int, row: Int): Boolean {
+        if (column < 0 || row < 0 || column + item.columnSpan > columns) return false
+        val occupiedByOthers = HashSet<Pair<Int, Int>>()
+        items.filter { it != item }.forEach { other ->
+            for (c in other.column until other.column + other.columnSpan) {
+                for (r in other.row until other.row + other.rowSpan) {
+                    occupiedByOthers.add(c to r)
+                }
+            }
+        }
+        for (c in column until column + item.columnSpan) {
+            for (r in row until row + item.rowSpan) {
+                if ((c to r) in occupiedByOthers) return false
+            }
+        }
+        return true
+    }
+
+    fun moving(item: HomeGridItem, column: Int, row: Int): HomeGrid =
+        copy(items = items.map { if (it == item) it.copy(column = column, row = row) else it })
+
+    fun without(item: HomeGridItem): HomeGrid = copy(items = items.filterNot { it == item })
+
     companion object {
         const val DEFAULT_COLUMNS = 4
         const val DEFAULT_ROWS = 6

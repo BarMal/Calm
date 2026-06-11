@@ -16,6 +16,9 @@ data class LauncherContextActionCallbacks(
     val hideApp: (AppEntry) -> Unit,
     val appShortcuts: (AppEntry) -> List<AppShortcutEntry>,
     val launchShortcut: (AppShortcutEntry) -> Unit,
+    val isDockItem: (String) -> Boolean,
+    val addDockItem: (String, String) -> Unit,
+    val removeDockItem: (String, String) -> Unit,
 )
 
 class LauncherContextActionFactory(
@@ -42,6 +45,9 @@ class LauncherContextActionFactory(
                 ),
             ),
         )
+        if (chapter.launchable) {
+            actions.add(2, dockAction(chapter.launcherIdentityKey, chapter.label))
+        }
         item.allActions().forEach { action ->
             actions.add(ContextAction(action.label, Runnable { callbacks.performNotificationAction(action) }))
         }
@@ -79,11 +85,20 @@ class LauncherContextActionFactory(
                 callbacks.pinApp(app)
             }
         }))
+        actions.add(dockAction(app.identityKey, app.label))
         callbacks.appShortcuts(app).take(MAX_SHORTCUTS).forEach { shortcut ->
             actions.add(ContextAction(shortcut.label, Runnable { callbacks.launchShortcut(shortcut) }))
         }
         actions.add(ContextAction("Info", Runnable { callbacks.openAppInfo(app) }))
         actions.add(ContextAction("Hide", Runnable { callbacks.hideApp(app) }, ContextActionCloseBehavior.REMOVE_CARD))
         return actions
+    }
+
+    fun dockAction(identityKey: String, label: String): ContextAction {
+        return if (callbacks.isDockItem(identityKey)) {
+            ContextAction("Remove from dock", Runnable { callbacks.removeDockItem(identityKey, label) })
+        } else {
+            ContextAction("Add to dock", Runnable { callbacks.addDockItem(identityKey, label) })
+        }
     }
 }

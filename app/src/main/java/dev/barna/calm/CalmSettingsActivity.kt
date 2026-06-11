@@ -171,7 +171,6 @@ class CalmSettingsActivity : ComponentActivity() {
     }
 
     private fun renderAppearanceSettings(content: LinearLayout) {
-        content.addView(backRow())
         content.addView(section("Cards"))
         content.addView(switchRow(
             title = "Tint notification cards",
@@ -234,7 +233,6 @@ class CalmSettingsActivity : ComponentActivity() {
     }
 
     private fun renderPageSettings(content: LinearLayout) {
-        content.addView(backRow())
         content.addView(section("Pages"))
         content.addView(actionRow("Page layout", "Reorder pages, toggle presets, and set the home page.") {
             showPageLayoutDialog()
@@ -253,7 +251,6 @@ class CalmSettingsActivity : ComponentActivity() {
     }
 
     private fun renderAppSettings(content: LinearLayout) {
-        content.addView(backRow())
         content.addView(section("Apps"))
         content.addView(switchRow(
             title = "Split personal and work apps",
@@ -286,7 +283,6 @@ class CalmSettingsActivity : ComponentActivity() {
     }
 
     private fun renderDockSettings(content: LinearLayout) {
-        content.addView(backRow())
         content.addView(section("Dock"))
         val dock = settings.dockConfig()
         content.addView(switchRow(
@@ -316,7 +312,6 @@ class CalmSettingsActivity : ComponentActivity() {
     }
 
     private fun renderCardStackSettings(content: LinearLayout) {
-        content.addView(backRow())
         content.addView(section("Card stack"))
         content.addView(actionRow("Apply Timescape preset", "Restore the curved stacked-card defaults.") {
             settings.applyTimescapeStackPreset()
@@ -354,7 +349,6 @@ class CalmSettingsActivity : ComponentActivity() {
     }
 
     private fun renderAccessSettings(content: LinearLayout) {
-        content.addView(backRow())
         content.addView(section("Access"))
         content.addView(actionRow("Set wallpaper", "Open Android's wallpaper picker.") {
             startActivity(Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Set wallpaper"))
@@ -375,10 +369,6 @@ class CalmSettingsActivity : ComponentActivity() {
 
     private fun settingsGroupRow(page: SettingsPage, title: String, summary: String): View {
         return actionRow(title, summary) { openSettingsPage(page) }
-    }
-
-    private fun backRow(): View {
-        return actionRow("All settings", "Back to grouped settings.") { openSettingsPage(SettingsPage.ROOT) }
     }
 
     private fun openSettingsPage(page: SettingsPage) {

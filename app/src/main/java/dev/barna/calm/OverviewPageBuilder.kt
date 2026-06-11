@@ -141,11 +141,15 @@ class OverviewPageBuilder(
             .sortedByDescending { chapter -> chapter.notifications.maxOf { it.postTime } }
         val cards = mutableListOf<TextView>()
         for (chapter in sortedChapters) {
+            if (chapter.notifications.size == 1) {
+                cards.add(overviewNotificationCard(NotificationCardItem(chapter.notifications), chapter, nested = false))
+                continue
+            }
             val isExpanded = chapter.identityKey in expandedOverviewGroups
             cards.add(overviewGroupHeaderCard(chapter, isExpanded, onRebuild))
             if (isExpanded) {
                 NotificationCardGrouper.cards(chapter.notifications, groupingEnabled = false).forEach { item ->
-                    cards.add(overviewNotificationSubCard(item, chapter))
+                    cards.add(overviewNotificationCard(item, chapter, nested = true))
                 }
             }
         }
@@ -189,12 +193,19 @@ class OverviewPageBuilder(
                 }
                 onRebuild()
             }
+            if (chapter.launchable) {
+                setOnLongClickListener {
+                    focusOverlay.show(this, listOf(contextActionFactory.dockAction(chapter.launcherIdentityKey, chapter.label)), chapter.label)
+                    true
+                }
+            }
         }
     }
 
-    private fun overviewNotificationSubCard(
+    private fun overviewNotificationCard(
         item: NotificationCardItem,
         chapter: AppChapter,
+        nested: Boolean,
     ): TextView {
         val data = notificationCardDisplayCache.getOrCreate(item, chapter, ::formatNotificationTime)
         return cardRenderer.stackCard(
@@ -206,7 +217,9 @@ class OverviewPageBuilder(
             data.sideImageRenderKey,
         ).apply {
             maxLines = 3
-            setPadding(paddingLeft + activity.dp(20), paddingTop, paddingRight, paddingBottom)
+            if (nested) {
+                setPadding(paddingLeft + activity.dp(20), paddingTop, paddingRight, paddingBottom)
+            }
             setOnClickListener {
                 focusOverlay.show(this, contextActionFactory.notificationActions(item, chapter), data.fullText)
             }

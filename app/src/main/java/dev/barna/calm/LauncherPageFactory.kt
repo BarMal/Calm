@@ -41,6 +41,7 @@ class LauncherPageFactory(
     private val addWidgetToClassicPage: (ClassicLauncherPageDefinition) -> Unit,
     private val removeClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem) -> Unit,
     private val moveClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem, ClassicLauncherPageDefinition) -> Unit,
+    private val moveClassicGridItemWithinPage: (ClassicLauncherPageDefinition, ClassicGridItem, Int, Int) -> Unit,
     private val resizeClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem, Int, Int) -> Unit,
     private val addClassicPage: () -> Unit,
     private val moveClassicPage: (ClassicLauncherPageDefinition, Int) -> Unit,
@@ -610,6 +611,13 @@ class LauncherPageFactory(
         val moveTargets = state.classicPages.filter { page -> page.id != classicPage.id }
         actions.add(
             ContextAction(
+                "Position",
+                Runnable { showClassicPositionDialog(classicPage, item) },
+                ContextActionCloseBehavior.REMOVE_CARD,
+            ),
+        )
+        actions.add(
+            ContextAction(
                 "Resize",
                 Runnable { showClassicResizeDialog(classicPage, item) },
                 ContextActionCloseBehavior.REMOVE_CARD,
@@ -647,6 +655,22 @@ class LauncherPageFactory(
             .setTitle("Move to")
             .setItems(moveTargets.map { page -> page.title }.toTypedArray()) { _, which ->
                 moveClassicGridItem(classicPage, item, moveTargets[which])
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showClassicPositionDialog(classicPage: ClassicLauncherPageDefinition, item: ClassicGridItem) {
+        val positions = classicPage.availablePositionsForItem(item.id)
+        if (positions.isEmpty()) {
+            Toast.makeText(activity, "No positions available", Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(activity)
+            .setTitle("Position")
+            .setItems(positions.map { position -> position.label(item) }.toTypedArray()) { _, which ->
+                val (x, y) = positions[which]
+                moveClassicGridItemWithinPage(classicPage, item, x, y)
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -725,6 +749,11 @@ class LauncherPageFactory(
             val current = if (item.width == width && item.height == height) " (current)" else ""
             return "$title - ${width}x$height$current"
         }
+    }
+
+    private fun Pair<Int, Int>.label(item: ClassicGridItem): String {
+        val current = if (first == item.x && second == item.y) " (current)" else ""
+        return "Row ${second + 1}, column ${first + 1}$current"
     }
 
     private companion object {

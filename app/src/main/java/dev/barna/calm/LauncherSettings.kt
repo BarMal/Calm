@@ -264,6 +264,20 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         return true
     }
 
+    fun moveClassicGridItemWithinPage(pageId: String, itemId: String, x: Int, y: Int): Boolean {
+        val pages = classicPages()
+        var changed = false
+        val updatedPages = pages.map { page ->
+            if (page.id != pageId) return@map page
+            val updatedPage = page.withMovedItem(itemId, x, y) ?: return false
+            changed = updatedPage != page
+            updatedPage
+        }
+        if (!changed) return false
+        setClassicPages(updatedPages)
+        return true
+    }
+
     fun resizeClassicGridItem(pageId: String, itemId: String, width: Int, height: Int): Boolean {
         val pages = classicPages()
         var changed = false

@@ -524,6 +524,38 @@ class LauncherSettingsTest {
     }
 
     @Test
+    fun moveClassicGridItemWithinPageUpdatesPosition() {
+        val app = ClassicGridItem.app("com.example", x = 0, y = 0)
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default().copy(items = listOf(app))))
+
+        assertTrue(settings.moveClassicGridItemWithinPage("classic-1", app.id, x = 2, y = 3))
+
+        val moved = settings.classicPages().single().items.single()
+        assertEquals(app.id, moved.id)
+        assertEquals(2, moved.x)
+        assertEquals(3, moved.y)
+    }
+
+    @Test
+    fun moveClassicGridItemWithinPageReturnsFalseForCollisionAndKeepsItem() {
+        val app = ClassicGridItem.app("com.example", x = 0, y = 0)
+        val blocker = ClassicGridItem.app("com.blocker", x = 1, y = 0)
+        val page = ClassicLauncherPageDefinition.default().copy(items = listOf(app, blocker))
+        settings.setClassicPages(listOf(page))
+
+        assertFalse(settings.moveClassicGridItemWithinPage("classic-1", app.id, x = 1, y = 0))
+
+        assertEquals(listOf(app, blocker), settings.classicPages().single().items)
+    }
+
+    @Test
+    fun moveClassicGridItemWithinPageReturnsFalseForMissingItem() {
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default()))
+
+        assertFalse(settings.moveClassicGridItemWithinPage("classic-1", "missing", x = 1, y = 1))
+    }
+
+    @Test
     fun resizeClassicGridItemUpdatesItemSpan() {
         val app = ClassicGridItem.app("com.example", x = 1, y = 1)
         settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default().copy(items = listOf(app))))

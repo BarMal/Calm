@@ -233,6 +233,7 @@ class CalmLauncherRunner(
         addWidgetToClassicPage = classicWidgetHostController::requestAddWidget,
         removeClassicGridItem = ::removeClassicGridItem,
         moveClassicGridItem = ::moveClassicGridItem,
+        moveClassicGridItemWithinPage = ::moveClassicGridItemWithinPage,
         resizeClassicGridItem = ::resizeClassicGridItem,
         addClassicPage = ::addClassicPage,
         moveClassicPage = ::moveClassicPage,
@@ -389,6 +390,24 @@ class CalmLauncherRunner(
         }
         selectPage(targetPage.key)
         Toast.makeText(activity, "Moved to ${targetPage.title}", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun moveClassicGridItemWithinPage(
+        page: ClassicLauncherPageDefinition,
+        item: ClassicGridItem,
+        x: Int,
+        y: Int,
+    ) {
+        if (item.x == x && item.y == y) {
+            Toast.makeText(activity, "Already there", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!settings.moveClassicGridItemWithinPage(page.id, item.id, x, y)) {
+            Toast.makeText(activity, "Position unavailable", Toast.LENGTH_SHORT).show()
+            return
+        }
+        Toast.makeText(activity, "Moved", Toast.LENGTH_SHORT).show()
         render()
     }
 

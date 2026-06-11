@@ -11,6 +11,7 @@ import android.widget.FrameLayout
 import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import java.text.Collator
@@ -137,19 +138,111 @@ class LauncherPageFactory(
             Toast.makeText(activity, "No apps available to add", Toast.LENGTH_SHORT).show()
             return
         }
-        val labels = apps.map(::classicAppPickerLabel).toTypedArray()
-        AlertDialog.Builder(activity)
+        val grid = GridLayout(activity).apply {
+            columnCount = CLASSIC_PICKER_COLUMNS
+            useDefaultMargins = false
+            setPadding(activity.dp(14), activity.dp(14), activity.dp(14), activity.dp(14))
+        }
+        var dialog: AlertDialog? = null
+        apps.forEachIndexed { index, app ->
+            grid.addView(
+                classicAppPickerCard(app) {
+                    dialog?.dismiss()
+                    addAppToClassicPage(classicPage, app)
+                },
+                GridLayout.LayoutParams(
+                    GridLayout.spec(index / CLASSIC_PICKER_COLUMNS),
+                    GridLayout.spec(index % CLASSIC_PICKER_COLUMNS, GridLayout.FILL),
+                ).apply {
+                    width = 0
+                    height = ViewGroup.LayoutParams.WRAP_CONTENT
+                    columnSpec = GridLayout.spec(index % CLASSIC_PICKER_COLUMNS, 1f)
+                    setMargins(activity.dp(6), activity.dp(6), activity.dp(6), activity.dp(6))
+                },
+            )
+        }
+        val scroll = ScrollView(activity).apply {
+            addView(grid, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        dialog = AlertDialog.Builder(activity)
             .setTitle("Add app to ${classicPage.title}")
-            .setItems(labels) { _, which ->
-                addAppToClassicPage(classicPage, apps[which])
-            }
+            .setView(scroll)
             .setNegativeButton("Cancel", null)
-            .show()
+            .create()
+        dialog.show()
     }
 
     private fun classicAppPickerLabel(app: AppEntry): String {
         val profile = app.profileLabel.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
         return "${app.label}$profile"
+    }
+
+    private fun classicAppPickerCard(app: AppEntry, onClick: () -> Unit): View {
+        val pickerLabel = classicAppPickerLabel(app)
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(16))
+            contentDescription = pickerLabel
+            setPadding(activity.dp(10), activity.dp(12), activity.dp(10), activity.dp(12))
+            addView(
+                FrameLayout(activity).apply {
+                    resolveIcon(app)?.let { icon ->
+                        addView(
+                            ImageView(activity).apply {
+                                scaleType = ImageView.ScaleType.CENTER_CROP
+                                setImageDrawable(RoundedBitmapDrawable(icon, activity.dp(16).toFloat()))
+                            },
+                            FrameLayout.LayoutParams(activity.dp(56), activity.dp(56), Gravity.CENTER),
+                        )
+                    } ?: addView(
+                        TextView(activity).apply {
+                            text = app.label.firstOrNull()?.uppercaseChar()?.toString().orEmpty()
+                            setTextColor(CalmTheme.INK)
+                            textSize = 28f
+                            typeface = Typeface.DEFAULT
+                            setTypeface(typeface, Typeface.BOLD)
+                            gravity = Gravity.CENTER
+                            includeFontPadding = false
+                        },
+                        FrameLayout.LayoutParams(activity.dp(56), activity.dp(56), Gravity.CENTER),
+                    )
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(62)),
+            )
+            addView(
+                TextView(activity).apply {
+                    text = app.label
+                    setTextColor(CalmTheme.INK)
+                    textSize = 13f
+                    typeface = Typeface.DEFAULT
+                    setTypeface(typeface, Typeface.BOLD)
+                    maxLines = 2
+                    ellipsize = TextUtils.TruncateAt.END
+                    gravity = Gravity.CENTER
+                    includeFontPadding = false
+                    setPadding(0, activity.dp(8), 0, 0)
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+            )
+            app.profileLabel.takeIf { it.isNotBlank() }?.let { profile ->
+                addView(
+                    TextView(activity).apply {
+                        text = profile
+                        setTextColor(CalmTheme.MUTED_INK)
+                        textSize = 11f
+                        maxLines = 1
+                        ellipsize = TextUtils.TruncateAt.END
+                        gravity = Gravity.CENTER
+                        includeFontPadding = false
+                        setPadding(0, activity.dp(5), 0, 0)
+                    },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+                )
+            }
+            minimumHeight = activity.dp(150)
+            setOnClickListener { onClick() }
+        }
     }
 
     private fun classicGrid(gridItems: List<Pair<ClassicGridItem, View>>): View {
@@ -404,6 +497,8 @@ class LauncherPageFactory(
     }
 
     private companion object {
+        private const val CLASSIC_PICKER_COLUMNS = 2
+
         val CLASSIC_ITEM_SIZE_OPTIONS = listOf(
             ClassicItemSizeOption("Icon", 1, 1),
             ClassicItemSizeOption("Wide", 2, 1),

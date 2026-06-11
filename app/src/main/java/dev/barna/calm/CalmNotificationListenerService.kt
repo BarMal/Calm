@@ -3,7 +3,6 @@ package dev.barna.calm
 import android.app.Notification
 import android.app.PendingIntent
 import android.graphics.Bitmap
-import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.UserManager
@@ -136,18 +135,16 @@ class CalmNotificationListenerService : NotificationListenerService() {
     }
 
     private fun messagingMessages(notification: Notification): List<ExtractedMessage> {
-        val rawMessages = notification.extras.getParcelableArray(Notification.EXTRA_MESSAGES) ?: return emptyList()
-        return rawMessages
-            .filterIsInstance<Bundle>()
-            .mapNotNull { bundle ->
-                val text = bundle.getCharSequence("text")?.toString().orEmpty()
+        return NotificationExtras.messagingMessages(notification)
+            .mapNotNull { message ->
+                val text = message.text?.toString().orEmpty()
                 if (text.isBlank()) {
                     null
                 } else {
                     ExtractedMessage(
-                        sender = bundle.getCharSequence("sender")?.toString().orEmpty(),
+                        sender = NotificationExtras.senderName(message),
                         text = text,
-                        timestamp = bundle.getLong("time"),
+                        timestamp = message.timestamp,
                     )
                 }
             }

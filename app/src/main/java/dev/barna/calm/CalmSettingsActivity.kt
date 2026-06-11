@@ -24,6 +24,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import java.util.Locale
+import java.util.concurrent.Executors
 
 class CalmSettingsActivity : ComponentActivity() {
     private lateinit var settings: LauncherSettings
@@ -32,8 +33,10 @@ class CalmSettingsActivity : ComponentActivity() {
     private lateinit var drawables: CalmDrawables
     private val mainHandler = Handler(Looper.getMainLooper())
     private val deferredRender = Runnable { render() }
+    private val appLoadExecutor = Executors.newSingleThreadExecutor()
     private var settingsScrollY = 0
     private var cachedAppEntries: List<AppEntry>? = null
+    private var destroyed = false
     private val calendarPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
         render()
     }
@@ -48,17 +51,20 @@ class CalmSettingsActivity : ComponentActivity() {
         drawables = CalmDrawables(this)
         configureWindow()
         render()
-        Thread {
+        appLoadExecutor.execute {
             val entries = appRepository.loadAppEntries()
             mainHandler.post {
+                if (destroyed) return@post
                 cachedAppEntries = entries
                 requestRender()
             }
-        }.start()
+        }
     }
 
     override fun onDestroy() {
+        destroyed = true
         mainHandler.removeCallbacks(deferredRender)
+        appLoadExecutor.shutdownNow()
         super.onDestroy()
     }
 

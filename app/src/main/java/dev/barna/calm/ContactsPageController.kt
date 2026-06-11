@@ -12,6 +12,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import java.util.concurrent.Executor
 
 class ContactsPageController(
     private val activity: MainActivity,
@@ -21,10 +22,13 @@ class ContactsPageController(
     private val cardStackController: CardStackController,
     private val focusOverlay: FocusOverlayController,
     private val mainHandler: Handler,
+    private val backgroundExecutor: Executor,
     private val activePreferences: () -> LauncherUiPreferences,
     private val barePagePanel: (Int) -> LinearLayout,
     private val label: (String, Int, Int, Int) -> TextView,
 ) {
+    private var loadGeneration = 0
+
     fun buildPage(): LinearLayout {
         val page = barePagePanel(activity.dp(20))
         page.addView(
@@ -48,11 +52,13 @@ class ContactsPageController(
     }
 
     private fun loadContacts(host: FrameLayout) {
-        Thread {
+        val generation = ++loadGeneration
+        backgroundExecutor.execute {
             val contacts = contactsRepository.loadFavouriteContacts()
             val photos = HashMap<Long, Bitmap?>()
             contacts.forEach { photos[it.contactId] = contactsRepository.photo(it) }
             mainHandler.post {
+                if (generation != loadGeneration) return@post
                 host.removeAllViews()
                 if (contacts.isEmpty()) {
                     host.addView(note("No favourite contacts yet. Star a contact to see them here."))
@@ -63,7 +69,7 @@ class ContactsPageController(
                     )
                 }
             }
-        }.start()
+        }
     }
 
     private fun contactStack(contacts: List<ContactEntry>, photos: Map<Long, Bitmap?>): View {

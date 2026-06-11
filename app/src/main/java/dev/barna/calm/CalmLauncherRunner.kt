@@ -162,6 +162,7 @@ class CalmLauncherRunner(
         openSettingsActivity = ::openSettingsActivity,
         openCalendarEvent = ::openCalendarEvent,
     )
+    private val stateExecutor = Executors.newFixedThreadPool(4)
     private val chapterPageBuilder = ChapterPageBuilder(
         activity = activity,
         drawables = drawables,
@@ -187,6 +188,7 @@ class CalmLauncherRunner(
         cardStackController = cardStackController,
         focusOverlay = focusOverlay,
         mainHandler = mainHandler,
+        backgroundExecutor = stateExecutor,
         activePreferences = { activePreferences },
         barePagePanel = ::createBarePagePanel,
         label = ::label,
@@ -209,7 +211,6 @@ class CalmLauncherRunner(
         barePagePanel = ::createBarePagePanel,
         label = ::label,
     )
-    private val stateExecutor = Executors.newFixedThreadPool(4)
     private val appLibraryDataManager = LauncherAppLibraryDataManager(
         notificationRepository = notificationRepository,
         settings = settings,
@@ -309,6 +310,7 @@ class CalmLauncherRunner(
     fun onDestroy() {
         try {
             mainHandler.removeCallbacksAndMessages(null)
+            stateExecutor.shutdownNow()
         } finally {
             unregisterPackageChangeReceiver()
         }

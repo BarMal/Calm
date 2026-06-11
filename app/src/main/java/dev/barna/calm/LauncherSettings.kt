@@ -205,14 +205,12 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         if (isClassicPageApp(identityKey)) return false
         val pages = classicPages().ifEmpty { listOf(ClassicLauncherPageDefinition.default()) }
         val target = pages.firstOrNull { it.enabled } ?: pages.first().copy(enabled = true)
-        val updatedTarget = target.withApp(identityKey) ?: return false
-        val nextPages = pages.map { page ->
-            if (page.id == updatedTarget.id) updatedTarget else page
-        }.let { mapped ->
-            if (mapped.any { it.id == updatedTarget.id }) mapped else mapped + updatedTarget
-        }
-        setClassicPages(nextPages)
-        return true
+        return addAppToClassicPage(target.id, identityKey, pages)
+    }
+
+    fun addAppToClassicPage(pageId: String, identityKey: String): Boolean {
+        if (isClassicPageApp(identityKey)) return false
+        return addAppToClassicPage(pageId, identityKey, classicPages())
     }
 
     fun addWidgetToClassicPage(pageId: String, appWidgetId: Int): Boolean {
@@ -237,6 +235,27 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         val removedItem = removed ?: return null
         setClassicPages(updatedPages)
         return removedItem
+    }
+
+    private fun addAppToClassicPage(
+        pageId: String,
+        identityKey: String,
+        pages: List<ClassicLauncherPageDefinition>,
+    ): Boolean {
+        var changed = false
+        val updatedPages = pages.map { page ->
+            if (page.id == pageId) {
+                val enabledPage = page.copy(enabled = true)
+                val updatedPage = enabledPage.withApp(identityKey) ?: return false
+                changed = updatedPage != page
+                updatedPage
+            } else {
+                page
+            }
+        }
+        if (!changed) return false
+        setClassicPages(updatedPages)
+        return true
     }
 
     fun dockConfig(): DockConfig {

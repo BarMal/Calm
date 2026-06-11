@@ -79,6 +79,20 @@ class LauncherAppMutationHandler(
         }
     }
 
+    fun addAppToClassicPage(page: ClassicLauncherPageDefinition, app: AppEntry) {
+        if (isClassicPageApp(app.identityKey)) {
+            Toast.makeText(activity, "${app.label} is already on a Classic page", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (settings.addAppToClassicPage(page.id, app.identityKey)) {
+            selectPage(page.key)
+            Toast.makeText(activity, "Added ${app.label} to ${page.title}", Toast.LENGTH_SHORT).show()
+            render()
+        } else {
+            Toast.makeText(activity, "${page.title} is full", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     fun showApp(appKey: String) {
         settings.showApp(appKey)
         render()

@@ -1,5 +1,6 @@
 package dev.barna.calm
 
+import android.app.AlertDialog
 import android.graphics.Bitmap
 import android.graphics.Typeface
 import android.text.TextUtils
@@ -11,6 +12,8 @@ import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
+import java.text.Collator
 
 /**
  * Builds the per-page content views for the launcher pager. Overview and notification-chapter pages
@@ -31,6 +34,7 @@ class LauncherPageFactory(
     private val resolveIcon: (AppEntry) -> Bitmap?,
     private val openAppEntry: (AppEntry) -> Unit,
     private val createWidgetView: (ClassicGridItem) -> View?,
+    private val addAppToClassicPage: (ClassicLauncherPageDefinition, AppEntry) -> Unit,
     private val addWidgetToClassicPage: (ClassicLauncherPageDefinition) -> Unit,
     private val removeClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem) -> Unit,
     private val barePagePanel: (Int) -> LinearLayout,
@@ -42,7 +46,7 @@ class LauncherPageFactory(
             page.key == CalmTheme.PINNED_KEY -> createPinnedPage(state.pinnedApps)
             page.key == CalmTheme.CONTACTS_KEY -> contactsPageController.buildPage()
             page.key == CalmTheme.WORK_OVERVIEW_KEY -> overviewPageBuilder.buildPage(state, workProfile = true)
-            page.classicPage != null -> createClassicPage(page.classicPage, state.appEntries)
+            page.classicPage != null -> createClassicPage(page.classicPage, state)
             page.chapter == null -> overviewPageBuilder.buildPage(state)
             else -> chapterPageBuilder.buildPage(page.chapter)
         }
@@ -50,8 +54,9 @@ class LauncherPageFactory(
 
     private fun createClassicPage(
         classicPage: ClassicLauncherPageDefinition,
-        appEntries: List<AppEntry>,
+        state: LauncherRenderModel,
     ): LinearLayout {
+        val appEntries = state.appEntries
         val appsByKey = appEntries.associateBy { it.identityKey }
         val gridItems = classicPage.items.mapNotNull { item ->
             when (item.type) {
@@ -60,7 +65,7 @@ class LauncherPageFactory(
             }
         }
         return barePagePanel(activity.dp(20)).apply {
-            addView(classicHeader(classicPage))
+            addView(classicHeader(classicPage, state))
             if (gridItems.isEmpty()) {
                 addView(
                     LinearLayout(activity).apply {
@@ -81,7 +86,7 @@ class LauncherPageFactory(
         }
     }
 
-    private fun classicHeader(classicPage: ClassicLauncherPageDefinition): View {
+    private fun classicHeader(classicPage: ClassicLauncherPageDefinition, state: LauncherRenderModel): View {
         return animatedChrome(
             LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -91,6 +96,11 @@ class LauncherPageFactory(
                     label(classicPage.title, 30, CalmTheme.INK, Typeface.NORMAL),
                     LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
                 )
+                addView(classicHeaderButton("Add app") { showClassicAppPicker(classicPage, state) }.apply {
+                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                        marginEnd = activity.dp(8)
+                    }
+                })
                 addView(classicHeaderButton("Add widget") { addWidgetToClassicPage(classicPage) })
             },
         )
@@ -110,6 +120,34 @@ class LauncherPageFactory(
             minWidth = activity.dp(104)
             setOnClickListener { action() }
         }
+    }
+
+    private fun showClassicAppPicker(classicPage: ClassicLauncherPageDefinition, state: LauncherRenderModel) {
+        val placedAppKeys = state.classicPages
+            .flatMap { page -> page.items }
+            .filter { item -> item.type == ClassicGridItemType.APP }
+            .map { item -> item.target }
+            .toSet()
+        val apps = state.appEntries
+            .filterNot { app -> app.identityKey in placedAppKeys }
+            .sortedWith { left, right -> Collator.getInstance().compare(classicAppPickerLabel(left), classicAppPickerLabel(right)) }
+        if (apps.isEmpty()) {
+            Toast.makeText(activity, "No apps available to add", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = apps.map(::classicAppPickerLabel).toTypedArray()
+        AlertDialog.Builder(activity)
+            .setTitle("Add app to ${classicPage.title}")
+            .setItems(labels) { _, which ->
+                addAppToClassicPage(classicPage, apps[which])
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun classicAppPickerLabel(app: AppEntry): String {
+        val profile = app.profileLabel.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
+        return "${app.label}$profile"
     }
 
     private fun classicGrid(gridItems: List<Pair<ClassicGridItem, View>>): View {

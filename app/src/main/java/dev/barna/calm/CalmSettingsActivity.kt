@@ -298,6 +298,12 @@ class CalmSettingsActivity : ComponentActivity() {
             valueText = { "${it + DockConfig.MIN_ITEM_COUNT} apps" },
         ) { settings.setDockItemCount(it + DockConfig.MIN_ITEM_COUNT); requestRender() })
         content.addView(sliderRow(
+            title = "Dock item size",
+            progress = dock.itemSpan - DockConfig.MIN_ITEM_SPAN,
+            max = DockConfig.MAX_ITEM_SPAN - DockConfig.MIN_ITEM_SPAN,
+            valueText = { dockItemSizeLabel(it + DockConfig.MIN_ITEM_SPAN) },
+        ) { settings.setDockItemSpan(it + DockConfig.MIN_ITEM_SPAN); requestRender() })
+        content.addView(sliderRow(
             title = "Dock height",
             progress = dock.verticalPaddingDp,
             max = DockConfig.MAX_VERTICAL_PADDING_DP,
@@ -634,6 +640,10 @@ class CalmSettingsActivity : ComponentActivity() {
         val count = settings.dockKeys().size
         if (count == 0) return "Choose apps to show in the dock."
         return "$count dock ${if (count == 1) "app" else "apps"}."
+    }
+
+    private fun dockItemSizeLabel(span: Int): String {
+        return if (DockConfig.showsItemLabels(span)) "2x1 icon + name" else "1x1 icon"
     }
 
     private fun showDockAppsDialog() {

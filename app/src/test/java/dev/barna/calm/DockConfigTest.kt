@@ -17,6 +17,11 @@ class DockConfigTest {
     }
 
     @Test
+    fun defaultItemSpanIsOneCell() {
+        assertEquals(1, DockConfig().itemSpan)
+    }
+
+    @Test
     fun defaultPaddingsAreNonZero() {
         assertTrue(DockConfig().verticalPaddingDp > 0)
         assertTrue(DockConfig().horizontalPaddingDp > 0)
@@ -37,10 +42,35 @@ class DockConfigTest {
     }
 
     @Test
+    fun itemSpanBoundsContainDefault() {
+        assertTrue(DockConfig.MIN_ITEM_SPAN <= DockConfig.DEFAULT_ITEM_SPAN)
+        assertTrue(DockConfig.DEFAULT_ITEM_SPAN <= DockConfig.MAX_ITEM_SPAN)
+    }
+
+    @Test
+    fun oneCellDockItemsHideLabels() {
+        assertFalse(DockConfig.showsItemLabels(1))
+        assertEquals(56, DockConfig.itemWidthDp(1))
+    }
+
+    @Test
+    fun twoCellDockItemsShowLabels() {
+        assertTrue(DockConfig.showsItemLabels(2))
+        assertEquals(112, DockConfig.itemWidthDp(2))
+    }
+
+    @Test
+    fun dockItemWidthClampsUnsupportedSpans() {
+        assertEquals(56, DockConfig.itemWidthDp(0))
+        assertEquals(112, DockConfig.itemWidthDp(99))
+    }
+
+    @Test
     fun enabledConfigCanBeConstructed() {
-        val config = DockConfig(enabled = true, itemCount = 4, verticalPaddingDp = 8, horizontalPaddingDp = 16)
+        val config = DockConfig(enabled = true, itemCount = 4, itemSpan = 2, verticalPaddingDp = 8, horizontalPaddingDp = 16)
         assertTrue(config.enabled)
         assertEquals(4, config.itemCount)
+        assertEquals(2, config.itemSpan)
         assertEquals(8, config.verticalPaddingDp)
         assertEquals(16, config.horizontalPaddingDp)
     }

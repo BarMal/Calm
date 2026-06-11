@@ -68,6 +68,7 @@ class LauncherSettingsTest {
         val dock = settings.dockConfig()
         assertFalse(dock.enabled)
         assertEquals(DockConfig.DEFAULT_ITEM_COUNT, dock.itemCount)
+        assertEquals(DockConfig.DEFAULT_ITEM_SPAN, dock.itemSpan)
         assertEquals(DockConfig.DEFAULT_VERTICAL_PADDING_DP, dock.verticalPaddingDp)
         assertEquals(DockConfig.DEFAULT_HORIZONTAL_PADDING_DP, dock.horizontalPaddingDp)
     }
@@ -155,6 +156,12 @@ class LauncherSettingsTest {
     }
 
     @Test
+    fun dockItemSpanRoundTrips() {
+        settings.setDockItemSpan(2)
+        assertEquals(2, settings.dockConfig().itemSpan)
+    }
+
+    @Test
     fun cardStackCurveRoundTrips() {
         settings.setCardStackCurve(75)
         assertEquals(75, settings.cardStackTuning().curve)
@@ -208,6 +215,18 @@ class LauncherSettingsTest {
     fun dockItemCountClampedToMax() {
         settings.setDockItemCount(100)
         assertEquals(DockConfig.MAX_ITEM_COUNT, settings.dockConfig().itemCount)
+    }
+
+    @Test
+    fun dockItemSpanClampedToMin() {
+        settings.setDockItemSpan(0)
+        assertEquals(DockConfig.MIN_ITEM_SPAN, settings.dockConfig().itemSpan)
+    }
+
+    @Test
+    fun dockItemSpanClampedToMax() {
+        settings.setDockItemSpan(100)
+        assertEquals(DockConfig.MAX_ITEM_SPAN, settings.dockConfig().itemSpan)
     }
 
     // ---- toggle semantics ----
@@ -421,6 +440,7 @@ class LauncherSettingsTest {
         val before = settings.launcherChangeToken()
         settings.setDockEnabled(true)
         settings.setDockItemCount(DockConfig.MAX_ITEM_COUNT)
+        settings.setDockItemSpan(DockConfig.MAX_ITEM_SPAN)
         settings.setDockVerticalPadding(DockConfig.MAX_VERTICAL_PADDING_DP)
         settings.setDockHorizontalPadding(DockConfig.MAX_HORIZONTAL_PADDING_DP)
         val after = settings.launcherChangeToken()

@@ -51,6 +51,17 @@ class ClassicGridItemTest {
     }
 
     @Test
+    fun staticCreatesStableTargetItem() {
+        val item = ClassicGridItem.static(ClassicStaticItem.CLOCK, x = 0, y = 2, width = 4, height = 1)
+
+        assertEquals("static:clock", item.id)
+        assertEquals(ClassicGridItemType.STATIC, item.type)
+        assertEquals("CLOCK", item.target)
+        assertEquals(4, item.width)
+        assertEquals(1, item.height)
+    }
+
+    @Test
     fun decodeClampsCoordinatesAndSizeMinimums() {
         val decoded = ClassicGridItem.decode(
             JSONObject()

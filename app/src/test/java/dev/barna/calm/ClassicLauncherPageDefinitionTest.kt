@@ -93,6 +93,41 @@ class ClassicLauncherPageDefinitionTest {
     }
 
     @Test
+    fun withStaticItemPlacesItemInFirstFreeArea() {
+        val page = ClassicLauncherPageDefinition.default()
+            .withApp("com.a")
+            ?.withStaticItem(ClassicStaticItem.CLOCK)
+
+        val item = page?.items?.single { it.type == ClassicGridItemType.STATIC }
+        assertEquals(0, item?.x)
+        assertEquals(1, item?.y)
+        assertEquals(ClassicGridItem.GRID_COLUMNS, item?.width)
+        assertEquals(1, item?.height)
+        assertTrue(page?.containsStaticItem(ClassicStaticItem.CLOCK) == true)
+    }
+
+    @Test
+    fun withStaticItemSkipsDuplicate() {
+        val page = ClassicLauncherPageDefinition.default().withStaticItem(ClassicStaticItem.SEARCH)
+
+        val updated = page?.withStaticItem(ClassicStaticItem.SEARCH)
+
+        assertSame(page, updated)
+        assertEquals(1, updated?.items?.size)
+    }
+
+    @Test
+    fun withStaticItemReturnsNullWhenNoSpanFits() {
+        val page = ClassicLauncherPageDefinition.default().copy(
+            items = (0 until ClassicGridItem.DEFAULT_GRID_ROWS).map { row ->
+                ClassicGridItem.app("com.$row", x = 0, y = row)
+            },
+        )
+
+        assertNull(page.withStaticItem(ClassicStaticItem.CLOCK))
+    }
+
+    @Test
     fun withoutItemRemovesOnlyMatchingItem() {
         val app = ClassicGridItem.app("com.example", x = 0, y = 0)
         val widget = ClassicGridItem.widget(appWidgetId = 42, x = 0, y = 1)

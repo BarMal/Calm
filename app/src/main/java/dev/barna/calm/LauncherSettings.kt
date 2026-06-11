@@ -201,6 +201,10 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         return classicPages().any { page -> page.containsWidget(appWidgetId) }
     }
 
+    fun isClassicPageStaticItem(staticItem: ClassicStaticItem): Boolean {
+        return classicPages().any { page -> page.containsStaticItem(staticItem) }
+    }
+
     fun addAppToClassicPage(identityKey: String): Boolean {
         if (isClassicPageApp(identityKey)) return false
         val pages = classicPages().ifEmpty { listOf(ClassicLauncherPageDefinition.default()) }
@@ -223,6 +227,22 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         val pages = classicPages()
         val updatedPages = pages.map { page ->
             if (page.id == pageId) page.withWidget(appWidgetId, width, height) ?: return false else page
+        }
+        if (updatedPages == pages) return false
+        setClassicPages(updatedPages)
+        return true
+    }
+
+    fun addStaticItemToClassicPage(
+        pageId: String,
+        staticItem: ClassicStaticItem,
+        width: Int = ClassicGridItem.GRID_COLUMNS,
+        height: Int = 1,
+    ): Boolean {
+        if (isClassicPageStaticItem(staticItem)) return false
+        val pages = classicPages()
+        val updatedPages = pages.map { page ->
+            if (page.id == pageId) page.withStaticItem(staticItem, width, height) ?: return false else page
         }
         if (updatedPages == pages) return false
         setClassicPages(updatedPages)

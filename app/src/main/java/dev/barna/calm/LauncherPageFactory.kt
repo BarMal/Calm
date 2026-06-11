@@ -14,6 +14,7 @@ import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.TextClock
 import android.widget.TextView
 import android.widget.Toast
 import java.text.Collator
@@ -76,6 +77,7 @@ class LauncherPageFactory(
             when (item.type) {
                 ClassicGridItemType.APP -> appsByKey[item.target]?.let { app -> item to classicAppTile(classicPage, item, app, state, editing) }
                 ClassicGridItemType.WIDGET -> item to classicWidgetTile(classicPage, item, state, editing)
+                ClassicGridItemType.STATIC -> item to classicStaticTile(classicPage, item, state, editing)
             }
         }
         return barePagePanel(activity.dp(20)).apply {
@@ -547,6 +549,71 @@ class LauncherPageFactory(
         }
     }
 
+    private fun classicStaticTile(
+        classicPage: ClassicLauncherPageDefinition,
+        item: ClassicGridItem,
+        state: LauncherRenderModel,
+        editing: Boolean,
+    ): View {
+        val staticItem = runCatching { ClassicStaticItem.valueOf(item.target) }.getOrNull()
+        val title = staticItem?.label ?: "Static item"
+        val tile = when (staticItem) {
+            ClassicStaticItem.CLOCK -> classicClockTile()
+            ClassicStaticItem.SEARCH -> classicSearchTile()
+            null -> classicUnavailableStaticTile()
+        }
+        tile.setOnLongClickListener {
+            showClassicItemActions(tile, classicPage, item, title, state)
+            true
+        }
+        return if (editing) {
+            editableClassicTile(tile, title) { source ->
+                showClassicItemActions(source, classicPage, item, title, state)
+            }
+        } else {
+            tile
+        }
+    }
+
+    private fun classicClockTile(): View {
+        return TextClock(activity).apply {
+            format12Hour = "h:mm"
+            format24Hour = "HH:mm"
+            setTextColor(CalmTheme.INK)
+            textSize = 28f
+            typeface = Typeface.DEFAULT
+            setTypeface(typeface, Typeface.NORMAL)
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            contentDescription = "Clock"
+        }
+    }
+
+    private fun classicSearchTile(): View {
+        return TextView(activity).apply {
+            text = "Search"
+            setTextColor(CalmTheme.INK)
+            textSize = 18f
+            typeface = Typeface.DEFAULT
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(999))
+            setPadding(activity.dp(16), activity.dp(10), activity.dp(16), activity.dp(10))
+            contentDescription = "Search"
+        }
+    }
+
+    private fun classicUnavailableStaticTile(): View {
+        return TextView(activity).apply {
+            text = "Unavailable"
+            setTextColor(CalmTheme.MUTED_INK)
+            textSize = 14f
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+        }
+    }
+
     private fun editableClassicTile(
         content: View,
         title: String,
@@ -825,6 +892,12 @@ class LauncherPageFactory(
             return "$title - ${width}x$height$current"
         }
     }
+
+    private val ClassicStaticItem.label: String
+        get() = when (this) {
+            ClassicStaticItem.CLOCK -> "Clock"
+            ClassicStaticItem.SEARCH -> "Search"
+        }
 
     private companion object {
         private const val CLASSIC_PICKER_COLUMNS = 2

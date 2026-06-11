@@ -436,6 +436,51 @@ class LauncherSettingsTest {
     }
 
     @Test
+    fun addStaticItemToClassicPageAddsItemToTargetPage() {
+        settings.setClassicPages(
+            listOf(
+                ClassicLauncherPageDefinition(id = "classic-1", title = "Classic"),
+                ClassicLauncherPageDefinition(id = "classic-2", title = "Second"),
+            ),
+        )
+
+        assertTrue(settings.addStaticItemToClassicPage("classic-2", ClassicStaticItem.CLOCK))
+
+        val pages = settings.classicPages()
+        assertFalse(pages[0].containsStaticItem(ClassicStaticItem.CLOCK))
+        assertTrue(pages[1].containsStaticItem(ClassicStaticItem.CLOCK))
+        assertTrue(settings.isClassicPageStaticItem(ClassicStaticItem.CLOCK))
+    }
+
+    @Test
+    fun addStaticItemToClassicPageUsesRequestedSpan() {
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default()))
+
+        assertTrue(settings.addStaticItemToClassicPage("classic-1", ClassicStaticItem.SEARCH, width = 2, height = 1))
+
+        val item = settings.classicPages().single().items.single()
+        assertEquals(2, item.width)
+        assertEquals(1, item.height)
+    }
+
+    @Test
+    fun addStaticItemToClassicPageReturnsFalseForDuplicate() {
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default()))
+        assertTrue(settings.addStaticItemToClassicPage("classic-1", ClassicStaticItem.CLOCK))
+
+        assertFalse(settings.addStaticItemToClassicPage("classic-1", ClassicStaticItem.CLOCK))
+
+        assertEquals(1, settings.classicPages().single().items.size)
+    }
+
+    @Test
+    fun addStaticItemToClassicPageReturnsFalseWhenTargetMissing() {
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default()))
+
+        assertFalse(settings.addStaticItemToClassicPage("missing", ClassicStaticItem.CLOCK))
+    }
+
+    @Test
     fun removeClassicGridItemReturnsAndRemovesItem() {
         val app = ClassicGridItem.app("com.example", x = 0, y = 0)
         val widget = ClassicGridItem.widget(appWidgetId = 42, x = 0, y = 1)

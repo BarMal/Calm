@@ -126,4 +126,44 @@ class ClassicLauncherPageDefinitionTest {
 
         assertNull(page.withItemAtNextFreeArea(app.copy(x = 1, y = 0)))
     }
+
+    @Test
+    fun withResizedItemPreservesPositionWhenAreaIsClear() {
+        val app = ClassicGridItem.app("com.example", x = 1, y = 1)
+        val page = ClassicLauncherPageDefinition.default().copy(items = listOf(app))
+
+        val resized = page.withResizedItem(app.id, width = 2, height = 2)?.items?.single()
+
+        assertEquals(app.id, resized?.id)
+        assertEquals(1, resized?.x)
+        assertEquals(1, resized?.y)
+        assertEquals(2, resized?.width)
+        assertEquals(2, resized?.height)
+    }
+
+    @Test
+    fun withResizedItemMovesToFirstFreeAreaWhenCurrentPositionCannotFit() {
+        val app = ClassicGridItem.app("com.example", x = ClassicGridItem.GRID_COLUMNS - 1, y = 0)
+        val page = ClassicLauncherPageDefinition.default().copy(items = listOf(app))
+
+        val resized = page.withResizedItem(app.id, width = 2, height = 1)?.items?.single()
+
+        assertEquals(0, resized?.x)
+        assertEquals(0, resized?.y)
+        assertEquals(2, resized?.width)
+        assertEquals(1, resized?.height)
+    }
+
+    @Test
+    fun withResizedItemReturnsNullWhenNoAreaFits() {
+        val app = ClassicGridItem.app("com.example", x = 0, y = 0)
+        val blockers = (0 until ClassicGridItem.DEFAULT_GRID_ROWS).flatMap { row ->
+            (0 until ClassicGridItem.GRID_COLUMNS).mapNotNull { column ->
+                if (row == 0 && column == 0) null else ClassicGridItem.app("com.$row.$column", column, row)
+            }
+        }
+        val page = ClassicLauncherPageDefinition.default().copy(items = listOf(app) + blockers)
+
+        assertNull(page.withResizedItem(app.id, width = 2, height = 2))
+    }
 }

@@ -232,6 +232,7 @@ class CalmLauncherRunner(
         addWidgetToClassicPage = classicWidgetHostController::requestAddWidget,
         removeClassicGridItem = ::removeClassicGridItem,
         moveClassicGridItem = ::moveClassicGridItem,
+        resizeClassicGridItem = ::resizeClassicGridItem,
         barePagePanel = ::createBarePagePanel,
         label = ::label,
     )
@@ -379,6 +380,25 @@ class CalmLauncherRunner(
         }
         selectPage(targetPage.key)
         Toast.makeText(activity, "Moved to ${targetPage.title}", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun resizeClassicGridItem(
+        page: ClassicLauncherPageDefinition,
+        item: ClassicGridItem,
+        width: Int,
+        height: Int,
+    ) {
+        if (item.width == width && item.height == height) {
+            Toast.makeText(activity, "Already that size", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val resized = settings.resizeClassicGridItem(page.id, item.id, width, height)
+        if (!resized) {
+            Toast.makeText(activity, "No room for that size", Toast.LENGTH_SHORT).show()
+            return
+        }
+        Toast.makeText(activity, "Resized", Toast.LENGTH_SHORT).show()
         render()
     }
 

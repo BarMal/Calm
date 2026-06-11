@@ -50,25 +50,57 @@ data class ClassicLauncherPageDefinition(
         return copy(items = items + item.copy(x = position.first, y = position.second, width = boundedWidth, height = boundedHeight))
     }
 
+    fun withResizedItem(itemId: String, width: Int, height: Int): ClassicLauncherPageDefinition? {
+        val item = items.firstOrNull { candidate -> candidate.id == itemId } ?: return null
+        val boundedWidth = width.coerceIn(1, ClassicGridItem.GRID_COLUMNS)
+        val boundedHeight = height.coerceIn(1, ClassicGridItem.DEFAULT_GRID_ROWS)
+        val otherItems = items.filterNot { candidate -> candidate.id == itemId }
+        val position = if (areaIsClear(otherItems, item.x, item.y, boundedWidth, boundedHeight)) {
+            item.x to item.y
+        } else {
+            firstFreeArea(otherItems, boundedWidth, boundedHeight) ?: return null
+        }
+        val resizedItem = item.copy(x = position.first, y = position.second, width = boundedWidth, height = boundedHeight)
+        return copy(items = items.map { candidate -> if (candidate.id == itemId) resizedItem else candidate })
+    }
+
     fun withoutItem(itemId: String): ClassicLauncherPageDefinition {
         return copy(items = items.filterNot { item -> item.id == itemId })
     }
 
     private fun nextFreeArea(width: Int, height: Int): Pair<Int, Int>? {
-        val occupied = items.flatMap { item ->
+        return firstFreeArea(items, width, height)
+    }
+
+    private fun firstFreeArea(placedItems: List<ClassicGridItem>, width: Int, height: Int): Pair<Int, Int>? {
+        for (y in 0..ClassicGridItem.DEFAULT_GRID_ROWS - height) {
+            for (x in 0..ClassicGridItem.GRID_COLUMNS - width) {
+                if (areaIsClear(placedItems, x, y, width, height)) return x to y
+            }
+        }
+        return null
+    }
+
+    private fun areaIsClear(
+        placedItems: List<ClassicGridItem>,
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+    ): Boolean {
+        if (x < 0 || y < 0) return false
+        if (x + width > ClassicGridItem.GRID_COLUMNS) return false
+        if (y + height > ClassicGridItem.DEFAULT_GRID_ROWS) return false
+        val occupied = placedItems.flatMap { item ->
             (item.x until item.x + item.width).flatMap { x ->
                 (item.y until item.y + item.height).map { y -> x to y }
             }
         }.toSet()
-        for (y in 0..ClassicGridItem.DEFAULT_GRID_ROWS - height) {
-            for (x in 0..ClassicGridItem.GRID_COLUMNS - width) {
-                val clear = (x until x + width).all { candidateX ->
-                    (y until y + height).all { candidateY -> (candidateX to candidateY) !in occupied }
-                }
-                if (clear) return x to y
+        return (x until x + width).all { candidateX ->
+            (y until y + height).all { candidateY ->
+                (candidateX to candidateY) !in occupied
             }
         }
-        return null
     }
 
     companion object {

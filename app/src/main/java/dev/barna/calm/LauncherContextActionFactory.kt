@@ -14,7 +14,7 @@ data class LauncherContextActionCallbacks(
     val unpinApp: (AppEntry) -> Unit,
     val openAppInfo: (AppEntry) -> Unit,
     val hideApp: (AppEntry) -> Unit,
-    val appShortcuts: (AppChapter) -> List<AppShortcutEntry>,
+    val appShortcuts: (AppEntry) -> List<AppShortcutEntry>,
     val launchShortcut: (AppShortcutEntry) -> Unit,
 )
 
@@ -70,17 +70,20 @@ class LauncherContextActionFactory(
         app: AppEntry,
         pinned: Boolean,
     ): List<ContextAction> {
-        return listOf(
-            ContextAction("Open", Runnable { callbacks.openAppEntry(app) }),
-            ContextAction(if (pinned) "Unpin" else "Pin", Runnable {
-                if (pinned) {
-                    callbacks.unpinApp(app)
-                } else {
-                    callbacks.pinApp(app)
-                }
-            }),
-            ContextAction("Info", Runnable { callbacks.openAppInfo(app) }),
-            ContextAction("Hide", Runnable { callbacks.hideApp(app) }, ContextActionCloseBehavior.REMOVE_CARD),
-        )
+        val actions = ArrayList<ContextAction>()
+        actions.add(ContextAction("Open", Runnable { callbacks.openAppEntry(app) }))
+        actions.add(ContextAction(if (pinned) "Unpin" else "Pin", Runnable {
+            if (pinned) {
+                callbacks.unpinApp(app)
+            } else {
+                callbacks.pinApp(app)
+            }
+        }))
+        callbacks.appShortcuts(app).take(MAX_SHORTCUTS).forEach { shortcut ->
+            actions.add(ContextAction(shortcut.label, Runnable { callbacks.launchShortcut(shortcut) }))
+        }
+        actions.add(ContextAction("Info", Runnable { callbacks.openAppInfo(app) }))
+        actions.add(ContextAction("Hide", Runnable { callbacks.hideApp(app) }, ContextActionCloseBehavior.REMOVE_CARD))
+        return actions
     }
 }

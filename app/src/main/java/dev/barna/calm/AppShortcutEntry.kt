@@ -6,5 +6,5 @@ data class AppShortcutEntry(
     val label: String,
     val id: String,
     val packageName: String,
-    val userHandle: UserHandle,
+    val userHandle: UserHandle?,
 )

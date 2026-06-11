@@ -315,29 +315,38 @@ class NotificationChapterRepository(
     }
 
     fun getAppShortcuts(chapter: AppChapter): List<AppShortcutEntry> {
+        return getAppShortcuts(chapter.packageName, chapter.userHandle)
+    }
+
+    fun getAppShortcuts(app: AppEntry): List<AppShortcutEntry> {
+        return getAppShortcuts(app.packageName, app.userHandle)
+    }
+
+    private fun getAppShortcuts(packageName: String, userHandle: UserHandle?): List<AppShortcutEntry> {
         val launcher = launcherApps ?: return emptyList()
-        val userHandle = chapter.userHandle ?: return emptyList()
+        val resolvedUserHandle = userHandle ?: return emptyList()
         val query = LauncherApps.ShortcutQuery().apply {
             setQueryFlags(
                 LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
                 LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST,
             )
-            setPackage(chapter.packageName)
+            setPackage(packageName)
         }
-        return runCatching { launcher.getShortcuts(query, userHandle).orEmpty() }
+        return runCatching { launcher.getShortcuts(query, resolvedUserHandle).orEmpty() }
             .getOrNull().orEmpty()
             .mapNotNull { info ->
                 val label = info.shortLabel?.toString()?.takeIf { it.isNotBlank() }
                     ?: info.longLabel?.toString()?.takeIf { it.isNotBlank() }
                     ?: return@mapNotNull null
-                AppShortcutEntry(label, info.id, chapter.packageName, userHandle)
+                AppShortcutEntry(label, info.id, packageName, resolvedUserHandle)
             }
     }
 
     fun launchShortcut(shortcut: AppShortcutEntry): Boolean {
         val launcher = launcherApps ?: return false
+        val userHandle = shortcut.userHandle ?: return false
         return runCatching {
-            launcher.startShortcut(shortcut.packageName, shortcut.id, null, null, shortcut.userHandle)
+            launcher.startShortcut(shortcut.packageName, shortcut.id, null, null, userHandle)
         }.isSuccess
     }
 

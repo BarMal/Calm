@@ -39,6 +39,27 @@ class LauncherContextActionFactoryTest {
     }
 
     @Test
+    fun appActionsIncludeShortcutsBeforeInfoAndHide() {
+        val events = ArrayList<String>()
+        val shortcuts = listOf(
+            shortcut("Compose", "compose"),
+            shortcut("Search", "search"),
+            shortcut("Scan", "scan"),
+            shortcut("Overflow", "overflow"),
+        )
+        val factory = LauncherContextActionFactory(callbacks(events, shortcuts))
+        val app = app("maps.pkg")
+
+        val actions = factory.appActions(app, pinned = false)
+
+        assertEquals(listOf("Open", "Pin", "Compose", "Search", "Scan", "Info", "Hide"), actions.labels())
+        actions[2].action.run()
+        actions[4].action.run()
+
+        assertEquals(listOf("shortcut:compose", "shortcut:scan"), events)
+    }
+
+    @Test
     fun calendarActionsReflectPermissionState() {
         val events = ArrayList<String>()
         val factory = LauncherContextActionFactory(callbacks(events))
@@ -89,7 +110,10 @@ class LauncherContextActionFactoryTest {
         )
     }
 
-    private fun callbacks(events: MutableList<String>): LauncherContextActionCallbacks {
+    private fun callbacks(
+        events: MutableList<String>,
+        shortcuts: List<AppShortcutEntry> = emptyList(),
+    ): LauncherContextActionCallbacks {
         return LauncherContextActionCallbacks(
             openNotification = { events.add("openNotification:${it.key}") },
             openPackage = { events.add("openPackage:${it.packageName}") },
@@ -104,8 +128,8 @@ class LauncherContextActionFactoryTest {
             unpinApp = { events.add("unpin:${it.packageName}") },
             openAppInfo = { events.add("info:${it.packageName}") },
             hideApp = { events.add("hide:${it.packageName}") },
-            appShortcuts = { emptyList() },
-            launchShortcut = { },
+            appShortcuts = { shortcuts },
+            launchShortcut = { events.add("shortcut:${it.id}") },
         )
     }
 
@@ -115,6 +139,10 @@ class LauncherContextActionFactoryTest {
 
     private fun app(packageName: String): AppEntry {
         return AppEntry(packageName = packageName, label = "Maps", hueColor = 0xff123456.toInt())
+    }
+
+    private fun shortcut(label: String, id: String): AppShortcutEntry {
+        return AppShortcutEntry(label, id, "maps.pkg", null)
     }
 
     private fun chapter(packageName: String): AppChapter {

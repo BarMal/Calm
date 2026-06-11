@@ -231,6 +231,8 @@ class CalmLauncherRunner(
         createWidgetView = classicWidgetHostController::createWidgetView,
         addAppToClassicPage = appMutationHandler::addAppToClassicPage,
         addWidgetToClassicPage = classicWidgetHostController::requestAddWidget,
+        configureClassicWidget = classicWidgetHostController::requestConfigureWidget,
+        canConfigureClassicWidget = classicWidgetHostController::canConfigureWidget,
         removeClassicGridItem = ::removeClassicGridItem,
         moveClassicGridItem = ::moveClassicGridItem,
         moveClassicGridItemWithinPage = ::moveClassicGridItemWithinPage,
@@ -366,7 +368,10 @@ class CalmLauncherRunner(
     }
 
     fun onWidgetConfigureResult(resultCode: Int, data: Intent?) {
-        classicWidgetHostController.onWidgetConfigureResult(resultCode, data)
+        val handledPendingAdd = classicWidgetHostController.onWidgetConfigureResult(resultCode, data)
+        if (!handledPendingAdd) {
+            render()
+        }
     }
 
     private fun removeClassicGridItem(page: ClassicLauncherPageDefinition, item: ClassicGridItem) {

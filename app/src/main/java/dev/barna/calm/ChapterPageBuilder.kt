@@ -150,15 +150,6 @@ class ChapterPageBuilder(
             data.sideImageAlpha,
             data.sideImageRenderKey,
         ).apply {
-            if (data.mediaBackgroundImage != null) {
-                background = drawables.notificationCardWithImage(
-                    cardRenderer.cardCornerRadius(),
-                    data.mediaBackgroundImage,
-                    chapter.hueColor,
-                    tintCards,
-                    activePreferences().cardAppearance,
-                )
-            }
             maxLines = 4
             setOnClickListener {
                 notificationActionController.openNotification(item.primary)

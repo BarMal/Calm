@@ -110,7 +110,7 @@ class AppSearchController(
             setSelectAllOnFocus(false)
             setOnFocusChangeListener { view, hasFocus ->
                 animateHeader(header, hasFocus)
-                if (!hasFocus) animatePage(page, 0)
+                if (!hasFocus) animatePage(page, keyboardHeight = 0)
                 if (hasFocus) {
                     view.post {
                         (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
@@ -147,7 +147,7 @@ class AppSearchController(
             search.clearFocus()
             hideKeyboard(search)
             animateHeader(header, false)
-            animatePage(page, 0)
+            animatePage(page, keyboardHeight = 0)
         }
         root.addView(search, FrameLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(
@@ -201,13 +201,18 @@ class AppSearchController(
     }
 
     private fun animatePage(page: View, keyboardHeight: Int) {
-        // Raise the page's bottom inset for the keyboard instead of translating the whole page up.
-        // The weighted card stack shrinks to stay fully on-screen above the (lifted) search bar,
-        // rather than being pushed off the top.
-        val extra = if (keyboardHeight > 0) (keyboardHeight - activity.dp(34)).coerceAtLeast(0) else 0
-        val targetBottom = activity.dp(PAGE_BASE_BOTTOM_PADDING_DP) + extra
-        if (page.paddingBottom == targetBottom) return
-        page.setPadding(page.paddingLeft, page.paddingTop, page.paddingRight, targetBottom)
+        val lift = if (keyboardHeight > 0) {
+            (keyboardHeight - activity.dp(48)).coerceAtLeast(0)
+        } else {
+            0
+        }
+        val maxLift = maxOf(0, page.height - activity.dp(240))
+        val target = -lift.coerceAtMost(maxLift).toFloat()
+        page.animate().cancel()
+        page.animate()
+            .translationY(target)
+            .setDuration(180L)
+            .start()
     }
 
     private fun resetPage(state: PageState) {
@@ -235,7 +240,5 @@ class AppSearchController(
     private companion object {
         const val APP_SEARCH_REFRESH_DELAY_MS = 90L
 
-        // Matches the bottom padding createBarePagePanel applies to app-library pages.
-        const val PAGE_BASE_BOTTOM_PADDING_DP = 30
     }
 }

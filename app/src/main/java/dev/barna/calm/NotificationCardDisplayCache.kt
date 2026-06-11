@@ -65,25 +65,15 @@ class NotificationCardDisplayCache(
         timeFormatter: (Long) -> String,
     ): NotificationCardDisplayData {
         val artwork = item.notifications.firstNotNullOfOrNull { it.backgroundImage }
-        val isMedia = MediaNotificationControls.from(item.notifications).hasAnyAction
-        val sideImage = when {
-            isMedia -> null
-            artwork != null -> artwork.toRectangularCardArtwork()
-            else -> assetResolver.resolveAppIconBitmap(chapter)
-        }
-        val sideImageKey = when {
-            isMedia -> null
-            artwork != null -> artworkKey(item, artwork)
-            sideImage != null -> chapter.launcherIdentityKey
-            else -> null
-        }
+        val sideImage = assetResolver.resolveAppIconBitmap(chapter)
+        val sideImageKey = sideImage?.let { chapter.launcherIdentityKey }
         return NotificationCardDisplayData(
             text = "${item.title()}\n${item.previewText()}\n${timeFormatter(item.primary.postTime)}",
             fullText = item.fullText(),
             sideImage = sideImage,
             sideImageRenderKey = sideImageKey,
-            sideImageAlpha = if (artwork != null && !isMedia) 156 else 64,
-            mediaBackgroundImage = artwork.takeIf { isMedia },
+            sideImageAlpha = 64,
+            expandedMediaImage = artwork,
         )
     }
 
@@ -125,21 +115,6 @@ class NotificationCardDisplayCache(
         }
     }
 
-    private fun artworkKey(item: NotificationCardItem, artwork: Bitmap): String {
-        return buildString {
-            append("artwork")
-            item.notifications.forEach { notification ->
-                append('|')
-                append(notification.key)
-            }
-            append('|')
-            append(artwork.width)
-            append('x')
-            append(artwork.height)
-            append('|')
-            append(artwork.generationId)
-        }
-    }
 }
 
 data class NotificationCardDisplayData(
@@ -148,7 +123,7 @@ data class NotificationCardDisplayData(
     val sideImage: Bitmap?,
     val sideImageRenderKey: String?,
     val sideImageAlpha: Int,
-    val mediaBackgroundImage: Bitmap?,
+    val expandedMediaImage: Bitmap?,
 )
 
 interface NotificationCardAssetResolver {

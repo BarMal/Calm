@@ -62,6 +62,29 @@ class NotificationCardDisplayCacheTest {
     }
 
     @Test
+    fun notificationArtworkDoesNotReplaceCardAppIcon() {
+        val appIcon = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        val media = Bitmap.createBitmap(3, 3, Bitmap.Config.ARGB_8888)
+        resolver.appIcon = appIcon
+        val item = NotificationCardItem(listOf(
+            notification(
+                key = "media",
+                title = "Track",
+                text = "Artist",
+                postTime = 10L,
+                backgroundImage = media,
+                actions = listOf(NotificationAction("Pause", null, emptyList())),
+            ),
+        ))
+
+        val data = cache.getOrCreate(item, chapter) { "time-$it" }
+
+        assertSame(appIcon, data.sideImage)
+        assertEquals(chapter.launcherIdentityKey, data.sideImageRenderKey)
+        assertSame(media, data.expandedMediaImage)
+    }
+
+    @Test
     fun clearForcesRecalculation() {
         var timeFormatCalls = 0
         val item = NotificationCardItem(listOf(notification(key = "one", title = "Alex", text = "Ping", postTime = 10L)))
@@ -115,6 +138,8 @@ class NotificationCardDisplayCacheTest {
         title: String,
         text: String,
         postTime: Long,
+        backgroundImage: Bitmap? = null,
+        actions: List<NotificationAction> = emptyList(),
     ): CalmNotificationListenerService.CalmNotification {
         return CalmNotificationListenerService.CalmNotification(
             key = key,
@@ -125,8 +150,8 @@ class NotificationCardDisplayCacheTest {
             conversationTitle = "",
             postTime = postTime,
             contentIntent = null,
-            backgroundImage = null,
-            actions = emptyList(),
+            backgroundImage = backgroundImage,
+            actions = actions,
         )
     }
 }
@@ -134,9 +159,10 @@ class NotificationCardDisplayCacheTest {
 private class FakeNotificationCardAssetResolver : NotificationCardAssetResolver {
     var appIconCalls = 0
     var maskedIconCalls = 0
+    var appIcon: Bitmap? = null
     override fun resolveAppIconBitmap(chapter: AppChapter): Bitmap? {
         appIconCalls++
-        return null
+        return appIcon
     }
 
     override fun resolveMaskedAppIconBitmap(chapter: AppChapter): Bitmap? {

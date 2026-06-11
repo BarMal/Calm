@@ -48,6 +48,21 @@ class ChapterPagePlannerTest {
         assertEquals(listOf("I", "II", "III", "IV"), pages.map { it.marker })
     }
 
+    @Test
+    fun splitProfilesPlacesWorkNotificationsBeforeAppPages() {
+        val pages = planner.buildPages(
+            preferences = preferences(splitAppsByProfile = true),
+            notificationChapters = listOf(
+                chapter("personal", "Personal chat"),
+                chapter("work", "Work chat", isWorkProfile = true),
+            ),
+            appEntries = listOf(app("personal.app", "Personal"), app("work.app", "Work", work = true)),
+            pinnedApps = emptyList(),
+        )
+
+        assertEquals(listOf("Work chat", "Work apps", "Personal apps", "Overview", "Work", "Personal chat"), pages.map { it.title })
+    }
+
     private fun preferences(
         splitAppsByProfile: Boolean = false,
         placeWorkNotificationChaptersBeforeApps: Boolean = false,

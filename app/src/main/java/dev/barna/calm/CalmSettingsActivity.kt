@@ -206,19 +206,19 @@ class CalmSettingsActivity : ComponentActivity() {
             progress = dock.itemCount - DockConfig.MIN_ITEM_COUNT,
             max = DockConfig.MAX_ITEM_COUNT - DockConfig.MIN_ITEM_COUNT,
             valueText = { "${it + DockConfig.MIN_ITEM_COUNT} apps" },
-        ) { settings.setDockItemCount(it + DockConfig.MIN_ITEM_COUNT) })
+        ) { settings.setDockItemCount(it + DockConfig.MIN_ITEM_COUNT); requestRender() })
         content.addView(sliderRow(
             title = "Dock height",
             progress = dock.verticalPaddingDp,
             max = DockConfig.MAX_VERTICAL_PADDING_DP,
             valueText = { "${it}dp padding" },
-        ) { settings.setDockVerticalPadding(it) })
+        ) { settings.setDockVerticalPadding(it); requestRender() })
         content.addView(sliderRow(
             title = "Dock side margin",
             progress = dock.horizontalPaddingDp,
             max = DockConfig.MAX_HORIZONTAL_PADDING_DP,
             valueText = { "${it}dp padding" },
-        ) { settings.setDockHorizontalPadding(it) })
+        ) { settings.setDockHorizontalPadding(it); requestRender() })
 
         content.addView(section("Card stack"))
         content.addView(actionRow("Apply Timescape preset", "Restore the curved stacked-card defaults.") {

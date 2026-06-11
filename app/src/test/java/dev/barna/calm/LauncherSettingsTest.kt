@@ -416,6 +416,25 @@ class LauncherSettingsTest {
         assertEquals(before, after)
     }
 
+    @Test
+    fun changeTokenAltersAfterDockConfigMutation() {
+        val before = settings.launcherChangeToken()
+        settings.setDockEnabled(true)
+        settings.setDockItemCount(DockConfig.MAX_ITEM_COUNT)
+        settings.setDockVerticalPadding(DockConfig.MAX_VERTICAL_PADDING_DP)
+        settings.setDockHorizontalPadding(DockConfig.MAX_HORIZONTAL_PADDING_DP)
+        val after = settings.launcherChangeToken()
+        assertNotEquals(before, after)
+    }
+
+    @Test
+    fun changeTokenAltersAfterDockKeysMutation() {
+        val before = settings.launcherChangeToken()
+        settings.setDockKeys(listOf("com.example.one", "com.example.two"))
+        val after = settings.launcherChangeToken()
+        assertNotEquals(before, after)
+    }
+
     // ---- app hue caching ----
 
     @Test

@@ -6,6 +6,12 @@ import java.security.MessageDigest
 enum class ClassicGridItemType {
     APP,
     WIDGET,
+    STATIC,
+}
+
+enum class ClassicStaticItem {
+    CLOCK,
+    SEARCH,
 }
 
 data class ClassicGridItem(
@@ -55,6 +61,18 @@ data class ClassicGridItem(
                 id = "widget:$appWidgetId",
                 type = ClassicGridItemType.WIDGET,
                 target = appWidgetId.toString(),
+                x = x,
+                y = y,
+                width = width,
+                height = height,
+            )
+        }
+
+        fun static(item: ClassicStaticItem, x: Int, y: Int, width: Int = GRID_COLUMNS, height: Int = 1): ClassicGridItem {
+            return ClassicGridItem(
+                id = "static:${item.name.lowercase()}",
+                type = ClassicGridItemType.STATIC,
+                target = item.name,
                 x = x,
                 y = y,
                 width = width,

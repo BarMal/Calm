@@ -28,6 +28,10 @@ data class ClassicLauncherPageDefinition(
         return items.any { item -> item.type == ClassicGridItemType.WIDGET && item.target == appWidgetId.toString() }
     }
 
+    fun containsStaticItem(staticItem: ClassicStaticItem): Boolean {
+        return items.any { item -> item.type == ClassicGridItemType.STATIC && item.target == staticItem.name }
+    }
+
     fun withApp(identityKey: String): ClassicLauncherPageDefinition? {
         if (containsApp(identityKey)) return this
         val position = nextFreeArea(width = 1, height = 1) ?: return null
@@ -40,6 +44,14 @@ data class ClassicLauncherPageDefinition(
         val boundedHeight = height.coerceIn(1, ClassicGridItem.DEFAULT_GRID_ROWS)
         val position = nextFreeArea(boundedWidth, boundedHeight) ?: return null
         return copy(items = items + ClassicGridItem.widget(appWidgetId, position.first, position.second, boundedWidth, boundedHeight))
+    }
+
+    fun withStaticItem(staticItem: ClassicStaticItem, width: Int = ClassicGridItem.GRID_COLUMNS, height: Int = 1): ClassicLauncherPageDefinition? {
+        if (containsStaticItem(staticItem)) return this
+        val boundedWidth = width.coerceIn(1, ClassicGridItem.GRID_COLUMNS)
+        val boundedHeight = height.coerceIn(1, ClassicGridItem.DEFAULT_GRID_ROWS)
+        val position = nextFreeArea(boundedWidth, boundedHeight) ?: return null
+        return copy(items = items + ClassicGridItem.static(staticItem, position.first, position.second, boundedWidth, boundedHeight))
     }
 
     fun withItemAtNextFreeArea(item: ClassicGridItem): ClassicLauncherPageDefinition? {

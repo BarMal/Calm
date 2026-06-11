@@ -17,6 +17,7 @@ import android.widget.ScrollView
 import android.widget.SeekBar
 import android.graphics.drawable.GradientDrawable
 import android.content.res.ColorStateList
+import android.widget.HorizontalScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
@@ -385,6 +386,7 @@ class CalmSettingsActivity : ComponentActivity() {
         rebuild = {
             list.removeAllViews()
             val layout = settings.pageLayout()
+            list.addView(pageLayoutPreview(layout, rebuild))
             layout.order.forEachIndexed { index, slot ->
                 list.addView(pageLayoutRow(layout, slot, index, rebuild))
             }
@@ -395,6 +397,55 @@ class CalmSettingsActivity : ComponentActivity() {
             .setView(ScrollView(this).apply { addView(list) })
             .setPositiveButton("Done") { _, _ -> requestRender() }
             .show()
+    }
+
+    private fun pageLayoutPreview(layout: LauncherPageLayout, rebuild: () -> Unit): View {
+        val strip = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(4), 0, dp(10))
+        }
+        PageLayoutPreviewModel.segments(layout).forEach { segment ->
+            strip.addView(pageLayoutPreviewTile(segment, rebuild))
+        }
+        return HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(strip, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+    }
+
+    private fun pageLayoutPreviewTile(segment: PageLayoutPreviewSegment, rebuild: () -> Unit): View {
+        val status = when {
+            segment.home -> "Home"
+            segment.enabled -> "On"
+            else -> "Off"
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            alpha = if (segment.enabled) 1f else 0.42f
+            setPadding(dp(10), dp(10), dp(10), dp(8))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(18).toFloat()
+                setColor(if (segment.home) withAlpha(CalmTheme.ACCENT, 54) else CalmTheme.SURFACE_CONTAINER)
+                setStroke(dp(1), if (segment.home) CalmTheme.ACCENT else CalmTheme.STROKE)
+            }
+            addView(label(segment.shortLabel, 15, CalmTheme.INK, Typeface.BOLD).apply {
+                gravity = Gravity.CENTER
+            })
+            addView(label(status, 11, if (segment.home) CalmTheme.ACCENT else CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, dp(3), 0, 0)
+            })
+            setOnClickListener {
+                settings.setDefaultHomeSlot(segment.slot)
+                rebuild()
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(78), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginEnd = dp(8)
+            }
+        }
     }
 
     private fun pageLayoutRow(layout: LauncherPageLayout, slot: PageSlot, index: Int, rebuild: () -> Unit): View {

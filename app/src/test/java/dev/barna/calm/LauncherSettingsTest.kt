@@ -499,4 +499,38 @@ class LauncherSettingsTest {
         assertEquals(42, tuning.focusedCardScale)
         assertEquals(82, tuning.magnetStrength)
     }
+
+    // ---- page layout ----
+
+    @Test
+    fun disablingDefaultHomeMovesHomeToFirstEnabledSlot() {
+        settings.setPageLayoutOrder(listOf(PageSlot.APPS, PageSlot.OVERVIEW, PageSlot.NOTIFICATIONS))
+        settings.setDefaultHomeSlot(PageSlot.OVERVIEW)
+
+        settings.setPageSlotEnabled(PageSlot.OVERVIEW, false)
+
+        val layout = settings.pageLayout()
+        assertEquals(PageSlot.APPS, layout.defaultHome)
+        assertTrue(PageSlot.OVERVIEW in layout.disabled)
+    }
+
+    @Test
+    fun settingDisabledSlotAsHomeReEnablesIt() {
+        settings.setPageSlotEnabled(PageSlot.CONTACTS, false)
+
+        settings.setDefaultHomeSlot(PageSlot.CONTACTS)
+
+        val layout = settings.pageLayout()
+        assertEquals(PageSlot.CONTACTS, layout.defaultHome)
+        assertFalse(PageSlot.CONTACTS in layout.disabled)
+    }
+
+    @Test
+    fun storedDisabledHomeIsNormalizedOnRead() {
+        settings.setPageLayoutOrder(listOf(PageSlot.APPS, PageSlot.OVERVIEW, PageSlot.NOTIFICATIONS))
+        settings.setDefaultHomeSlot(PageSlot.OVERVIEW)
+        settings.setPageSlotEnabled(PageSlot.OVERVIEW, false)
+
+        assertEquals(PageSlot.APPS, settings.pageLayout().defaultHome)
+    }
 }

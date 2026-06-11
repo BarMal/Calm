@@ -72,3 +72,10 @@ object PageArranger {
         return result.ifEmpty { pages }
     }
 }
+
+object PageLayoutPolicy {
+    fun firstEnabledHome(layout: LauncherPageLayout): PageSlot {
+        if (layout.defaultHome !in layout.disabled) return layout.defaultHome
+        return layout.order.firstOrNull { slot -> slot !in layout.disabled } ?: layout.defaultHome
+    }
+}

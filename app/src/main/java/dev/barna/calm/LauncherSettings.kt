@@ -261,7 +261,8 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         val home = preferences.getString(PREF_PAGE_LAYOUT_HOME, null)
             ?.let { name -> runCatching { PageSlot.valueOf(name) }.getOrNull() }
             ?: PageSlot.OVERVIEW
-        return LauncherPageLayout(order, disabled, home)
+        val layout = LauncherPageLayout(order, disabled, home)
+        return layout.copy(defaultHome = PageLayoutPolicy.firstEnabledHome(layout))
     }
 
     fun setPageLayoutOrder(order: List<PageSlot>) {
@@ -269,13 +270,22 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     }
 
     fun setPageSlotEnabled(slot: PageSlot, enabled: Boolean) {
-        val disabled = pageLayout().disabled.toMutableSet()
+        val layout = pageLayout()
+        val disabled = layout.disabled.toMutableSet()
         if (enabled) disabled.remove(slot) else disabled.add(slot)
-        preferences.edit().putStringSet(PREF_PAGE_LAYOUT_DISABLED, disabled.map { it.name }.toSet()).apply()
+        val home = PageLayoutPolicy.firstEnabledHome(layout.copy(disabled = disabled))
+        preferences.edit()
+            .putStringSet(PREF_PAGE_LAYOUT_DISABLED, disabled.map { it.name }.toSet())
+            .putString(PREF_PAGE_LAYOUT_HOME, home.name)
+            .apply()
     }
 
     fun setDefaultHomeSlot(slot: PageSlot) {
-        preferences.edit().putString(PREF_PAGE_LAYOUT_HOME, slot.name).apply()
+        val disabled = pageLayout().disabled - slot
+        preferences.edit()
+            .putStringSet(PREF_PAGE_LAYOUT_DISABLED, disabled.map { it.name }.toSet())
+            .putString(PREF_PAGE_LAYOUT_HOME, slot.name)
+            .apply()
     }
 
     fun cardAppearance(): CardAppearance {

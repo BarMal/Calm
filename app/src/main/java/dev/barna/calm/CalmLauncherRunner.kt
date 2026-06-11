@@ -234,6 +234,9 @@ class CalmLauncherRunner(
         removeClassicGridItem = ::removeClassicGridItem,
         moveClassicGridItem = ::moveClassicGridItem,
         resizeClassicGridItem = ::resizeClassicGridItem,
+        renameClassicPage = ::renameClassicPage,
+        setDefaultClassicPage = ::setDefaultClassicPage,
+        removeClassicPage = ::removeClassicPage,
         barePagePanel = ::createBarePagePanel,
         label = ::label,
     )
@@ -400,6 +403,31 @@ class CalmLauncherRunner(
             return
         }
         Toast.makeText(activity, "Resized", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun renameClassicPage(page: ClassicLauncherPageDefinition, title: String) {
+        if (!settings.renameClassicPage(page.id, title)) {
+            Toast.makeText(activity, "Page name can't be empty", Toast.LENGTH_SHORT).show()
+            return
+        }
+        Toast.makeText(activity, "Renamed page", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun setDefaultClassicPage(page: ClassicLauncherPageDefinition) {
+        if (!settings.setDefaultClassicPage(page.id)) return
+        settings.setDefaultHomeSlot(PageSlot.CLASSIC_PAGES)
+        Toast.makeText(activity, "${page.title} is now home", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun removeClassicPage(page: ClassicLauncherPageDefinition) {
+        val removed = settings.removeClassicPage(page.id) ?: return
+        removed.items
+            .filter { item -> item.type == ClassicGridItemType.WIDGET }
+            .forEach(classicWidgetHostController::deleteWidget)
+        Toast.makeText(activity, "Removed ${removed.title}", Toast.LENGTH_SHORT).show()
         render()
     }
 

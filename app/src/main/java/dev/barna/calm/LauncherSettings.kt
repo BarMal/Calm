@@ -337,6 +337,8 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             pinnedPackages(),
             hiddenAppKeys(),
             splitNotificationPackages(),
+            dockConfig(),
+            dockKeys(),
         ).hashCode()
     }
 

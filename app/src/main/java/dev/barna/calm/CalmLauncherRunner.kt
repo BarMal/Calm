@@ -33,6 +33,8 @@ class CalmLauncherRunner(
     private val launcherStateViewModel: LauncherStateViewModel,
     requestCalendarPermission: () -> Unit,
     requestContactsPermission: () -> Unit,
+    requestWidgetPick: (Intent) -> Unit,
+    requestWidgetConfigure: (Intent) -> Unit,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val settings = LauncherSettings(activity)
@@ -204,8 +206,17 @@ class CalmLauncherRunner(
         resolveIcon = { notificationRepository.resolveAppIconBitmap(it) },
         openAppEntry = ::openAppEntry,
     )
+    private val classicWidgetHostController = ClassicWidgetHostController(
+        activity = activity,
+        settings = settings,
+        requestWidgetPick = requestWidgetPick,
+        requestWidgetConfigure = requestWidgetConfigure,
+        render = ::render,
+        selectPage = ::selectPage,
+    )
     private val pageFactory = LauncherPageFactory(
         activity = activity,
+        drawables = drawables,
         overviewPageBuilder = overviewPageBuilder,
         chapterPageBuilder = chapterPageBuilder,
         appLibraryController = appLibraryController,
@@ -215,6 +226,8 @@ class CalmLauncherRunner(
         contactsPageController = contactsPageController,
         resolveIcon = { notificationRepository.resolveAppIconBitmap(it) },
         openAppEntry = ::openAppEntry,
+        createWidgetView = classicWidgetHostController::createWidgetView,
+        addWidgetToClassicPage = classicWidgetHostController::requestAddWidget,
         barePagePanel = ::createBarePagePanel,
         label = ::label,
     )
@@ -287,6 +300,7 @@ class CalmLauncherRunner(
     }
 
     fun onResume() {
+        classicWidgetHostController.startListening()
         CalmNotificationListenerService.addListener(notificationRefresh)
         val hasCurrentScreen = currentScreen != null
         val hasCurrentState = currentUiState != null
@@ -311,6 +325,7 @@ class CalmLauncherRunner(
     }
 
     fun onPause() {
+        classicWidgetHostController.stopListening()
         CalmNotificationListenerService.removeListener(notificationRefresh)
     }
 
@@ -329,6 +344,14 @@ class CalmLauncherRunner(
 
     fun onContactsPermissionResult() {
         render()
+    }
+
+    fun onWidgetPickResult(resultCode: Int, data: Intent?) {
+        classicWidgetHostController.onWidgetPickResult(resultCode, data)
+    }
+
+    fun onWidgetConfigureResult(resultCode: Int, data: Intent?) {
+        classicWidgetHostController.onWidgetConfigureResult(resultCode, data)
     }
 
     /** Dismisses the expanded/focus card on back so it returns to the current page, not overview. */

@@ -116,6 +116,10 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         return classicPages().any { page -> page.containsApp(identityKey) }
     }
 
+    fun isClassicPageWidget(appWidgetId: Int): Boolean {
+        return classicPages().any { page -> page.containsWidget(appWidgetId) }
+    }
+
     fun addAppToClassicPage(identityKey: String): Boolean {
         if (isClassicPageApp(identityKey)) return false
         val pages = classicPages().ifEmpty { listOf(ClassicLauncherPageDefinition.default()) }
@@ -127,6 +131,17 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             if (mapped.any { it.id == updatedTarget.id }) mapped else mapped + updatedTarget
         }
         setClassicPages(nextPages)
+        return true
+    }
+
+    fun addWidgetToClassicPage(pageId: String, appWidgetId: Int): Boolean {
+        if (isClassicPageWidget(appWidgetId)) return false
+        val pages = classicPages()
+        val updatedPages = pages.map { page ->
+            if (page.id == pageId) page.withWidget(appWidgetId) ?: return false else page
+        }
+        if (updatedPages == pages) return false
+        setClassicPages(updatedPages)
         return true
     }
 

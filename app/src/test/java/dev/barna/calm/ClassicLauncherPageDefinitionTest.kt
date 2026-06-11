@@ -55,4 +55,39 @@ class ClassicLauncherPageDefinitionTest {
 
         assertNull(full.withApp("com.extra"))
     }
+
+    @Test
+    fun withWidgetPlacesWidgetInFirstFreeArea() {
+        val page = ClassicLauncherPageDefinition.default()
+            .withApp("com.a")
+            ?.withWidget(appWidgetId = 42)
+
+        val widget = page?.items?.single { it.type == ClassicGridItemType.WIDGET }
+        assertEquals(0, widget?.x)
+        assertEquals(1, widget?.y)
+        assertEquals(ClassicGridItem.GRID_COLUMNS, widget?.width)
+        assertEquals(2, widget?.height)
+        assertTrue(page?.containsWidget(42) == true)
+    }
+
+    @Test
+    fun withWidgetSkipsDuplicate() {
+        val page = ClassicLauncherPageDefinition.default().withWidget(42)
+
+        val updated = page?.withWidget(42)
+
+        assertSame(page, updated)
+        assertEquals(1, updated?.items?.size)
+    }
+
+    @Test
+    fun withWidgetReturnsNullWhenNoSpanFits() {
+        val page = ClassicLauncherPageDefinition.default().copy(
+            items = (0 until ClassicGridItem.DEFAULT_GRID_ROWS).map { row ->
+                ClassicGridItem.app("com.$row", x = 0, y = row)
+            },
+        )
+
+        assertNull(page.withWidget(42))
+    }
 }

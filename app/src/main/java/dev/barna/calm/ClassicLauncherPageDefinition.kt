@@ -24,21 +24,36 @@ data class ClassicLauncherPageDefinition(
         return items.any { item -> item.type == ClassicGridItemType.APP && item.target == identityKey }
     }
 
+    fun containsWidget(appWidgetId: Int): Boolean {
+        return items.any { item -> item.type == ClassicGridItemType.WIDGET && item.target == appWidgetId.toString() }
+    }
+
     fun withApp(identityKey: String): ClassicLauncherPageDefinition? {
         if (containsApp(identityKey)) return this
-        val position = nextFreeCell() ?: return null
+        val position = nextFreeArea(width = 1, height = 1) ?: return null
         return copy(items = items + ClassicGridItem.app(identityKey, position.first, position.second))
     }
 
-    private fun nextFreeCell(): Pair<Int, Int>? {
+    fun withWidget(appWidgetId: Int, width: Int = ClassicGridItem.GRID_COLUMNS, height: Int = 2): ClassicLauncherPageDefinition? {
+        if (containsWidget(appWidgetId)) return this
+        val boundedWidth = width.coerceIn(1, ClassicGridItem.GRID_COLUMNS)
+        val boundedHeight = height.coerceIn(1, ClassicGridItem.DEFAULT_GRID_ROWS)
+        val position = nextFreeArea(boundedWidth, boundedHeight) ?: return null
+        return copy(items = items + ClassicGridItem.widget(appWidgetId, position.first, position.second, boundedWidth, boundedHeight))
+    }
+
+    private fun nextFreeArea(width: Int, height: Int): Pair<Int, Int>? {
         val occupied = items.flatMap { item ->
             (item.x until item.x + item.width).flatMap { x ->
                 (item.y until item.y + item.height).map { y -> x to y }
             }
         }.toSet()
-        for (y in 0 until ClassicGridItem.DEFAULT_GRID_ROWS) {
-            for (x in 0 until ClassicGridItem.GRID_COLUMNS) {
-                if ((x to y) !in occupied) return x to y
+        for (y in 0..ClassicGridItem.DEFAULT_GRID_ROWS - height) {
+            for (x in 0..ClassicGridItem.GRID_COLUMNS - width) {
+                val clear = (x until x + width).all { candidateX ->
+                    (y until y + height).all { candidateY -> (candidateX to candidateY) !in occupied }
+                }
+                if (clear) return x to y
             }
         }
         return null

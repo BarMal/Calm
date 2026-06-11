@@ -41,6 +41,8 @@ class LauncherPageFactory(
     private val removeClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem) -> Unit,
     private val moveClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem, ClassicLauncherPageDefinition) -> Unit,
     private val resizeClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem, Int, Int) -> Unit,
+    private val addClassicPage: () -> Unit,
+    private val moveClassicPage: (ClassicLauncherPageDefinition, Int) -> Unit,
     private val renameClassicPage: (ClassicLauncherPageDefinition, String) -> Unit,
     private val setDefaultClassicPage: (ClassicLauncherPageDefinition) -> Unit,
     private val removeClassicPage: (ClassicLauncherPageDefinition) -> Unit,
@@ -147,6 +149,55 @@ class LauncherPageFactory(
         classicPage: ClassicLauncherPageDefinition,
         state: LauncherRenderModel,
     ) {
+        val pageIndex = state.classicPages.indexOfFirst { page -> page.id == classicPage.id }
+        val actions = mutableListOf(
+            ContextAction(
+                "Add app",
+                Runnable { showClassicAppPicker(classicPage, state) },
+                ContextActionCloseBehavior.REMOVE_CARD,
+            ),
+            ContextAction(
+                "Add widget",
+                Runnable { addWidgetToClassicPage(classicPage) },
+                ContextActionCloseBehavior.REMOVE_CARD,
+            ),
+            ContextAction(
+                "New page",
+                Runnable { addClassicPage() },
+                ContextActionCloseBehavior.REMOVE_CARD,
+            ),
+        )
+        if (pageIndex > 0) {
+            actions += ContextAction(
+                "Move left",
+                Runnable { moveClassicPage(classicPage, pageIndex - 1) },
+                ContextActionCloseBehavior.REMOVE_CARD,
+            )
+        }
+        if (pageIndex != -1 && pageIndex < state.classicPages.lastIndex) {
+            actions += ContextAction(
+                "Move right",
+                Runnable { moveClassicPage(classicPage, pageIndex + 1) },
+                ContextActionCloseBehavior.REMOVE_CARD,
+            )
+        }
+        actions += listOf(
+            ContextAction(
+                "Rename",
+                Runnable { showRenameClassicPageDialog(classicPage) },
+                ContextActionCloseBehavior.REMOVE_CARD,
+            ),
+            ContextAction(
+                "Set home",
+                Runnable { setDefaultClassicPage(classicPage) },
+                ContextActionCloseBehavior.REMOVE_CARD,
+            ),
+            ContextAction(
+                "Remove",
+                Runnable { confirmRemoveClassicPage(classicPage) },
+                ContextActionCloseBehavior.REMOVE_CARD,
+            ),
+        )
         val content = TextView(activity).apply {
             text = classicPage.title
             setTextColor(CalmTheme.INK)
@@ -159,33 +210,7 @@ class LauncherPageFactory(
         focusOverlay.showExpandedCard(
             source,
             content,
-            listOf(
-                ContextAction(
-                    "Add app",
-                    Runnable { showClassicAppPicker(classicPage, state) },
-                    ContextActionCloseBehavior.REMOVE_CARD,
-                ),
-                ContextAction(
-                    "Add widget",
-                    Runnable { addWidgetToClassicPage(classicPage) },
-                    ContextActionCloseBehavior.REMOVE_CARD,
-                ),
-                ContextAction(
-                    "Rename",
-                    Runnable { showRenameClassicPageDialog(classicPage) },
-                    ContextActionCloseBehavior.REMOVE_CARD,
-                ),
-                ContextAction(
-                    "Set home",
-                    Runnable { setDefaultClassicPage(classicPage) },
-                    ContextActionCloseBehavior.REMOVE_CARD,
-                ),
-                ContextAction(
-                    "Remove",
-                    Runnable { confirmRemoveClassicPage(classicPage) },
-                    ContextActionCloseBehavior.REMOVE_CARD,
-                ),
-            ),
+            actions,
         )
     }
 

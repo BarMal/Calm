@@ -234,6 +234,8 @@ class CalmLauncherRunner(
         removeClassicGridItem = ::removeClassicGridItem,
         moveClassicGridItem = ::moveClassicGridItem,
         resizeClassicGridItem = ::resizeClassicGridItem,
+        addClassicPage = ::addClassicPage,
+        moveClassicPage = ::moveClassicPage,
         renameClassicPage = ::renameClassicPage,
         setDefaultClassicPage = ::setDefaultClassicPage,
         removeClassicPage = ::removeClassicPage,
@@ -403,6 +405,21 @@ class CalmLauncherRunner(
             return
         }
         Toast.makeText(activity, "Resized", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun addClassicPage() {
+        val page = settings.addClassicPage()
+        settings.setPageSlotEnabled(PageSlot.CLASSIC_PAGES, true)
+        selectPage(page.key)
+        Toast.makeText(activity, "Added ${page.title}", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun moveClassicPage(page: ClassicLauncherPageDefinition, targetIndex: Int) {
+        if (!settings.moveClassicPage(page.id, targetIndex)) return
+        selectPage(page.key)
+        Toast.makeText(activity, "Moved ${page.title}", Toast.LENGTH_SHORT).show()
         render()
     }
 

@@ -83,11 +83,11 @@ class AppLibrarySnapshotCodecTest {
 
     @Test
     fun roundTripNegativeHueColor() {
-        val snapshot = snapshotOf(app("com.example", "App", hueColor = 0xFF5A00.toInt()))
+        val snapshot = snapshotOf(app("com.example", "App", hueColor = 0xFF5A00))
 
         val decoded = decode(encode(snapshot))!!
 
-        assertEquals(0xFF5A00.toInt(), decoded.apps.single().hueColor)
+        assertEquals(0xFF5A00, decoded.apps.single().hueColor)
     }
 
     // ---- empty / blank input ----

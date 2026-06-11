@@ -425,15 +425,15 @@ class LauncherSettingsTest {
 
     @Test
     fun cacheAppHueRoundTrips() {
-        settings.cacheAppHue("com.example", 0xFF3344.toInt())
-        assertEquals(0xFF3344.toInt(), settings.cachedAppHue("com.example"))
+        settings.cacheAppHue("com.example", 0xFF3344)
+        assertEquals(0xFF3344, settings.cachedAppHue("com.example"))
     }
 
     @Test
     fun cacheAppHueIgnoresZero() {
-        settings.cacheAppHue("com.example", 0xFF3344.toInt())
+        settings.cacheAppHue("com.example", 0xFF3344)
         settings.cacheAppHue("com.example", 0)
-        assertEquals(0xFF3344.toInt(), settings.cachedAppHue("com.example"))
+        assertEquals(0xFF3344, settings.cachedAppHue("com.example"))
     }
 
     // ---- notification grouping ----

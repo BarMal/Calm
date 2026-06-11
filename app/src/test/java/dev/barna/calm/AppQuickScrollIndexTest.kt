@@ -149,11 +149,12 @@ class AppQuickScrollIndexTest {
         for (y in 0..railHeight step 10) {
             val target = index.targetAt(model, railHeight = railHeight, y = y.toFloat())
             assertNotNull("Target should not be null at y=$y", target)
+            val cardIndex = target?.cardIndex ?: error("Target should not be null at y=$y")
             assertTrue(
-                "Card index should be non-decreasing during downward drag (y=$y, prev=$previousCardIndex, curr=${target!!.cardIndex})",
-                target.cardIndex >= previousCardIndex,
+                "Card index should be non-decreasing during downward drag (y=$y, prev=$previousCardIndex, curr=$cardIndex)",
+                cardIndex >= previousCardIndex,
             )
-            previousCardIndex = target.cardIndex
+            previousCardIndex = cardIndex
         }
     }
 

@@ -8,7 +8,7 @@ class AppQuickScrollIndex {
         }
         val allLetters = ('A'..'Z').map { it.toString() } + listOf("#")
         val activePositions = allLetters.mapIndexedNotNull { i, l ->
-            if (activeLetters.containsKey(l)) i to activeLetters[l]!! else null
+            activeLetters[l]?.let { cardIndex -> i to cardIndex }
         }
         val targets = allLetters.mapIndexed { i, l ->
             val cardIndex = activeLetters[l] ?: interpolateCardIndex(i, activePositions)

@@ -27,6 +27,7 @@ object PageLayoutPreviewModel {
         PageSlot.CONTACTS -> "People"
         PageSlot.OVERVIEW -> "Overview"
         PageSlot.WORK_OVERVIEW -> "Work"
+        PageSlot.CLASSIC_PAGES -> "Classic"
         PageSlot.NOTIFICATIONS -> "Notifications"
     }
 
@@ -36,6 +37,7 @@ object PageLayoutPreviewModel {
         PageSlot.CONTACTS -> "Ppl"
         PageSlot.OVERVIEW -> "Home"
         PageSlot.WORK_OVERVIEW -> "Work"
+        PageSlot.CLASSIC_PAGES -> "Grid"
         PageSlot.NOTIFICATIONS -> "Noti"
     }
 }

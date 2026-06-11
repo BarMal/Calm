@@ -85,6 +85,7 @@ class LauncherSettingsTest {
         assertTrue(settings.pinnedPackages().isEmpty())
         assertTrue(settings.hiddenAppKeys().isEmpty())
         assertTrue(settings.pinnedChapterPackages().isEmpty())
+        assertTrue(settings.classicPages().isEmpty())
         assertTrue(settings.dockKeys().isEmpty())
     }
 
@@ -159,6 +160,38 @@ class LauncherSettingsTest {
     fun dockItemSpanRoundTrips() {
         settings.setDockItemSpan(2)
         assertEquals(2, settings.dockConfig().itemSpan)
+    }
+
+    @Test
+    fun classicPagesRoundTrip() {
+        val page = ClassicLauncherPageDefinition(id = "classic-1", title = "Classic", enabled = true)
+
+        settings.setClassicPages(listOf(page))
+
+        assertEquals(listOf(page), settings.classicPages())
+    }
+
+    @Test
+    fun enablingClassicPagesCreatesDefaultPage() {
+        settings.setClassicPagesEnabled(true)
+
+        val pages = settings.classicPages()
+        assertEquals(1, pages.size)
+        assertEquals("classic:classic-1", pages.single().key)
+        assertEquals("Classic", pages.single().title)
+        assertTrue(pages.single().enabled)
+    }
+
+    @Test
+    fun disablingClassicPagesKeepsDefinitionButDisablesIt() {
+        settings.setClassicPagesEnabled(true)
+
+        settings.setClassicPagesEnabled(false)
+
+        val pages = settings.classicPages()
+        assertEquals(1, pages.size)
+        assertFalse(pages.single().enabled)
+        assertFalse(settings.classicPagesEnabled())
     }
 
     @Test
@@ -443,6 +476,14 @@ class LauncherSettingsTest {
         settings.setDockItemSpan(DockConfig.MAX_ITEM_SPAN)
         settings.setDockVerticalPadding(DockConfig.MAX_VERTICAL_PADDING_DP)
         settings.setDockHorizontalPadding(DockConfig.MAX_HORIZONTAL_PADDING_DP)
+        val after = settings.launcherChangeToken()
+        assertNotEquals(before, after)
+    }
+
+    @Test
+    fun changeTokenAltersAfterClassicPageMutation() {
+        val before = settings.launcherChangeToken()
+        settings.setClassicPagesEnabled(true)
         val after = settings.launcherChangeToken()
         assertNotEquals(before, after)
     }

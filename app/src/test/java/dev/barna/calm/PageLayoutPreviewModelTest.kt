@@ -21,4 +21,18 @@ class PageLayoutPreviewModelTest {
         assertFalse(segments[2].enabled)
     }
 
+    @Test
+    fun classicPagesSegmentUsesGridShortLabel() {
+        val segments = PageLayoutPreviewModel.segments(
+            LauncherPageLayout(
+                order = listOf(PageSlot.CLASSIC_PAGES),
+                disabled = emptySet(),
+                defaultHome = PageSlot.CLASSIC_PAGES,
+            ),
+        )
+
+        assertEquals("Classic", segments.single().label)
+        assertEquals("Grid", segments.single().shortLabel)
+        assertTrue(segments.single().home)
+    }
 }

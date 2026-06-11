@@ -9,6 +9,7 @@ class ChapterPagePlanner {
         appEntries: List<AppEntry>,
         pinnedApps: List<AppEntry>,
         pinnedChapterPackages: Set<String> = emptySet(),
+        classicPages: List<ClassicLauncherPageDefinition> = emptyList(),
     ): List<ChapterPage> {
         val pages = ArrayList<ChapterPage>()
         var chapterNumber = 1
@@ -65,6 +66,10 @@ class ChapterPagePlanner {
         chapterNumber++
         if (preferences.splitAppsByProfile && notificationChapters.any { it.isWorkProfile }) {
             pages.add(ChapterPage.workOverview(CalmTheme.WORK_OVERVIEW_KEY, roman(chapterNumber)))
+            chapterNumber++
+        }
+        classicPages.filter { it.enabled }.forEach { classicPage ->
+            pages.add(ChapterPage.classic(classicPage, roman(chapterNumber)))
             chapterNumber++
         }
         standardChapters.forEach { chapter ->

@@ -195,6 +195,124 @@ class LauncherSettingsTest {
     }
 
     @Test
+    fun addClassicPageCreatesNextNumberedPage() {
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default()))
+
+        val page = settings.addClassicPage()
+
+        assertEquals("classic-2", page.id)
+        assertEquals("Classic 2", page.title)
+        assertEquals(listOf("classic-1", "classic-2"), settings.classicPages().map { it.id })
+    }
+
+    @Test
+    fun addClassicPageReusesFirstMissingNumber() {
+        settings.setClassicPages(
+            listOf(
+                ClassicLauncherPageDefinition(id = "classic-1", title = "Classic"),
+                ClassicLauncherPageDefinition(id = "classic-3", title = "Classic 3"),
+            ),
+        )
+
+        val page = settings.addClassicPage()
+
+        assertEquals("classic-2", page.id)
+    }
+
+    @Test
+    fun renameClassicPageUpdatesTitle() {
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default()))
+
+        assertTrue(settings.renameClassicPage("classic-1", "Home"))
+
+        assertEquals("Home", settings.classicPages().single().title)
+    }
+
+    @Test
+    fun renameClassicPageRejectsBlankTitle() {
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default()))
+
+        assertFalse(settings.renameClassicPage("classic-1", " "))
+
+        assertEquals("Classic", settings.classicPages().single().title)
+    }
+
+    @Test
+    fun setClassicPageEnabledTogglesSinglePage() {
+        settings.setClassicPages(
+            listOf(
+                ClassicLauncherPageDefinition(id = "classic-1", title = "Classic"),
+                ClassicLauncherPageDefinition(id = "classic-2", title = "Second"),
+            ),
+        )
+
+        assertTrue(settings.setClassicPageEnabled("classic-2", false))
+
+        assertEquals(listOf(true, false), settings.classicPages().map { it.enabled })
+    }
+
+    @Test
+    fun setDefaultClassicPageEnablesAndPrefersPage() {
+        settings.setClassicPages(
+            listOf(
+                ClassicLauncherPageDefinition(id = "classic-1", title = "Classic"),
+                ClassicLauncherPageDefinition(id = "classic-2", title = "Second", enabled = false),
+            ),
+        )
+
+        assertTrue(settings.setDefaultClassicPage("classic-2"))
+
+        assertEquals("classic-2", settings.homeClassicPage()?.id)
+        assertTrue(settings.classicPages().last().enabled)
+    }
+
+    @Test
+    fun homeClassicPageFallsBackWhenPreferredPageDisabled() {
+        settings.setClassicPages(
+            listOf(
+                ClassicLauncherPageDefinition(id = "classic-1", title = "Classic"),
+                ClassicLauncherPageDefinition(id = "classic-2", title = "Second"),
+            ),
+        )
+        settings.setDefaultClassicPage("classic-2")
+        settings.setClassicPageEnabled("classic-2", false)
+
+        assertEquals("classic-1", settings.homeClassicPage()?.id)
+    }
+
+    @Test
+    fun moveClassicPageReordersPages() {
+        settings.setClassicPages(
+            listOf(
+                ClassicLauncherPageDefinition(id = "classic-1", title = "Classic"),
+                ClassicLauncherPageDefinition(id = "classic-2", title = "Second"),
+                ClassicLauncherPageDefinition(id = "classic-3", title = "Third"),
+            ),
+        )
+
+        assertTrue(settings.moveClassicPage("classic-3", 0))
+
+        assertEquals(listOf("classic-3", "classic-1", "classic-2"), settings.classicPages().map { it.id })
+    }
+
+    @Test
+    fun removeClassicPageReturnsPageAndClearsHomePreference() {
+        settings.setClassicPages(
+            listOf(
+                ClassicLauncherPageDefinition(id = "classic-1", title = "Classic"),
+                ClassicLauncherPageDefinition(id = "classic-2", title = "Second"),
+            ),
+        )
+        settings.setDefaultClassicPage("classic-2")
+
+        val removed = settings.removeClassicPage("classic-2")
+
+        assertEquals("classic-2", removed?.id)
+        assertEquals(listOf("classic-1"), settings.classicPages().map { it.id })
+        assertEquals("classic-1", settings.homeClassicPage()?.id)
+    }
+
+    @Test
     fun addAppToClassicPageCreatesDefaultPage() {
         assertTrue(settings.addAppToClassicPage("com.example"))
 

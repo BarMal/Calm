@@ -548,7 +548,7 @@ class CalmLauncherRunner(
         PageSlot.PINNED -> CalmTheme.PINNED_KEY
         PageSlot.CONTACTS -> CalmTheme.CONTACTS_KEY
         PageSlot.APPS -> CalmTheme.APP_LIBRARY_KEY
-        PageSlot.CLASSIC_PAGES -> settings.classicPages().firstOrNull { it.enabled }?.key ?: CalmTheme.OVERVIEW_KEY
+        PageSlot.CLASSIC_PAGES -> settings.homeClassicPage()?.key ?: CalmTheme.OVERVIEW_KEY
         PageSlot.NOTIFICATIONS -> CalmTheme.OVERVIEW_KEY
     }
 

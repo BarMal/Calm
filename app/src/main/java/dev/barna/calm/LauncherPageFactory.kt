@@ -2,6 +2,7 @@ package dev.barna.calm
 
 import android.app.AlertDialog
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.Typeface
 import android.text.TextUtils
 import android.view.Gravity
@@ -43,6 +44,8 @@ class LauncherPageFactory(
     private val resizeClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem, Int, Int) -> Unit,
     private val addClassicPage: () -> Unit,
     private val moveClassicPage: (ClassicLauncherPageDefinition, Int) -> Unit,
+    private val isClassicPageEditing: (ClassicLauncherPageDefinition) -> Boolean,
+    private val setClassicPageEditing: (ClassicLauncherPageDefinition, Boolean) -> Unit,
     private val renameClassicPage: (ClassicLauncherPageDefinition, String) -> Unit,
     private val setDefaultClassicPage: (ClassicLauncherPageDefinition) -> Unit,
     private val removeClassicPage: (ClassicLauncherPageDefinition) -> Unit,
@@ -65,20 +68,25 @@ class LauncherPageFactory(
         classicPage: ClassicLauncherPageDefinition,
         state: LauncherRenderModel,
     ): LinearLayout {
+        val editing = isClassicPageEditing(classicPage)
         val appEntries = state.appEntries
         val appsByKey = appEntries.associateBy { it.identityKey }
         val gridItems = classicPage.items.mapNotNull { item ->
             when (item.type) {
-                ClassicGridItemType.APP -> appsByKey[item.target]?.let { app -> item to classicAppTile(classicPage, item, app, state) }
-                ClassicGridItemType.WIDGET -> item to classicWidgetTile(classicPage, item, state)
+                ClassicGridItemType.APP -> appsByKey[item.target]?.let { app -> item to classicAppTile(classicPage, item, app, state, editing) }
+                ClassicGridItemType.WIDGET -> item to classicWidgetTile(classicPage, item, state, editing)
             }
         }
         return barePagePanel(activity.dp(20)).apply {
             setOnLongClickListener {
-                showClassicPageActions(this, classicPage, state)
+                if (editing) {
+                    showClassicPageActions(this, classicPage, state)
+                } else {
+                    setClassicPageEditing(classicPage, true)
+                }
                 true
             }
-            addView(classicHeader(classicPage, state))
+            addView(classicHeader(classicPage, state, editing))
             if (gridItems.isEmpty()) {
                 addView(
                     LinearLayout(activity).apply {
@@ -99,36 +107,74 @@ class LauncherPageFactory(
         }
     }
 
-    private fun classicHeader(classicPage: ClassicLauncherPageDefinition, state: LauncherRenderModel): View {
+    private fun classicHeader(
+        classicPage: ClassicLauncherPageDefinition,
+        state: LauncherRenderModel,
+        editing: Boolean,
+    ): View {
         return animatedChrome(
             LinearLayout(activity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, activity.dp(8), 0, activity.dp(24))
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, activity.dp(8), 0, activity.dp(if (editing) 18 else 24))
                 setOnLongClickListener {
                     showClassicPageActions(this, classicPage, state)
                     true
                 }
                 addView(
-                    label(classicPage.title, 30, CalmTheme.INK, Typeface.NORMAL).apply {
-                        setOnLongClickListener {
-                            showClassicPageActions(this, classicPage, state)
-                            true
+                    LinearLayout(activity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        val header = this
+                        addView(
+                            label(classicPage.title, 30, CalmTheme.INK, Typeface.NORMAL).apply {
+                                setOnLongClickListener {
+                                    showClassicPageActions(header, classicPage, state)
+                                    true
+                                }
+                            },
+                            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+                        )
+                        if (editing) {
+                            addView(
+                                classicHeaderButton("Done", minWidthDp = 74) {
+                                    setClassicPageEditing(classicPage, false)
+                                },
+                                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+                            )
                         }
                     },
-                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
                 )
-                addView(classicHeaderButton("Add app") { showClassicAppPicker(classicPage, state) }.apply {
-                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                        marginEnd = activity.dp(8)
-                    }
-                })
-                addView(classicHeaderButton("Add widget") { addWidgetToClassicPage(classicPage) })
+                addView(
+                    LinearLayout(activity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        val actionRow = this
+                        if (editing) {
+                            addHeaderActionButton("Page") { showClassicPageActions(actionRow, classicPage, state) }
+                        }
+                        addHeaderActionButton("Add app") { showClassicAppPicker(classicPage, state) }
+                        addHeaderActionButton("Add widget") { addWidgetToClassicPage(classicPage) }
+                    },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                        topMargin = activity.dp(12)
+                    },
+                )
             },
         )
     }
 
-    private fun classicHeaderButton(text: String, action: () -> Unit): TextView {
+    private fun LinearLayout.addHeaderActionButton(text: String, action: () -> Unit) {
+        if (childCount > 0) {
+            addView(View(activity), LinearLayout.LayoutParams(activity.dp(8), 1))
+        }
+        addView(
+            classicHeaderButton(text, minWidthDp = 0, action = action),
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+        )
+    }
+
+    private fun classicHeaderButton(text: String, minWidthDp: Int = 104, action: () -> Unit): TextView {
         return TextView(activity).apply {
             this.text = text
             setTextColor(CalmTheme.INK)
@@ -139,7 +185,7 @@ class LauncherPageFactory(
             includeFontPadding = false
             background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(999))
             setPadding(activity.dp(14), activity.dp(9), activity.dp(14), activity.dp(9))
-            minWidth = activity.dp(104)
+            minWidth = activity.dp(minWidthDp)
             setOnClickListener { action() }
         }
     }
@@ -164,6 +210,11 @@ class LauncherPageFactory(
             ContextAction(
                 "New page",
                 Runnable { addClassicPage() },
+                ContextActionCloseBehavior.REMOVE_CARD,
+            ),
+            ContextAction(
+                if (isClassicPageEditing(classicPage)) "Done editing" else "Edit layout",
+                Runnable { setClassicPageEditing(classicPage, !isClassicPageEditing(classicPage)) },
                 ContextActionCloseBehavior.REMOVE_CARD,
             ),
         )
@@ -402,8 +453,9 @@ class LauncherPageFactory(
         classicPage: ClassicLauncherPageDefinition,
         item: ClassicGridItem,
         state: LauncherRenderModel,
+        editing: Boolean,
     ): View {
-        return FrameLayout(activity).apply {
+        val tile = FrameLayout(activity).apply {
             clipChildren = false
             clipToPadding = false
             val showActions = View.OnLongClickListener {
@@ -431,6 +483,13 @@ class LauncherPageFactory(
             }
             setOnLongClickListener(showActions)
         }
+        return if (editing) {
+            editableClassicTile(tile, "Widget") { source ->
+                showClassicItemActions(source, classicPage, item, "Widget", state)
+            }
+        } else {
+            tile
+        }
     }
 
     private fun classicAppTile(
@@ -438,8 +497,9 @@ class LauncherPageFactory(
         item: ClassicGridItem,
         app: AppEntry,
         state: LauncherRenderModel,
+        editing: Boolean,
     ): View {
-        return LinearLayout(activity).apply {
+        val tile = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             clipChildren = false
@@ -469,11 +529,64 @@ class LauncherPageFactory(
                 },
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
             )
-            setOnClickListener { openAppEntry(app) }
+            if (!editing) {
+                setOnClickListener { openAppEntry(app) }
+            }
             setOnLongClickListener {
                 showClassicItemActions(this, classicPage, item, app.label, state)
                 true
             }
+        }
+        return if (editing) {
+            editableClassicTile(tile, app.label) { source ->
+                showClassicItemActions(source, classicPage, item, app.label, state)
+            }
+        } else {
+            tile
+        }
+    }
+
+    private fun editableClassicTile(
+        content: View,
+        title: String,
+        showActions: (View) -> Unit,
+    ): View {
+        return FrameLayout(activity).apply {
+            val editContainer = this
+            clipChildren = false
+            clipToPadding = false
+            contentDescription = "Edit $title"
+            addView(
+                content,
+                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+            )
+            addView(
+                TextView(activity).apply {
+                    text = "Edit"
+                    setTextColor(CalmTheme.INK)
+                    textSize = 11f
+                    typeface = Typeface.DEFAULT
+                    setTypeface(typeface, Typeface.BOLD)
+                    gravity = Gravity.CENTER
+                    includeFontPadding = false
+                    background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(999))
+                    setPadding(activity.dp(8), activity.dp(5), activity.dp(8), activity.dp(5))
+                },
+                FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
+                    setMargins(0, 0, activity.dp(2), 0)
+                },
+            )
+            addView(
+                View(activity).apply {
+                    setBackgroundColor(Color.TRANSPARENT)
+                    setOnClickListener { showActions(editContainer) }
+                    setOnLongClickListener {
+                        showActions(editContainer)
+                        true
+                    }
+                },
+                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+            )
         }
     }
 

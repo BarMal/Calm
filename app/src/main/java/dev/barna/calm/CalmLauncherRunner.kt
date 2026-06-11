@@ -236,6 +236,8 @@ class CalmLauncherRunner(
         resizeClassicGridItem = ::resizeClassicGridItem,
         addClassicPage = ::addClassicPage,
         moveClassicPage = ::moveClassicPage,
+        isClassicPageEditing = ::isClassicPageEditing,
+        setClassicPageEditing = ::setClassicPageEditing,
         renameClassicPage = ::renameClassicPage,
         setDefaultClassicPage = ::setDefaultClassicPage,
         removeClassicPage = ::removeClassicPage,
@@ -290,6 +292,7 @@ class CalmLauncherRunner(
     private var packageChangeReceiverRegistered = false
     private var pagePrewarmGeneration = 0
     private var suppressedPageEntryKey: String? = null
+    private var editingClassicPageId: String? = null
 
     fun onCreate() {
         configureWindow()
@@ -411,6 +414,7 @@ class CalmLauncherRunner(
     private fun addClassicPage() {
         val page = settings.addClassicPage()
         settings.setPageSlotEnabled(PageSlot.CLASSIC_PAGES, true)
+        editingClassicPageId = page.id
         selectPage(page.key)
         Toast.makeText(activity, "Added ${page.title}", Toast.LENGTH_SHORT).show()
         render()
@@ -420,6 +424,15 @@ class CalmLauncherRunner(
         if (!settings.moveClassicPage(page.id, targetIndex)) return
         selectPage(page.key)
         Toast.makeText(activity, "Moved ${page.title}", Toast.LENGTH_SHORT).show()
+        render()
+    }
+
+    private fun isClassicPageEditing(page: ClassicLauncherPageDefinition): Boolean {
+        return editingClassicPageId == page.id
+    }
+
+    private fun setClassicPageEditing(page: ClassicLauncherPageDefinition, editing: Boolean) {
+        editingClassicPageId = if (editing) page.id else null
         render()
     }
 
@@ -441,6 +454,9 @@ class CalmLauncherRunner(
 
     private fun removeClassicPage(page: ClassicLauncherPageDefinition) {
         val removed = settings.removeClassicPage(page.id) ?: return
+        if (editingClassicPageId == removed.id) {
+            editingClassicPageId = null
+        }
         removed.items
             .filter { item -> item.type == ClassicGridItemType.WIDGET }
             .forEach(classicWidgetHostController::deleteWidget)

@@ -324,6 +324,40 @@ class LauncherSettingsTest {
     }
 
     @Test
+    fun addAppToSpecificClassicPageAddsToTargetPage() {
+        settings.setClassicPages(
+            listOf(
+                ClassicLauncherPageDefinition(id = "classic-1", title = "Classic"),
+                ClassicLauncherPageDefinition(id = "classic-2", title = "Second"),
+            ),
+        )
+
+        assertTrue(settings.addAppToClassicPage("classic-2", "com.example"))
+
+        val pages = settings.classicPages()
+        assertFalse(pages[0].containsApp("com.example"))
+        assertTrue(pages[1].containsApp("com.example"))
+    }
+
+    @Test
+    fun addAppToSpecificClassicPageEnablesDisabledTargetPage() {
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition(id = "classic-1", title = "Classic", enabled = false)))
+
+        assertTrue(settings.addAppToClassicPage("classic-1", "com.example"))
+
+        val page = settings.classicPages().single()
+        assertTrue(page.enabled)
+        assertTrue(page.containsApp("com.example"))
+    }
+
+    @Test
+    fun addAppToSpecificClassicPageReturnsFalseForMissingPage() {
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default()))
+
+        assertFalse(settings.addAppToClassicPage("missing", "com.example"))
+    }
+
+    @Test
     fun addAppToClassicPageEnablesFirstPageWhenAllDisabled() {
         settings.setClassicPages(listOf(ClassicLauncherPageDefinition(id = "classic-1", title = "Classic", enabled = false)))
 

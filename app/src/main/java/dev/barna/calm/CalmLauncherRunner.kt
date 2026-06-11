@@ -228,6 +228,7 @@ class CalmLauncherRunner(
         resolveIcon = { notificationRepository.resolveAppIconBitmap(it) },
         openAppEntry = ::openAppEntry,
         createWidgetView = classicWidgetHostController::createWidgetView,
+        addAppToClassicPage = appMutationHandler::addAppToClassicPage,
         addWidgetToClassicPage = classicWidgetHostController::requestAddWidget,
         removeClassicGridItem = ::removeClassicGridItem,
         barePagePanel = ::createBarePagePanel,

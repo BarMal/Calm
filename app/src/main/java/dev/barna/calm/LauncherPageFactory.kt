@@ -19,6 +19,7 @@ import android.widget.TextView
  */
 class LauncherPageFactory(
     private val activity: MainActivity,
+    private val drawables: CalmDrawables,
     private val overviewPageBuilder: OverviewPageBuilder,
     private val chapterPageBuilder: ChapterPageBuilder,
     private val appLibraryController: LauncherAppLibraryController,
@@ -28,6 +29,8 @@ class LauncherPageFactory(
     private val contactsPageController: ContactsPageController,
     private val resolveIcon: (AppEntry) -> Bitmap?,
     private val openAppEntry: (AppEntry) -> Unit,
+    private val createWidgetView: (ClassicGridItem) -> View?,
+    private val addWidgetToClassicPage: (ClassicLauncherPageDefinition) -> Unit,
     private val barePagePanel: (Int) -> LinearLayout,
     private val label: (String, Int, Int, Int) -> TextView,
 ) {
@@ -48,19 +51,20 @@ class LauncherPageFactory(
         appEntries: List<AppEntry>,
     ): LinearLayout {
         val appsByKey = appEntries.associateBy { it.identityKey }
-        val appItems = classicPage.items
-            .filter { item -> item.type == ClassicGridItemType.APP }
-            .mapNotNull { item -> appsByKey[item.target]?.let { app -> item to app } }
+        val gridItems = classicPage.items.mapNotNull { item ->
+            when (item.type) {
+                ClassicGridItemType.APP -> appsByKey[item.target]?.let { app -> item to classicAppTile(app) }
+                ClassicGridItemType.WIDGET -> item to classicWidgetTile(item)
+            }
+        }
         return barePagePanel(activity.dp(20)).apply {
-            addView(animatedChrome(label(classicPage.title, 30, CalmTheme.INK, Typeface.NORMAL).apply {
-                setPadding(0, activity.dp(8), 0, activity.dp(24))
-            }))
-            if (appItems.isEmpty()) {
+            addView(classicHeader(classicPage))
+            if (gridItems.isEmpty()) {
                 addView(
                     LinearLayout(activity).apply {
                         orientation = LinearLayout.VERTICAL
                         gravity = Gravity.CENTER
-                        addView(label("No icons yet", 22, CalmTheme.INK, Typeface.NORMAL).apply {
+                        addView(label("No items yet", 22, CalmTheme.INK, Typeface.NORMAL).apply {
                             gravity = Gravity.CENTER
                         })
                     },
@@ -68,14 +72,45 @@ class LauncherPageFactory(
                 )
             } else {
                 addView(
-                    classicGrid(appItems),
+                    classicGrid(gridItems),
                     LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
                 )
             }
         }
     }
 
-    private fun classicGrid(appItems: List<Pair<ClassicGridItem, AppEntry>>): View {
+    private fun classicHeader(classicPage: ClassicLauncherPageDefinition): View {
+        return animatedChrome(
+            LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, activity.dp(8), 0, activity.dp(24))
+                addView(
+                    label(classicPage.title, 30, CalmTheme.INK, Typeface.NORMAL),
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+                )
+                addView(classicHeaderButton("Add widget") { addWidgetToClassicPage(classicPage) })
+            },
+        )
+    }
+
+    private fun classicHeaderButton(text: String, action: () -> Unit): TextView {
+        return TextView(activity).apply {
+            this.text = text
+            setTextColor(CalmTheme.INK)
+            textSize = 13f
+            typeface = Typeface.DEFAULT
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(999))
+            setPadding(activity.dp(14), activity.dp(9), activity.dp(14), activity.dp(9))
+            minWidth = activity.dp(104)
+            setOnClickListener { action() }
+        }
+    }
+
+    private fun classicGrid(gridItems: List<Pair<ClassicGridItem, View>>): View {
         val cellWidth = activity.dp(78)
         val cellHeight = activity.dp(92)
         val grid = GridLayout(activity).apply {
@@ -86,12 +121,12 @@ class LauncherPageFactory(
             clipChildren = false
             clipToPadding = false
             setPadding(0, activity.dp(4), 0, activity.dp(12))
-            appItems.sortedWith(compareBy<Pair<ClassicGridItem, AppEntry>> { it.first.y }.thenBy { it.first.x })
-                .forEach { (item, app) ->
-                    val columnSpec = GridLayout.spec(item.x, item.width)
-                    val rowSpec = GridLayout.spec(item.y, item.height)
+            gridItems.sortedWith(compareBy<Pair<ClassicGridItem, View>> { it.first.y }.thenBy { it.first.x })
+                .forEach { (item, view) ->
+                    val columnSpec = GridLayout.spec(item.x, item.width, GridLayout.FILL)
+                    val rowSpec = GridLayout.spec(item.y, item.height, GridLayout.FILL)
                     addView(
-                        classicAppTile(app),
+                        view,
                         GridLayout.LayoutParams(rowSpec, columnSpec).apply {
                             width = cellWidth * item.width
                             height = cellHeight * item.height
@@ -107,6 +142,33 @@ class LauncherPageFactory(
                 grid,
                 FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL),
             )
+        }
+    }
+
+    private fun classicWidgetTile(item: ClassicGridItem): View {
+        return FrameLayout(activity).apply {
+            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(18))
+            clipChildren = true
+            clipToPadding = true
+            setPadding(activity.dp(6), activity.dp(6), activity.dp(6), activity.dp(6))
+            val widgetView = createWidgetView(item)
+            if (widgetView == null) {
+                addView(
+                    TextView(activity).apply {
+                        text = "Widget unavailable"
+                        setTextColor(CalmTheme.MUTED_INK)
+                        textSize = 14f
+                        gravity = Gravity.CENTER
+                        includeFontPadding = false
+                    },
+                    FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+                )
+            } else {
+                addView(
+                    widgetView,
+                    FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+                )
+            }
         }
     }
 

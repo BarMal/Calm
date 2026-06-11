@@ -40,6 +40,17 @@ class ClassicGridItemTest {
     }
 
     @Test
+    fun widgetCreatesStableHostIdTarget() {
+        val item = ClassicGridItem.widget(appWidgetId = 42, x = 0, y = 3, width = 4, height = 2)
+
+        assertEquals("widget:42", item.id)
+        assertEquals(ClassicGridItemType.WIDGET, item.type)
+        assertEquals("42", item.target)
+        assertEquals(4, item.width)
+        assertEquals(2, item.height)
+    }
+
+    @Test
     fun decodeClampsCoordinatesAndSizeMinimums() {
         val decoded = ClassicGridItem.decode(
             JSONObject()

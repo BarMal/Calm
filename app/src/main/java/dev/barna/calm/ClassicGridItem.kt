@@ -50,6 +50,18 @@ data class ClassicGridItem(
             )
         }
 
+        fun widget(appWidgetId: Int, x: Int, y: Int, width: Int = GRID_COLUMNS, height: Int = 2): ClassicGridItem {
+            return ClassicGridItem(
+                id = "widget:$appWidgetId",
+                type = ClassicGridItemType.WIDGET,
+                target = appWidgetId.toString(),
+                x = x,
+                y = y,
+                width = width,
+                height = height,
+            )
+        }
+
         fun decode(json: JSONObject): ClassicGridItem? {
             val id = json.optString(FIELD_ID).takeIf { it.isNotBlank() } ?: return null
             val target = json.optString(FIELD_TARGET).takeIf { it.isNotBlank() } ?: return null

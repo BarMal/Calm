@@ -239,6 +239,40 @@ class LauncherSettingsTest {
     }
 
     @Test
+    fun addWidgetToClassicPageAddsWidgetToTargetPage() {
+        settings.setClassicPages(
+            listOf(
+                ClassicLauncherPageDefinition(id = "classic-1", title = "Classic"),
+                ClassicLauncherPageDefinition(id = "classic-2", title = "Second"),
+            ),
+        )
+
+        assertTrue(settings.addWidgetToClassicPage("classic-2", appWidgetId = 42))
+
+        val pages = settings.classicPages()
+        assertFalse(pages[0].containsWidget(42))
+        assertTrue(pages[1].containsWidget(42))
+        assertTrue(settings.isClassicPageWidget(42))
+    }
+
+    @Test
+    fun addWidgetToClassicPageReturnsFalseForDuplicate() {
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default()))
+        assertTrue(settings.addWidgetToClassicPage("classic-1", appWidgetId = 42))
+
+        assertFalse(settings.addWidgetToClassicPage("classic-1", appWidgetId = 42))
+
+        assertEquals(1, settings.classicPages().single().items.size)
+    }
+
+    @Test
+    fun addWidgetToClassicPageReturnsFalseWhenTargetMissing() {
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default()))
+
+        assertFalse(settings.addWidgetToClassicPage("missing", appWidgetId = 42))
+    }
+
+    @Test
     fun cardStackCurveRoundTrips() {
         settings.setCardStackCurve(75)
         assertEquals(75, settings.cardStackTuning().curve)

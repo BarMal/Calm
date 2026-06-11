@@ -192,10 +192,8 @@ class LauncherPageFactory(
         state: LauncherRenderModel,
     ): View {
         return FrameLayout(activity).apply {
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(18))
-            clipChildren = true
-            clipToPadding = true
-            setPadding(activity.dp(6), activity.dp(6), activity.dp(6), activity.dp(6))
+            clipChildren = false
+            clipToPadding = false
             val showActions = View.OnLongClickListener {
                 showClassicItemActions(this, classicPage, item, "Widget", state)
                 true

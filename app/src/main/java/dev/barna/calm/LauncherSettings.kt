@@ -92,6 +92,10 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         return classicPages().any { it.enabled }
     }
 
+    fun firstEnabledClassicPage(): ClassicLauncherPageDefinition? {
+        return classicPages().firstOrNull { it.enabled }
+    }
+
     fun setClassicPagesEnabled(enabled: Boolean) {
         val pages = classicPages()
         val nextPages = if (pages.isEmpty() && enabled) {
@@ -106,6 +110,24 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         preferences.edit()
             .putString(PREF_CLASSIC_PAGES, ClassicLauncherPageDefinition.encodeList(pages.distinctBy { it.id }))
             .apply()
+    }
+
+    fun isClassicPageApp(identityKey: String): Boolean {
+        return classicPages().any { page -> page.containsApp(identityKey) }
+    }
+
+    fun addAppToClassicPage(identityKey: String): Boolean {
+        if (isClassicPageApp(identityKey)) return false
+        val pages = classicPages().ifEmpty { listOf(ClassicLauncherPageDefinition.default()) }
+        val target = pages.firstOrNull { it.enabled } ?: pages.first().copy(enabled = true)
+        val updatedTarget = target.withApp(identityKey) ?: return false
+        val nextPages = pages.map { page ->
+            if (page.id == updatedTarget.id) updatedTarget else page
+        }.let { mapped ->
+            if (mapped.any { it.id == updatedTarget.id }) mapped else mapped + updatedTarget
+        }
+        setClassicPages(nextPages)
+        return true
     }
 
     fun dockConfig(): DockConfig {

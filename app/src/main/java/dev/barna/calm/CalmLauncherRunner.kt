@@ -86,6 +86,8 @@ class CalmLauncherRunner(
             isDockItem = appMutationHandler::isDockItem,
             addDockItem = appMutationHandler::addDockItem,
             removeDockItem = appMutationHandler::removeDockItem,
+            isClassicPageApp = appMutationHandler::isClassicPageApp,
+            addAppToClassicPage = appMutationHandler::addAppToClassicPage,
         ),
     )
     private val cardStackController = CardStackController(activity, mainHandler, ::performCardScrollHaptic)
@@ -211,6 +213,8 @@ class CalmLauncherRunner(
         appLibraryPageModelFactory = appLibraryPageModelFactory,
         appLibraryStore = appLibraryStore,
         contactsPageController = contactsPageController,
+        resolveIcon = { notificationRepository.resolveAppIconBitmap(it) },
+        openAppEntry = ::openAppEntry,
         barePagePanel = ::createBarePagePanel,
         label = ::label,
     )

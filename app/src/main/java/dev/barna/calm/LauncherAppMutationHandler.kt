@@ -60,6 +60,25 @@ class LauncherAppMutationHandler(
         render()
     }
 
+    fun isClassicPageApp(identityKey: String): Boolean {
+        return settings.isClassicPageApp(identityKey)
+    }
+
+    fun addAppToClassicPage(app: AppEntry) {
+        if (isClassicPageApp(app.identityKey)) {
+            Toast.makeText(activity, "${app.label} is already on a Classic page", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (settings.addAppToClassicPage(app.identityKey)) {
+            val pageKey = settings.firstEnabledClassicPage()?.key ?: CalmTheme.OVERVIEW_KEY
+            selectPage(pageKey)
+            Toast.makeText(activity, "Added ${app.label} to Classic", Toast.LENGTH_SHORT).show()
+            render()
+        } else {
+            Toast.makeText(activity, "Classic page is full", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     fun showApp(appKey: String) {
         settings.showApp(appKey)
         render()

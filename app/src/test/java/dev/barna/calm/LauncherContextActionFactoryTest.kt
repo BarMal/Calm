@@ -13,13 +13,13 @@ class LauncherContextActionFactoryTest {
         val pinActions = factory.appActions(app, pinned = false)
         val unpinActions = factory.appActions(app, pinned = true)
 
-        assertEquals(listOf("Open", "Pin", "Add to dock", "Info", "Hide"), pinActions.labels())
-        assertEquals(listOf("Open", "Unpin", "Add to dock", "Info", "Hide"), unpinActions.labels())
+        assertEquals(listOf("Open", "Pin", "Add to dock", "Add to Classic page", "Info", "Hide"), pinActions.labels())
+        assertEquals(listOf("Open", "Unpin", "Add to dock", "Add to Classic page", "Info", "Hide"), unpinActions.labels())
 
         pinActions[1].action.run()
         unpinActions[1].action.run()
-        pinActions[3].action.run()
         pinActions[4].action.run()
+        pinActions[5].action.run()
 
         assertEquals(listOf("pin:maps.pkg", "unpin:maps.pkg", "info:maps.pkg", "hide:maps.pkg"), events)
     }
@@ -52,9 +52,12 @@ class LauncherContextActionFactoryTest {
 
         val actions = factory.appActions(app, pinned = false)
 
-        assertEquals(listOf("Open", "Pin", "Add to dock", "Compose", "Search", "Scan", "Info", "Hide"), actions.labels())
-        actions[3].action.run()
-        actions[5].action.run()
+        assertEquals(
+            listOf("Open", "Pin", "Add to dock", "Add to Classic page", "Compose", "Search", "Scan", "Info", "Hide"),
+            actions.labels(),
+        )
+        actions[4].action.run()
+        actions[6].action.run()
 
         assertEquals(listOf("shortcut:compose", "shortcut:scan"), events)
     }
@@ -70,6 +73,30 @@ class LauncherContextActionFactoryTest {
         assertEquals("Remove from dock", actions[2].label)
         actions[2].action.run()
         assertEquals(listOf("removeDock:maps.pkg:Maps"), events)
+    }
+
+    @Test
+    fun appActionsAddToClassicPageWhenNotAlreadyPlaced() {
+        val events = ArrayList<String>()
+        val factory = LauncherContextActionFactory(callbacks(events))
+        val app = app("maps.pkg")
+
+        val actions = factory.appActions(app, pinned = false)
+
+        val addAction = actions.first { it.label == "Add to Classic page" }
+        addAction.action.run()
+        assertEquals(listOf("addClassic:maps.pkg"), events)
+    }
+
+    @Test
+    fun appActionsSkipClassicPageActionWhenAlreadyPlaced() {
+        val events = ArrayList<String>()
+        val factory = LauncherContextActionFactory(callbacks(events, classicPageKeys = setOf("maps.pkg")))
+        val app = app("maps.pkg")
+
+        val actions = factory.appActions(app, pinned = false)
+
+        assertEquals(listOf("Open", "Pin", "Add to dock", "Info", "Hide"), actions.labels())
     }
 
     @Test
@@ -129,6 +156,7 @@ class LauncherContextActionFactoryTest {
         events: MutableList<String>,
         shortcuts: List<AppShortcutEntry> = emptyList(),
         dockedKeys: Set<String> = emptySet(),
+        classicPageKeys: Set<String> = emptySet(),
     ): LauncherContextActionCallbacks {
         return LauncherContextActionCallbacks(
             openNotification = { events.add("openNotification:${it.key}") },
@@ -149,6 +177,8 @@ class LauncherContextActionFactoryTest {
             isDockItem = { it in dockedKeys },
             addDockItem = { key, label -> events.add("addDock:$key:$label") },
             removeDockItem = { key, label -> events.add("removeDock:$key:$label") },
+            isClassicPageApp = { it in classicPageKeys },
+            addAppToClassicPage = { events.add("addClassic:${it.identityKey}") },
         )
     }
 

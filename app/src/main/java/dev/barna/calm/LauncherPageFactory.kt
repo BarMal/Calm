@@ -666,14 +666,89 @@ class LauncherPageFactory(
             Toast.makeText(activity, "No positions available", Toast.LENGTH_SHORT).show()
             return
         }
-        AlertDialog.Builder(activity)
-            .setTitle("Position")
-            .setItems(positions.map { position -> position.label(item) }.toTypedArray()) { _, which ->
-                val (x, y) = positions[which]
-                moveClassicGridItemWithinPage(classicPage, item, x, y)
+        val availablePositions = positions.toSet()
+        val grid = GridLayout(activity).apply {
+            columnCount = ClassicGridItem.GRID_COLUMNS
+            rowCount = ClassicGridItem.DEFAULT_GRID_ROWS
+            useDefaultMargins = false
+            setPadding(activity.dp(16), activity.dp(16), activity.dp(16), activity.dp(16))
+        }
+        var dialog: AlertDialog? = null
+        for (y in 0 until ClassicGridItem.DEFAULT_GRID_ROWS) {
+            for (x in 0 until ClassicGridItem.GRID_COLUMNS) {
+                val position = x to y
+                val available = position in availablePositions
+                val current = item.x == x && item.y == y
+                grid.addView(
+                    classicPositionCell(
+                        label = if (current) "Here" else "${y + 1}.${x + 1}",
+                        contentDescription = position.positionDescription(available, current),
+                        available = available,
+                        current = current,
+                    ) {
+                        dialog?.dismiss()
+                        moveClassicGridItemWithinPage(classicPage, item, x, y)
+                    },
+                    GridLayout.LayoutParams(
+                        GridLayout.spec(y, GridLayout.FILL),
+                        GridLayout.spec(x, GridLayout.FILL),
+                    ).apply {
+                        width = 0
+                        height = activity.dp(44)
+                        columnSpec = GridLayout.spec(x, 1f)
+                        setMargins(activity.dp(4), activity.dp(4), activity.dp(4), activity.dp(4))
+                    },
+                )
             }
+        }
+        val scroll = ScrollView(activity).apply {
+            addView(grid, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        dialog = AlertDialog.Builder(activity)
+            .setTitle("Position")
+            .setView(scroll)
             .setNegativeButton("Cancel", null)
-            .show()
+            .create()
+        dialog.show()
+    }
+
+    private fun classicPositionCell(
+        label: String,
+        contentDescription: String,
+        available: Boolean,
+        current: Boolean,
+        onClick: () -> Unit,
+    ): TextView {
+        val color = when {
+            current -> Color.argb(68, Color.red(CalmTheme.ACCENT), Color.green(CalmTheme.ACCENT), Color.blue(CalmTheme.ACCENT))
+            available -> CalmTheme.QUIET_GLASS
+            else -> Color.argb(22, 255, 255, 255)
+        }
+        return TextView(activity).apply {
+            text = label
+            this.contentDescription = contentDescription
+            setTextColor(if (available) CalmTheme.INK else CalmTheme.MUTED_INK)
+            textSize = if (current) 12f else 11f
+            typeface = Typeface.DEFAULT
+            setTypeface(typeface, if (current) Typeface.BOLD else Typeface.NORMAL)
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            background = drawables.glass(color, activity.dp(12))
+            alpha = if (available) 1f else 0.42f
+            isEnabled = available
+            if (available) {
+                setOnClickListener { onClick() }
+            }
+        }
+    }
+
+    private fun Pair<Int, Int>.positionDescription(available: Boolean, current: Boolean): String {
+        val state = when {
+            current -> "current"
+            available -> "available"
+            else -> "unavailable"
+        }
+        return "Row ${second + 1}, column ${first + 1}, $state"
     }
 
     private fun showClassicResizeDialog(classicPage: ClassicLauncherPageDefinition, item: ClassicGridItem) {
@@ -749,11 +824,6 @@ class LauncherPageFactory(
             val current = if (item.width == width && item.height == height) " (current)" else ""
             return "$title - ${width}x$height$current"
         }
-    }
-
-    private fun Pair<Int, Int>.label(item: ClassicGridItem): String {
-        val current = if (first == item.x && second == item.y) " (current)" else ""
-        return "Row ${second + 1}, column ${first + 1}$current"
     }
 
     private companion object {

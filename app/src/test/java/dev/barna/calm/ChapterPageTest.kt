@@ -15,6 +15,7 @@ class ChapterPageTest {
         assertEquals("Overview", page.title)
         assertNull(page.chapter)
         assertNull(page.appScope)
+        assertNull(page.classicPage)
     }
 
     @Test
@@ -28,6 +29,7 @@ class ChapterPageTest {
         assertEquals("Messages", page.title)
         assertSame(chapter, page.chapter)
         assertNull(page.appScope)
+        assertNull(page.classicPage)
     }
 
     @Test
@@ -41,5 +43,18 @@ class ChapterPageTest {
         assertEquals(AppLibraryScope.WORK, work.appScope)
     }
 
+    @Test
+    fun classicPageUsesDefinitionKeyAndTitle() {
+        val definition = ClassicLauncherPageDefinition(id = "classic-1", title = "Classic")
+
+        val page = ChapterPage.classic(definition, "III")
+
+        assertEquals("classic:classic-1", page.key)
+        assertEquals("III", page.marker)
+        assertEquals("Classic", page.title)
+        assertNull(page.chapter)
+        assertNull(page.appScope)
+        assertSame(definition, page.classicPage)
+    }
 
 }

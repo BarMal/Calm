@@ -55,6 +55,23 @@ class LauncherPageStateTest {
         assertEquals(listOf("Work", "Apps", "Overview", "Personal"), state.pages.map { it.title })
     }
 
+    @Test
+    fun includesEnabledClassicPages() {
+        val preferences = preferences()
+        val classic = ClassicLauncherPageDefinition(id = "classic-1", title = "Classic")
+
+        val state = factory.create(
+            preferences = preferences,
+            notificationChapters = emptyList(),
+            appEntries = listOf(app("browser.pkg", "Browser")),
+            pinnedKeys = emptySet(),
+            classicPages = listOf(classic),
+        )
+
+        assertEquals(listOf("Apps", "Overview", "Classic"), state.pages.map { it.title })
+        assertEquals(classic, state.pages.last().classicPage)
+    }
+
     private fun preferences(
         splitAppsByProfile: Boolean = false,
         placeWorkNotificationChaptersBeforeApps: Boolean = false,

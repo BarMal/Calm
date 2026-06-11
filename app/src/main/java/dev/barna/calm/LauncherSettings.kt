@@ -84,6 +84,30 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             .apply()
     }
 
+    fun classicPages(): List<ClassicLauncherPageDefinition> {
+        return ClassicLauncherPageDefinition.decodeList(preferences.getString(PREF_CLASSIC_PAGES, null))
+    }
+
+    fun classicPagesEnabled(): Boolean {
+        return classicPages().any { it.enabled }
+    }
+
+    fun setClassicPagesEnabled(enabled: Boolean) {
+        val pages = classicPages()
+        val nextPages = if (pages.isEmpty() && enabled) {
+            listOf(ClassicLauncherPageDefinition.default())
+        } else {
+            pages.map { page -> page.copy(enabled = enabled) }
+        }
+        setClassicPages(nextPages)
+    }
+
+    fun setClassicPages(pages: List<ClassicLauncherPageDefinition>) {
+        preferences.edit()
+            .putString(PREF_CLASSIC_PAGES, ClassicLauncherPageDefinition.encodeList(pages.distinctBy { it.id }))
+            .apply()
+    }
+
     fun dockConfig(): DockConfig {
         return DockConfig(
             enabled = preferences.getBoolean(PREF_DOCK_ENABLED, false),
@@ -355,6 +379,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             pinnedPackages(),
             hiddenAppKeys(),
             splitNotificationPackages(),
+            classicPages(),
             dockConfig(),
             dockKeys(),
         ).hashCode()
@@ -601,6 +626,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_PAGE_SORT_ORDER = "page_sort_order"
         private const val PREF_EXPANDED_CARDS = "expanded_cards"
         private const val PREF_CONTACTS_PAGE = "contacts_page"
+        private const val PREF_CLASSIC_PAGES = "classic_pages"
         private const val PREF_LAST_PAGE_KEY = "last_page_key"
         private const val PREF_DOCK_ENABLED = "dock_enabled"
         private const val PREF_DOCK_ITEM_COUNT = "dock_item_count"

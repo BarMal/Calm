@@ -7,6 +7,7 @@ class PageArrangerTest {
     private val apps = ChapterPage.appLibrary(CalmTheme.APP_LIBRARY_KEY)
     private val pinned = ChapterPage.pinned(CalmTheme.PINNED_KEY, "II")
     private val overview = ChapterPage.overview(CalmTheme.OVERVIEW_KEY)
+    private val classic = ChapterPage.classic(ClassicLauncherPageDefinition("classic-1", "Classic"), "III")
     private val chatA = ChapterPage.notifications(chapter("com.a", "A"), "IV")
     private val chatB = ChapterPage.notifications(chapter("com.b", "B"), "V")
     private val pages = listOf(apps, pinned, overview, chatA, chatB)
@@ -19,11 +20,16 @@ class PageArrangerTest {
     @Test
     fun customOrderGroupsSlotsAndKeepsNotificationClusterTogether() {
         val layout = LauncherPageLayout(
-            order = listOf(PageSlot.NOTIFICATIONS, PageSlot.OVERVIEW, PageSlot.APPS, PageSlot.PINNED),
+            order = listOf(PageSlot.NOTIFICATIONS, PageSlot.CLASSIC_PAGES, PageSlot.OVERVIEW, PageSlot.APPS, PageSlot.PINNED),
             disabled = emptySet(),
             defaultHome = PageSlot.OVERVIEW,
         )
-        assertEquals(listOf(chatA, chatB, overview, apps, pinned), PageArranger.arrange(pages, layout))
+        assertEquals(listOf(chatA, chatB, classic, overview, apps, pinned), PageArranger.arrange(pages + classic, layout))
+    }
+
+    @Test
+    fun classicPageUsesClassicPagesSlot() {
+        assertEquals(PageSlot.CLASSIC_PAGES, PageArranger.slotOf(classic))
     }
 
     @Test

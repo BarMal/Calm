@@ -10,6 +10,7 @@ class LauncherRenderModelFactory(
         appEntries: List<AppEntry>,
         pinnedKeys: Set<String>,
         pinnedChapterPackages: Set<String> = emptySet(),
+        classicPages: List<ClassicLauncherPageDefinition> = emptyList(),
         dockConfig: DockConfig = DockConfig(),
         dockKeys: List<String> = emptyList(),
         hasCalendarPermission: Boolean,
@@ -21,6 +22,7 @@ class LauncherRenderModelFactory(
             appEntries = appEntries,
             pinnedKeys = pinnedKeys,
             pinnedChapterPackages = pinnedChapterPackages,
+            classicPages = classicPages,
         )
         val resolvedDockApps = if (dockConfig.enabled) {
             dockResolver.resolve(appEntries, dockKeys)
@@ -34,6 +36,7 @@ class LauncherRenderModelFactory(
             pinnedKeys = pinnedKeys,
             pinnedApps = pageState.pinnedApps,
             pinnedChapterPackages = pinnedChapterPackages,
+            classicPages = classicPages,
             pages = pageState.pages,
             dockConfig = dockConfig,
             dockKeys = dockKeys,
@@ -51,6 +54,7 @@ data class LauncherRenderModel(
     val pinnedKeys: Set<String>,
     val pinnedApps: List<AppEntry>,
     val pinnedChapterPackages: Set<String> = emptySet(),
+    val classicPages: List<ClassicLauncherPageDefinition> = emptyList(),
     val pages: List<ChapterPage>,
     val dockConfig: DockConfig = DockConfig(),
     val dockKeys: List<String> = emptyList(),

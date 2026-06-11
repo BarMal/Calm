@@ -63,6 +63,35 @@ class ChapterPagePlannerTest {
         assertEquals(listOf("Work chat", "Work apps", "Personal apps", "Overview", "Work", "Personal chat"), pages.map { it.title })
     }
 
+    @Test
+    fun enabledClassicPagesAppearBeforeNotificationChapters() {
+        val classic = ClassicLauncherPageDefinition(id = "classic-1", title = "Classic")
+        val pages = planner.buildPages(
+            preferences = preferences(),
+            notificationChapters = listOf(chapter("chat", "Chat")),
+            appEntries = listOf(app("browser", "Browser")),
+            pinnedApps = emptyList(),
+            classicPages = listOf(classic),
+        )
+
+        assertEquals(listOf("Apps", "Overview", "Classic", "Chat"), pages.map { it.title })
+        assertEquals(classic, pages.first { it.classicPage != null }.classicPage)
+        assertEquals(listOf("I", "II", "III", "IV"), pages.map { it.marker })
+    }
+
+    @Test
+    fun disabledClassicPagesAreSkipped() {
+        val pages = planner.buildPages(
+            preferences = preferences(),
+            notificationChapters = emptyList(),
+            appEntries = listOf(app("browser", "Browser")),
+            pinnedApps = emptyList(),
+            classicPages = listOf(ClassicLauncherPageDefinition(id = "classic-1", title = "Classic", enabled = false)),
+        )
+
+        assertEquals(listOf("Apps", "Overview"), pages.map { it.title })
+    }
+
     private fun preferences(
         splitAppsByProfile: Boolean = false,
         placeWorkNotificationChaptersBeforeApps: Boolean = false,

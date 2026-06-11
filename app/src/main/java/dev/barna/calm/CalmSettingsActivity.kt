@@ -242,6 +242,11 @@ class CalmSettingsActivity : ComponentActivity() {
             summary = "Add a People page with your starred contacts and ways to reach them.",
             checked = settings.contactsPageEnabled(),
         ) { settings.toggleContactsPage(); requestRender() })
+        content.addView(switchRow(
+            title = "Classic launcher page",
+            summary = classicPagesSummary(),
+            checked = settings.classicPagesEnabled(),
+        ) { settings.setClassicPagesEnabled(!settings.classicPagesEnabled()); requestRender() })
         content.addView(actionRow(
             "Page order",
             "Sorted by ${pageSortLabel(settings.pageSortOrder())}.",
@@ -489,6 +494,7 @@ class CalmSettingsActivity : ComponentActivity() {
         PageSlot.CONTACTS -> "People"
         PageSlot.OVERVIEW -> "Overview"
         PageSlot.WORK_OVERVIEW -> "Work overview"
+        PageSlot.CLASSIC_PAGES -> "Classic pages"
         PageSlot.NOTIFICATIONS -> "Notifications"
     }
 
@@ -640,6 +646,13 @@ class CalmSettingsActivity : ComponentActivity() {
         val count = settings.dockKeys().size
         if (count == 0) return "Choose apps to show in the dock."
         return "$count dock ${if (count == 1) "app" else "apps"}."
+    }
+
+    private fun classicPagesSummary(): String {
+        val pages = settings.classicPages()
+        val enabled = pages.count { it.enabled }
+        if (pages.isEmpty()) return "Create an empty classic page."
+        return "$enabled of ${pages.size} classic ${if (pages.size == 1) "page" else "pages"} enabled."
     }
 
     private fun dockItemSizeLabel(span: Int): String {

@@ -10,6 +10,7 @@ class LauncherPageStateFactory(
         appEntries: List<AppEntry>,
         pinnedKeys: Set<String>,
         pinnedChapterPackages: Set<String> = emptySet(),
+        classicPages: List<ClassicLauncherPageDefinition> = emptyList(),
     ): LauncherPageState {
         val pinnedApps = pinnedAppResolver.resolve(appEntries, pinnedKeys)
         val pages = chapterPagePlanner.buildPages(
@@ -18,6 +19,7 @@ class LauncherPageStateFactory(
             appEntries = appEntries,
             pinnedApps = pinnedApps,
             pinnedChapterPackages = pinnedChapterPackages,
+            classicPages = classicPages,
         )
         return LauncherPageState(
             pages = PageArranger.arrange(pages, preferences.pageLayout),

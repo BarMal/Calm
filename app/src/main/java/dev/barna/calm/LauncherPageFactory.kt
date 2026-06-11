@@ -30,8 +30,27 @@ class LauncherPageFactory(
             page.key == CalmTheme.PINNED_KEY -> createPinnedPage(state.pinnedApps)
             page.key == CalmTheme.CONTACTS_KEY -> contactsPageController.buildPage()
             page.key == CalmTheme.WORK_OVERVIEW_KEY -> overviewPageBuilder.buildPage(state, workProfile = true)
+            page.classicPage != null -> createClassicPage(page.classicPage)
             page.chapter == null -> overviewPageBuilder.buildPage(state)
             else -> chapterPageBuilder.buildPage(page.chapter)
+        }
+    }
+
+    private fun createClassicPage(classicPage: ClassicLauncherPageDefinition): LinearLayout {
+        return barePagePanel(activity.dp(20)).apply {
+            addView(animatedChrome(label(classicPage.title, 30, CalmTheme.INK, Typeface.NORMAL).apply {
+                setPadding(0, activity.dp(8), 0, activity.dp(24))
+            }))
+            addView(
+                LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = android.view.Gravity.CENTER
+                    addView(label("No icons yet", 22, CalmTheme.INK, Typeface.NORMAL).apply {
+                        gravity = android.view.Gravity.CENTER
+                    })
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+            )
         }
     }
 

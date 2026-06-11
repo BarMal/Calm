@@ -10,6 +10,7 @@ enum class PageSlot {
     CONTACTS,
     OVERVIEW,
     WORK_OVERVIEW,
+    CLASSIC_PAGES,
     NOTIFICATIONS,
 }
 
@@ -32,6 +33,7 @@ data class LauncherPageLayout(
             PageSlot.CONTACTS,
             PageSlot.OVERVIEW,
             PageSlot.WORK_OVERVIEW,
+            PageSlot.CLASSIC_PAGES,
             PageSlot.NOTIFICATIONS,
         )
         val DEFAULT = LauncherPageLayout(DEFAULT_ORDER, emptySet(), PageSlot.OVERVIEW)
@@ -46,6 +48,7 @@ object PageArranger {
         page.key == CalmTheme.CONTACTS_KEY -> PageSlot.CONTACTS
         page.key == CalmTheme.WORK_OVERVIEW_KEY -> PageSlot.WORK_OVERVIEW
         page.key == CalmTheme.OVERVIEW_KEY -> PageSlot.OVERVIEW
+        page.classicPage != null -> PageSlot.CLASSIC_PAGES
         page.chapter != null -> PageSlot.NOTIFICATIONS
         else -> PageSlot.OVERVIEW
     }

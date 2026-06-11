@@ -86,16 +86,16 @@ data class ClassicGridItem(
             val type = runCatching {
                 ClassicGridItemType.valueOf(json.optString(FIELD_TYPE, ClassicGridItemType.APP.name))
             }.getOrDefault(ClassicGridItemType.APP)
-            val x = json.optInt(FIELD_X, 0).coerceIn(0, GRID_COLUMNS - 1)
-            val y = json.optInt(FIELD_Y, 0).coerceIn(0, DEFAULT_GRID_ROWS - 1)
+            val x = json.optInt(FIELD_X, 0).coerceAtLeast(0)
+            val y = json.optInt(FIELD_Y, 0).coerceAtLeast(0)
             return ClassicGridItem(
                 id = id,
                 type = type,
                 target = target,
                 x = x,
                 y = y,
-                width = json.optInt(FIELD_WIDTH, 1).coerceIn(1, GRID_COLUMNS - x),
-                height = json.optInt(FIELD_HEIGHT, 1).coerceIn(1, DEFAULT_GRID_ROWS - y),
+                width = json.optInt(FIELD_WIDTH, 1).coerceAtLeast(1),
+                height = json.optInt(FIELD_HEIGHT, 1).coerceAtLeast(1),
             )
         }
 

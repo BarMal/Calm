@@ -23,12 +23,12 @@ import java.text.Collator
 
 class ClassicWidgetHostController(
     private val activity: MainActivity,
-    private val drawables: CalmDrawables,
     private val settings: LauncherSettings,
     private val requestWidgetBind: (Intent) -> Unit,
     private val requestWidgetConfigure: (Intent) -> Unit,
     private val render: () -> Unit,
     private val selectPage: (String) -> Unit,
+    private val beginClassicItemPlacement: (ClassicLauncherPageDefinition, String) -> Unit,
 ) {
     private val appWidgetManager = AppWidgetManager.getInstance(activity)
     private val appWidgetHost = AppWidgetHost(activity, HOST_ID)
@@ -92,7 +92,7 @@ class ClassicWidgetHostController(
         val scroll = ScrollView(activity).apply {
             addView(grid, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
-        dialog = AlertDialog.Builder(activity)
+        dialog = GoogleInteractionStyle.dialogBuilder(activity)
             .setTitle("Add widget")
             .setView(scroll)
             .setNegativeButton("Cancel", null)
@@ -102,11 +102,11 @@ class ClassicWidgetHostController(
 
     private fun widgetProviderCard(provider: AppWidgetProviderInfo, onClick: () -> Unit): View {
         val label = widgetLabel(provider)
-        val span = ClassicWidgetSpanCalculator.spanFor(provider.minWidth, provider.minHeight)
+        val span = ClassicWidgetSpanCalculator.spanFor(provider.minWidth, provider.minHeight, settings.classicGridConfig())
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(16))
+            background = GoogleInteractionStyle.rowBackground(activity, 18)
             setPadding(activity.dp(10), activity.dp(10), activity.dp(10), activity.dp(10))
             addView(
                 FrameLayout(activity).apply {
@@ -125,7 +125,7 @@ class ClassicWidgetHostController(
             addView(
                 TextView(activity).apply {
                     text = label
-                    setTextColor(CalmTheme.INK)
+                    setTextColor(GoogleInteractionStyle.onSurface(activity))
                     textSize = 13f
                     typeface = Typeface.DEFAULT
                     setTypeface(typeface, Typeface.BOLD)
@@ -139,7 +139,7 @@ class ClassicWidgetHostController(
             addView(
                 TextView(activity).apply {
                     text = "${span.first}x${span.second}"
-                    setTextColor(CalmTheme.MUTED_INK)
+                    setTextColor(GoogleInteractionStyle.onSurfaceVariant(activity))
                     textSize = 11f
                     gravity = Gravity.CENTER
                     includeFontPadding = false
@@ -214,6 +214,12 @@ class ClassicWidgetHostController(
         return appWidgetManager.getAppWidgetInfo(appWidgetId)?.configure != null
     }
 
+    fun defaultWidgetSpan(appWidgetId: Int): Pair<Int, Int> {
+        return appWidgetManager.getAppWidgetInfo(appWidgetId)
+            ?.let { info -> ClassicWidgetSpanCalculator.spanFor(info.minWidth, info.minHeight, settings.classicGridConfig()) }
+            ?: (settings.classicGridConfig().columns to 2)
+    }
+
     fun requestConfigureWidget(item: ClassicGridItem) {
         val appWidgetId = item.target.toIntOrNull() ?: return
         val configure = appWidgetManager.getAppWidgetInfo(appWidgetId)?.configure
@@ -239,11 +245,14 @@ class ClassicWidgetHostController(
         val request = pendingRequest ?: return
         pendingRequest = null
         val span = appWidgetManager.getAppWidgetInfo(appWidgetId)
-            ?.let { info -> ClassicWidgetSpanCalculator.spanFor(info.minWidth, info.minHeight) }
-            ?: (ClassicGridItem.GRID_COLUMNS to 2)
+            ?.let { info -> ClassicWidgetSpanCalculator.spanFor(info.minWidth, info.minHeight, settings.classicGridConfig()) }
+            ?: (settings.classicGridConfig().columns to 2)
         if (settings.addWidgetToClassicPage(request.pageId, appWidgetId, span.first, span.second)) {
-            settings.classicPages().firstOrNull { it.id == request.pageId }?.let { page -> selectPage(page.key) }
-            Toast.makeText(activity, "Added widget", Toast.LENGTH_SHORT).show()
+            settings.classicPages().firstOrNull { it.id == request.pageId }?.let { page ->
+                selectPage(page.key)
+                beginClassicItemPlacement(page, "widget:$appWidgetId")
+            }
+            Toast.makeText(activity, "Added widget; drag to place", Toast.LENGTH_SHORT).show()
             render()
         } else {
             appWidgetHost.deleteAppWidgetId(appWidgetId)

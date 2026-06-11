@@ -1,6 +1,5 @@
 package dev.barna.calm
 
-import android.app.AlertDialog
 import android.appwidget.AppWidgetHost
 import android.Manifest
 import android.content.ComponentName
@@ -11,7 +10,9 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -26,6 +27,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import kotlin.math.roundToInt
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -33,7 +35,6 @@ class CalmSettingsActivity : ComponentActivity() {
     private lateinit var settings: LauncherSettings
     private lateinit var calendarRepository: CalendarRepository
     private lateinit var appRepository: NotificationChapterRepository
-    private lateinit var drawables: CalmDrawables
     private val mainHandler = Handler(Looper.getMainLooper())
     private val deferredRender = Runnable { render() }
     private val appLoadExecutor = Executors.newSingleThreadExecutor()
@@ -52,7 +53,6 @@ class CalmSettingsActivity : ComponentActivity() {
             calendarPermissionLauncher.launch(Manifest.permission.READ_CALENDAR)
         }
         appRepository = NotificationChapterRepository(this, settings)
-        drawables = CalmDrawables(this)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (currentSettingsPage != SettingsPage.ROOT) {
@@ -90,7 +90,7 @@ class CalmSettingsActivity : ComponentActivity() {
         val screen = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), statusBarHeightFallback() + dp(18), dp(18), dp(20))
-            setBackgroundColor(CalmTheme.SURFACE)
+            setBackgroundColor(GoogleInteractionStyle.background(this@CalmSettingsActivity))
         }
 
         val scrollView = ScrollView(this).apply {
@@ -129,7 +129,7 @@ class CalmSettingsActivity : ComponentActivity() {
 
     private fun settingsTitle(): TextView {
         val title = if (currentSettingsPage == SettingsPage.ROOT) "Settings" else currentSettingsPage.title
-        return label(title, 32, CalmTheme.INK, Typeface.NORMAL).apply {
+        return label(title, 32, GoogleInteractionStyle.onSurface(this), Typeface.NORMAL).apply {
             setPadding(0, dp(2), 0, dp(18))
         }
     }
@@ -236,21 +236,30 @@ class CalmSettingsActivity : ComponentActivity() {
 
     private fun renderPageSettings(content: LinearLayout) {
         content.addView(section("Pages"))
-        content.addView(actionRow("Page layout", "Reorder pages, toggle presets, and set the home page.") {
+        content.addView(actionRow("Page layout", "Reorder page types and set the home page.") {
             showPageLayoutDialog()
         })
-        content.addView(switchRow(
-            title = "Favourite contacts page",
-            summary = "Add a People page with your starred contacts and ways to reach them.",
-            checked = settings.contactsPageEnabled(),
-        ) { settings.toggleContactsPage(); requestRender() })
-        content.addView(switchRow(
-            title = "Classic launcher page",
-            summary = classicPagesSummary(),
-            checked = settings.classicPagesEnabled(),
-        ) { settings.setClassicPagesEnabled(!settings.classicPagesEnabled()); requestRender() })
         content.addView(actionRow("Classic pages", classicPagesManagementSummary()) {
             showClassicPagesDialog()
+        })
+        val classicGrid = settings.classicGridConfig()
+        content.addView(sliderRow(
+            title = "Classic grid columns",
+            progress = classicGrid.columns - ClassicGridConfig.MIN_COLUMNS,
+            max = ClassicGridConfig.MAX_COLUMNS - ClassicGridConfig.MIN_COLUMNS,
+            valueText = { "${it + ClassicGridConfig.MIN_COLUMNS} columns" },
+        ) {
+            settings.setClassicGridColumns(it + ClassicGridConfig.MIN_COLUMNS)
+            requestRender()
+        })
+        content.addView(sliderRow(
+            title = "Classic grid rows",
+            progress = classicGrid.rows - ClassicGridConfig.MIN_ROWS,
+            max = ClassicGridConfig.MAX_ROWS - ClassicGridConfig.MIN_ROWS,
+            valueText = { "${it + ClassicGridConfig.MIN_ROWS} rows" },
+        ) {
+            settings.setClassicGridRows(it + ClassicGridConfig.MIN_ROWS)
+            requestRender()
         })
         content.addView(actionRow(
             "Page order",
@@ -267,11 +276,6 @@ class CalmSettingsActivity : ComponentActivity() {
             summary = "Show Work apps and Personal apps as separate chapters.",
             checked = settings.splitAppsByProfile(),
         ) { settings.toggleSplitAppsByProfile(); requestRender() })
-        content.addView(switchRow(
-            title = "Favourite contacts page",
-            summary = "Add a People page with your starred contacts and ways to reach them.",
-            checked = settings.contactsPageEnabled(),
-        ) { settings.toggleContactsPage(); requestRender() })
         content.addView(switchRow(
             title = "Work notifications on the left",
             summary = "Place work notification chapters before the app chapters.",
@@ -422,10 +426,16 @@ class CalmSettingsActivity : ComponentActivity() {
         return Switch(this).apply {
             isChecked = checked
             val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
-            thumbTintList = ColorStateList(states, intArrayOf(CalmTheme.ACCENT, CalmTheme.INK))
+            thumbTintList = ColorStateList(
+                states,
+                intArrayOf(GoogleInteractionStyle.primary(this@CalmSettingsActivity), GoogleInteractionStyle.surface(this@CalmSettingsActivity)),
+            )
             trackTintList = ColorStateList(
                 states,
-                intArrayOf(withAlpha(CalmTheme.ACCENT, 140), withAlpha(CalmTheme.MUTED_INK, 90)),
+                intArrayOf(
+                    withAlpha(GoogleInteractionStyle.primary(this@CalmSettingsActivity), 96),
+                    GoogleInteractionStyle.surfaceContainerHigh(this@CalmSettingsActivity),
+                ),
             )
             setOnClickListener { onToggle() }
         }
@@ -465,7 +475,7 @@ class CalmSettingsActivity : ComponentActivity() {
         val options = CardEffect.entries.toTypedArray()
         val current = options.indexOf(settings.cardAppearance().effect).coerceAtLeast(0)
         val labels = options.map(::cardEffectLabel).toTypedArray()
-        AlertDialog.Builder(this)
+        GoogleInteractionStyle.dialogBuilder(this)
             .setTitle("Card effect")
             .setSingleChoiceItems(labels, current) { dialog, which ->
                 settings.setCardEffect(options[which])
@@ -482,7 +492,7 @@ class CalmSettingsActivity : ComponentActivity() {
         val labels = options.map { order ->
             pageSortLabel(order).replaceFirstChar { it.titlecase(Locale.getDefault()) }
         }.toTypedArray()
-        AlertDialog.Builder(this)
+        GoogleInteractionStyle.dialogBuilder(this)
             .setTitle("Page order")
             .setSingleChoiceItems(labels, current) { dialog, which ->
                 settings.setPageSortOrder(options[which])
@@ -493,114 +503,331 @@ class CalmSettingsActivity : ComponentActivity() {
             .show()
     }
 
-    private fun pageSlotLabel(slot: PageSlot): String = when (slot) {
-        PageSlot.APPS -> "Apps"
-        PageSlot.PINNED -> "Pinned"
-        PageSlot.CONTACTS -> "People"
-        PageSlot.OVERVIEW -> "Overview"
-        PageSlot.WORK_OVERVIEW -> "Work overview"
-        PageSlot.CLASSIC_PAGES -> "Classic pages"
-        PageSlot.NOTIFICATIONS -> "Notifications"
-    }
-
     private fun showPageLayoutDialog() {
         val list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(8), dp(20), dp(8))
+            setPadding(dp(20), dp(10), dp(20), dp(16))
         }
         lateinit var rebuild: () -> Unit
         rebuild = {
             list.removeAllViews()
             val layout = settings.pageLayout()
-            list.addView(pageLayoutPreview(layout, rebuild))
-            layout.order.forEachIndexed { index, slot ->
-                list.addView(pageLayoutRow(layout, slot, index, rebuild))
-            }
+            list.addView(pageLayoutCarousel(layout, rebuild))
+            list.addView(pageLayoutActions(rebuild))
         }
         rebuild()
-        AlertDialog.Builder(this)
+        GoogleInteractionStyle.dialogBuilder(this)
             .setTitle("Page layout")
             .setView(ScrollView(this).apply { addView(list) })
             .setPositiveButton("Done") { _, _ -> requestRender() }
             .show()
     }
 
-    private fun pageLayoutPreview(layout: LauncherPageLayout, rebuild: () -> Unit): View {
-        val strip = LinearLayout(this).apply {
+    private fun pageLayoutCarousel(layout: LauncherPageLayout, rebuild: () -> Unit): View {
+        val carousel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, dp(4), 0, dp(10))
+            setPadding(0, dp(4), 0, dp(14))
         }
-        PageLayoutPreviewModel.segments(layout).forEach { segment ->
-            strip.addView(pageLayoutPreviewTile(segment, rebuild))
+        PageLayoutPreviewModel.segments(layout).forEachIndexed { index, segment ->
+            carousel.addView(pageLayoutPreviewTile(segment, layout, index, rebuild))
         }
         return HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
-            addView(strip, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            clipToPadding = false
+            addView(carousel, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
     }
 
-    private fun pageLayoutPreviewTile(segment: PageLayoutPreviewSegment, rebuild: () -> Unit): View {
+    private fun pageLayoutPreviewTile(
+        segment: PageLayoutPreviewSegment,
+        layout: LauncherPageLayout,
+        index: Int,
+        rebuild: () -> Unit,
+    ): View {
         val status = when {
-            segment.home -> "Home"
-            segment.enabled -> "On"
-            else -> "Off"
+            segment.home && canUseAsDefaultHome(segment.slot) -> "Home"
+            else -> "Page type"
         }
-        return LinearLayout(this).apply {
+        val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            alpha = if (segment.enabled) 1f else 0.42f
-            setPadding(dp(10), dp(10), dp(10), dp(8))
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dp(18).toFloat()
-                setColor(if (segment.home) withAlpha(CalmTheme.ACCENT, 54) else CalmTheme.SURFACE_CONTAINER)
-                setStroke(dp(1), if (segment.home) CalmTheme.ACCENT else CalmTheme.STROKE)
-            }
-            addView(label(segment.shortLabel, 15, CalmTheme.INK, Typeface.BOLD).apply {
-                gravity = Gravity.CENTER
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(12), dp(12), dp(12), dp(10))
+            background = pageTileBackground(segment.home)
+            isClickable = true
+            addView(pageTilePreview(segment.slot, segment.home))
+            addView(label(segment.label, 15, CalmTheme.INK, Typeface.BOLD).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(0, dp(10), 0, 0)
             })
-            addView(label(status, 11, if (segment.home) CalmTheme.ACCENT else CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
-                gravity = Gravity.CENTER
+            addView(label(status, 12, if (segment.home) CalmTheme.ACCENT else CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
                 setPadding(0, dp(3), 0, 0)
             })
             setOnClickListener {
-                settings.setDefaultHomeSlot(segment.slot)
+                if (canUseAsDefaultHome(segment.slot)) settings.setDefaultHomeSlot(segment.slot)
                 rebuild()
             }
-            layoutParams = LinearLayout.LayoutParams(dp(78), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                marginEnd = dp(8)
+            layoutParams = LinearLayout.LayoutParams(dp(142), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginEnd = dp(10)
+            }
+        }
+        installPageTileGestures(card, segment.slot, layout, index, rebuild)
+        return card
+    }
+
+    private fun pageTileBackground(home: Boolean): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(24).toFloat()
+            setColor(if (home) GoogleInteractionStyle.primaryContainer(this@CalmSettingsActivity) else GoogleInteractionStyle.surface(this@CalmSettingsActivity))
+            setStroke(dp(if (home) 2 else 1), if (home) GoogleInteractionStyle.primary(this@CalmSettingsActivity) else GoogleInteractionStyle.outlineVariant(this@CalmSettingsActivity))
+        }
+    }
+
+    private fun pageTilePreview(slot: PageSlot, home: Boolean): View {
+        val colors = GoogleInteractionStyle.palette(this)
+        val accent = if (home) colors.primary else colors.onSurfaceVariant
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(18).toFloat()
+                setColor(colors.surfaceContainer)
+            }
+            addView(View(this@CalmSettingsActivity).apply {
+                background = roundedBlock(accent, 999)
+            }, LinearLayout.LayoutParams(dp(42), dp(6)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(12)
+            })
+            when (slot) {
+                PageSlot.CLASSIC_PAGES -> addClassicPreviewRows(this, accent)
+                PageSlot.APPS -> addAppPreviewRows(this, accent)
+                PageSlot.NOTIFICATIONS -> addNotificationPreviewRows(this, accent)
+                PageSlot.PINNED -> addPinnedPreviewRows(this, accent)
+                PageSlot.CONTACTS -> addContactPreviewRows(this, accent)
+                PageSlot.WORK_OVERVIEW -> addOverviewPreviewRows(this, accent, dense = true)
+                PageSlot.OVERVIEW -> addOverviewPreviewRows(this, accent, dense = false)
+            }
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(132))
+        }
+    }
+
+    private fun addClassicPreviewRows(parent: LinearLayout, color: Int) {
+        repeat(3) {
+            parent.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                repeat(4) {
+                    addView(View(this@CalmSettingsActivity).apply {
+                        background = roundedBlock(color, 10)
+                    }, LinearLayout.LayoutParams(dp(16), dp(16)).apply {
+                        leftMargin = dp(3)
+                        rightMargin = dp(3)
+                    })
+                }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
+    }
+
+    private fun addAppPreviewRows(parent: LinearLayout, color: Int) {
+        repeat(4) {
+            parent.addView(View(this).apply {
+                background = roundedBlock(color, 10)
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(13)).apply {
+                leftMargin = dp(10)
+                rightMargin = dp(10)
+                bottomMargin = dp(7)
+            })
+        }
+    }
+
+    private fun addNotificationPreviewRows(parent: LinearLayout, color: Int) {
+        listOf(72, 56, 86).forEach { width ->
+            parent.addView(View(this).apply {
+                background = roundedBlock(color, 12)
+            }, LinearLayout.LayoutParams(dp(width), dp(22)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(8)
+            })
+        }
+    }
+
+    private fun addPinnedPreviewRows(parent: LinearLayout, color: Int) {
+        repeat(2) {
+            parent.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                repeat(2) {
+                    addView(View(this@CalmSettingsActivity).apply {
+                        background = roundedBlock(color, 16)
+                    }, LinearLayout.LayoutParams(dp(28), dp(28)).apply {
+                        leftMargin = dp(6)
+                        rightMargin = dp(6)
+                    })
+                }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
+    }
+
+    private fun addContactPreviewRows(parent: LinearLayout, color: Int) {
+        repeat(3) {
+            parent.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(View(this@CalmSettingsActivity).apply {
+                    background = roundedBlock(color, 999)
+                }, LinearLayout.LayoutParams(dp(22), dp(22)).apply {
+                    rightMargin = dp(8)
+                })
+                addView(View(this@CalmSettingsActivity).apply {
+                    background = roundedBlock(color, 999)
+                }, LinearLayout.LayoutParams(0, dp(8), 1f))
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+                leftMargin = dp(8)
+                rightMargin = dp(8)
+            })
+        }
+    }
+
+    private fun addOverviewPreviewRows(parent: LinearLayout, color: Int, dense: Boolean) {
+        val rows = if (dense) listOf(84, 64, 74, 52) else listOf(68, 88, 58)
+        rows.forEach { width ->
+            parent.addView(View(this).apply {
+                background = roundedBlock(color, 12)
+            }, LinearLayout.LayoutParams(dp(width), dp(if (dense) 14 else 18)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(8)
+            })
+        }
+    }
+
+    private fun roundedBlock(color: Int, radiusDp: Int): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(radiusDp).toFloat()
+            setColor(color)
+        }
+    }
+
+    private fun installPageTileGestures(
+        card: View,
+        slot: PageSlot,
+        layout: LauncherPageLayout,
+        index: Int,
+        rebuild: () -> Unit,
+    ) {
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+        var downRawX = 0f
+        var downRawY = 0f
+        var dragging = false
+        var menuShown = false
+        val longPress = Runnable {
+            menuShown = true
+            showPageSlotMenu(card, slot, downRawX.toInt(), downRawY.toInt(), rebuild)
+        }
+        card.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    dragging = false
+                    menuShown = false
+                    mainHandler.postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (menuShown) return@setOnTouchListener true
+                    val dx = event.rawX - downRawX
+                    val dy = event.rawY - downRawY
+                    if (!dragging && kotlin.math.hypot(dx.toDouble(), dy.toDouble()) > touchSlop) {
+                        dragging = true
+                        mainHandler.removeCallbacks(longPress)
+                        view.parent?.requestDisallowInterceptTouchEvent(true)
+                    }
+                    if (dragging) {
+                        view.translationX = dx
+                        view.translationY = dy.coerceIn(-dp(18).toFloat(), dp(18).toFloat())
+                        view.elevation = dp(10).toFloat()
+                        view.scaleX = 1.03f
+                        view.scaleY = 1.03f
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    mainHandler.removeCallbacks(longPress)
+                    view.parent?.requestDisallowInterceptTouchEvent(false)
+                    val dx = event.rawX - downRawX
+                    val dy = event.rawY - downRawY
+                    view.animate().translationX(0f).translationY(0f).scaleX(1f).scaleY(1f).setDuration(120L).start()
+                    view.elevation = 0f
+                    if (dragging) {
+                        pageDropIndex(layout.order, index, dx)?.let { target ->
+                            if (target != index) settings.setPageLayoutOrder(movedSlot(layout.order, index, target))
+                        }
+                        rebuild()
+                    } else if (!menuShown && kotlin.math.hypot(dx.toDouble(), dy.toDouble()) <= touchSlop) {
+                        view.performClick()
+                    }
+                    true
+                }
+                else -> true
             }
         }
     }
 
-    private fun pageLayoutRow(layout: LauncherPageLayout, slot: PageSlot, index: Int, rebuild: () -> Unit): View {
-        val isHome = layout.defaultHome == slot
+    private fun pageDropIndex(order: List<PageSlot>, from: Int, dx: Float): Int? {
+        if (order.isEmpty()) return null
+        val delta = (dx / dp(96).toFloat()).roundToInt()
+        return (from + delta).coerceIn(0, order.lastIndex)
+    }
+
+    private fun showPageSlotMenu(view: View, slot: PageSlot, x: Int, y: Int, rebuild: () -> Unit) {
+        val layout = settings.pageLayout()
+        val actions = mutableListOf<ContextAction>()
+        if (canUseAsDefaultHome(slot)) {
+            actions.add(ContextAction("Set as home", Runnable {
+                settings.setDefaultHomeSlot(slot)
+                rebuild()
+            }))
+        }
+        val index = layout.order.indexOf(slot)
+        if (index > 0) {
+            actions.add(ContextAction("Move left", Runnable {
+                settings.setPageLayoutOrder(movedSlot(settings.pageLayout().order, index, index - 1))
+                rebuild()
+            }))
+        }
+        if (index in 0 until layout.order.lastIndex) {
+            actions.add(ContextAction("Move right", Runnable {
+                settings.setPageLayoutOrder(movedSlot(settings.pageLayout().order, index, index + 1))
+                rebuild()
+            }))
+        }
+        GoogleInteractionStyle.popupMenu(this, view, x to y, actions)
+    }
+
+    private fun canUseAsDefaultHome(slot: PageSlot): Boolean = slot != PageSlot.NOTIFICATIONS
+
+    private fun pageLayoutActions(rebuild: () -> Unit): View {
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(6), 0, dp(6))
-            addView(
-                label(if (isHome) "${pageSlotLabel(slot)}  ·  Home" else pageSlotLabel(slot), 16, CalmTheme.INK, Typeface.NORMAL),
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-            )
-            addView(miniButton(if (isHome) "Home" else "Set home") { settings.setDefaultHomeSlot(slot); rebuild() })
-            addView(Switch(this@CalmSettingsActivity).apply {
-                isChecked = slot !in layout.disabled
-                setOnClickListener { settings.setPageSlotEnabled(slot, isChecked); rebuild() }
-            })
-            addView(miniButton("↑") {
-                if (index > 0) { settings.setPageLayoutOrder(movedSlot(layout.order, index, index - 1)); rebuild() }
-            })
-            addView(miniButton("↓") {
-                if (index < layout.order.lastIndex) { settings.setPageLayoutOrder(movedSlot(layout.order, index, index + 1)); rebuild() }
+            setPadding(0, dp(8), 0, 0)
+            addView(miniButton("Reset layout") {
+                settings.setPageLayoutOrder(LauncherPageLayout.DEFAULT_ORDER)
+                settings.setDefaultHomeSlot(PageSlot.OVERVIEW)
+                rebuild()
             })
         }
     }
 
     private fun miniButton(text: String, onClick: () -> Unit): TextView {
-        return label(text, 13, CalmTheme.INK, Typeface.NORMAL).apply {
+        return label(text, 13, GoogleInteractionStyle.primary(this), Typeface.NORMAL).apply {
             setPadding(dp(10), dp(8), dp(10), dp(8))
+            background = GoogleInteractionStyle.chipBackground(this@CalmSettingsActivity)
             isClickable = true
             setOnClickListener { onClick() }
         }
@@ -620,11 +847,10 @@ class CalmSettingsActivity : ComponentActivity() {
             list.removeAllViews()
             list.addView(miniButton("Add page") {
                 settings.addClassicPage()
-                settings.setPageSlotEnabled(PageSlot.CLASSIC_PAGES, true)
                 rebuild()
             }.apply {
                 gravity = Gravity.CENTER
-                background = drawables.glass(CalmTheme.QUIET_GLASS, dp(14))
+                background = GoogleInteractionStyle.chipBackground(this@CalmSettingsActivity)
                 layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                     bottomMargin = dp(8)
                 }
@@ -642,7 +868,7 @@ class CalmSettingsActivity : ComponentActivity() {
             }
         }
         rebuild()
-        AlertDialog.Builder(this)
+        GoogleInteractionStyle.dialogBuilder(this)
             .setTitle("Classic pages")
             .setView(ScrollView(this).apply { addView(list) })
             .setPositiveButton("Done") { _, _ -> requestRender() }
@@ -669,13 +895,6 @@ class CalmSettingsActivity : ComponentActivity() {
                         label(if (home) "${page.title}  -  Home" else page.title, 16, CalmTheme.INK, Typeface.BOLD),
                         LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
                     )
-                    addView(Switch(this@CalmSettingsActivity).apply {
-                        isChecked = page.enabled
-                        setOnClickListener {
-                            settings.setClassicPageEnabled(page.id, isChecked)
-                            rebuild()
-                        }
-                    })
                 },
             )
             addView(label(classicPageDetail(page), 13, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
@@ -708,7 +927,7 @@ class CalmSettingsActivity : ComponentActivity() {
             setSingleLine(true)
             setSelection(0, text.length)
         }
-        AlertDialog.Builder(this)
+        GoogleInteractionStyle.dialogBuilder(this)
             .setTitle("Rename Classic page")
             .setView(input)
             .setNegativeButton("Cancel", null)
@@ -728,7 +947,7 @@ class CalmSettingsActivity : ComponentActivity() {
         } else {
             "Remove ${page.title} and its $itemCount ${if (itemCount == 1) "item" else "items"}?"
         }
-        AlertDialog.Builder(this)
+        GoogleInteractionStyle.dialogBuilder(this)
             .setTitle("Remove Classic page")
             .setMessage(message)
             .setNegativeButton("Cancel", null)
@@ -774,7 +993,7 @@ class CalmSettingsActivity : ComponentActivity() {
             app.identityKey in hidden || app.packageName in hidden
         }
         val labels = apps.map(::hiddenAppLabel).toTypedArray()
-        AlertDialog.Builder(this)
+        GoogleInteractionStyle.dialogBuilder(this)
             .setTitle("Hidden apps")
             .setMultiChoiceItems(labels, selected) { _, which, isChecked ->
                 selected[which] = isChecked
@@ -795,9 +1014,8 @@ class CalmSettingsActivity : ComponentActivity() {
 
     private fun classicPagesSummary(): String {
         val pages = settings.classicPages()
-        val enabled = pages.count { it.enabled }
         if (pages.isEmpty()) return "Create an empty classic page."
-        return "$enabled of ${pages.size} classic ${if (pages.size == 1) "page" else "pages"} enabled."
+        return "${pages.size} classic ${if (pages.size == 1) "page" else "pages"} added."
     }
 
     private fun classicPagesManagementSummary(): String {
@@ -809,8 +1027,7 @@ class CalmSettingsActivity : ComponentActivity() {
 
     private fun classicPageDetail(page: ClassicLauncherPageDefinition): String {
         val itemCount = page.items.size
-        val itemText = "$itemCount ${if (itemCount == 1) "item" else "items"}"
-        return "${if (page.enabled) "Enabled" else "Disabled"}; $itemText."
+        return "$itemCount ${if (itemCount == 1) "item" else "items"}."
     }
 
     private fun dockItemSizeLabel(span: Int): String {
@@ -830,7 +1047,7 @@ class CalmSettingsActivity : ComponentActivity() {
         val selected = BooleanArray(apps.size) { index -> apps[index].identityKey in dockKeys }
         val labels = apps.map(::hiddenAppLabel).toTypedArray()
         val maxItems = settings.dockConfig().itemCount
-        AlertDialog.Builder(this)
+        GoogleInteractionStyle.dialogBuilder(this)
             .setTitle("Dock apps (up to $maxItems)")
             .setMultiChoiceItems(labels, selected) { _, which, isChecked ->
                 selected[which] = isChecked
@@ -923,7 +1140,7 @@ class CalmSettingsActivity : ComponentActivity() {
     private fun stepButton(text: String, action: () -> Unit): TextView {
         return label(text, 20, CalmTheme.INK, Typeface.BOLD).apply {
             gravity = Gravity.CENTER
-            background = drawables.glass(CalmTheme.QUIET_GLASS, dp(14))
+            background = GoogleInteractionStyle.chipBackground(this@CalmSettingsActivity)
             setOnClickListener { action() }
             layoutParams = LinearLayout.LayoutParams(dp(54), dp(44))
         }
@@ -934,11 +1151,7 @@ class CalmSettingsActivity : ComponentActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(16), dp(14), dp(16), dp(14))
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                setColor(CalmTheme.SURFACE_CONTAINER)
-                cornerRadius = dp(16).toFloat()
-            }
+            background = GoogleInteractionStyle.rowBackground(this@CalmSettingsActivity)
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(10)
             }
@@ -946,7 +1159,7 @@ class CalmSettingsActivity : ComponentActivity() {
     }
 
     private fun section(text: String): TextView {
-        return label(text.uppercase(Locale.getDefault()), 12, CalmTheme.ACCENT, Typeface.BOLD).apply {
+        return label(text.uppercase(Locale.getDefault()), 12, GoogleInteractionStyle.primary(this), Typeface.BOLD).apply {
             setPadding(0, dp(18), 0, dp(8))
         }
     }
@@ -954,7 +1167,7 @@ class CalmSettingsActivity : ComponentActivity() {
     private fun label(text: String, sp: Int, color: Int, style: Int): TextView {
         return TextView(this).apply {
             this.text = text
-            setTextColor(color)
+            setTextColor(GoogleInteractionStyle.mapSettingsTextColor(this@CalmSettingsActivity, color))
             textSize = sp.toFloat()
             typeface = Typeface.DEFAULT
             setTypeface(typeface, style)

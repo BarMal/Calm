@@ -64,7 +64,7 @@ class ChapterPagePlannerTest {
     }
 
     @Test
-    fun enabledClassicPagesAppearBeforeNotificationChapters() {
+    fun classicPagesAppearBeforeNotificationChapters() {
         val classic = ClassicLauncherPageDefinition(id = "classic-1", title = "Classic")
         val pages = planner.buildPages(
             preferences = preferences(),
@@ -80,7 +80,7 @@ class ChapterPagePlannerTest {
     }
 
     @Test
-    fun disabledClassicPagesAreSkipped() {
+    fun legacyDisabledClassicPagesStillAppearWhenAdded() {
         val pages = planner.buildPages(
             preferences = preferences(),
             notificationChapters = emptyList(),
@@ -89,7 +89,7 @@ class ChapterPagePlannerTest {
             classicPages = listOf(ClassicLauncherPageDefinition(id = "classic-1", title = "Classic", enabled = false)),
         )
 
-        assertEquals(listOf("Apps", "Overview"), pages.map { it.title })
+        assertEquals(listOf("Apps", "Overview", "Classic"), pages.map { it.title })
     }
 
     private fun preferences(

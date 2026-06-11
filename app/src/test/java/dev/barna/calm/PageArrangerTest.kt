@@ -33,13 +33,13 @@ class PageArrangerTest {
     }
 
     @Test
-    fun disabledSlotIsDropped() {
+    fun legacyDisabledSlotIsStillArranged() {
         val layout = LauncherPageLayout(
             order = LauncherPageLayout.DEFAULT_ORDER,
             disabled = setOf(PageSlot.PINNED),
             defaultHome = PageSlot.OVERVIEW,
         )
-        assertEquals(listOf(apps, overview, chatA, chatB), PageArranger.arrange(pages, layout))
+        assertEquals(pages, PageArranger.arrange(pages, layout))
     }
 
     @Test
@@ -64,14 +64,14 @@ class PageArrangerTest {
     }
 
     @Test
-    fun firstEnabledHomeFallsBackWhenConfiguredHomeIsDisabled() {
+    fun firstEnabledHomeKeepsConfiguredHomeWhenLegacyDisabled() {
         val layout = LauncherPageLayout(
             order = listOf(PageSlot.APPS, PageSlot.OVERVIEW, PageSlot.NOTIFICATIONS),
             disabled = setOf(PageSlot.OVERVIEW),
             defaultHome = PageSlot.OVERVIEW,
         )
 
-        assertEquals(PageSlot.APPS, PageLayoutPolicy.firstEnabledHome(layout))
+        assertEquals(PageSlot.OVERVIEW, PageLayoutPolicy.firstEnabledHome(layout))
     }
 
     private fun chapter(packageName: String, label: String): AppChapter {

@@ -5,8 +5,12 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -15,9 +19,16 @@ import android.os.Vibrator
 import android.provider.CalendarContract
 import android.provider.Settings
 import android.text.format.DateFormat
+import android.view.Gravity
+import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextClock
 import android.widget.TextView
@@ -27,6 +38,7 @@ import androidx.viewpager2.widget.CompositePageTransformer
 import androidx.viewpager2.widget.ViewPager2
 import java.util.Date
 import java.util.concurrent.Executors
+import kotlin.math.roundToInt
 
 class CalmLauncherRunner(
     private val activity: MainActivity,
@@ -63,6 +75,7 @@ class CalmLauncherRunner(
         render = ::render,
         selectPage = ::selectPage,
         loadPinnedApps = ::loadPinnedApps,
+        beginClassicItemPlacement = ::beginClassicItemPlacement,
     )
     private val contextActionFactory = LauncherContextActionFactory(
         LauncherContextActionCallbacks(
@@ -208,12 +221,12 @@ class CalmLauncherRunner(
     )
     private val classicWidgetHostController = ClassicWidgetHostController(
         activity = activity,
-        drawables = drawables,
         settings = settings,
         requestWidgetBind = requestWidgetBind,
         requestWidgetConfigure = requestWidgetConfigure,
         render = ::render,
         selectPage = ::selectPage,
+        beginClassicItemPlacement = ::beginClassicItemPlacement,
     )
     private val pageFactory = LauncherPageFactory(
         activity = activity,
@@ -237,6 +250,9 @@ class CalmLauncherRunner(
         moveClassicGridItem = ::moveClassicGridItem,
         moveClassicGridItemWithinPage = ::moveClassicGridItemWithinPage,
         resizeClassicGridItem = ::resizeClassicGridItem,
+        resetClassicGridItemSize = ::resetClassicGridItemSize,
+        pendingClassicPlacementItemId = { pendingClassicPlacementItemId },
+        finishClassicItemPlacement = ::finishClassicItemPlacement,
         addClassicPage = ::addClassicPage,
         moveClassicPage = ::moveClassicPage,
         isClassicPageEditing = ::isClassicPageEditing,
@@ -285,7 +301,11 @@ class CalmLauncherRunner(
         ?: settings.lastSelectedPageKey()
         ?: defaultHomeKey()
     private var currentPager: ViewPager2? = null
-    private var currentScreen: View? = null
+    private var currentPagerAdapter: ChapterPagerAdapter? = null
+    private var currentScreen: FrameLayout? = null
+    private var pageOverviewOverlay: View? = null
+    private val pageOverviewHiddenViews = ArrayList<View>()
+    private var reopenPageOverviewAfterRender = false
     private val currentUiState: LauncherRenderModel?
         get() = launcherStateViewModel.uiState.value.renderModel
     private var activePreferences: LauncherUiPreferences = settings.uiPreferences()
@@ -296,6 +316,7 @@ class CalmLauncherRunner(
     private var pagePrewarmGeneration = 0
     private var suppressedPageEntryKey: String? = null
     private var editingClassicPageId: String? = null
+    private var pendingClassicPlacementItemId: String? = null
 
     fun onCreate() {
         configureWindow()
@@ -435,9 +456,31 @@ class CalmLauncherRunner(
         render()
     }
 
+    private fun resetClassicGridItemSize(page: ClassicLauncherPageDefinition, item: ClassicGridItem) {
+        val gridConfig = settings.classicGridConfig()
+        val defaultSize = when (item.type) {
+            ClassicGridItemType.APP -> 1 to 1
+            ClassicGridItemType.STATIC -> gridConfig.columns to 1
+            ClassicGridItemType.WIDGET -> item.target.toIntOrNull()
+                ?.let { widgetId -> classicWidgetHostController.defaultWidgetSpan(widgetId) }
+                ?: (gridConfig.columns to 2)
+        }
+        resizeClassicGridItem(page, item, defaultSize.first, defaultSize.second)
+    }
+
+    private fun beginClassicItemPlacement(page: ClassicLauncherPageDefinition, itemId: String) {
+        editingClassicPageId = page.id
+        pendingClassicPlacementItemId = itemId
+    }
+
+    private fun finishClassicItemPlacement(itemId: String) {
+        if (pendingClassicPlacementItemId == itemId) {
+            pendingClassicPlacementItemId = null
+        }
+    }
+
     private fun addClassicPage() {
         val page = settings.addClassicPage()
-        settings.setPageSlotEnabled(PageSlot.CLASSIC_PAGES, true)
         editingClassicPageId = page.id
         selectPage(page.key)
         Toast.makeText(activity, "Added ${page.title}", Toast.LENGTH_SHORT).show()
@@ -457,6 +500,7 @@ class CalmLauncherRunner(
 
     private fun setClassicPageEditing(page: ClassicLauncherPageDefinition, editing: Boolean) {
         editingClassicPageId = if (editing) page.id else null
+        if (!editing) pendingClassicPlacementItemId = null
         render()
     }
 
@@ -481,6 +525,7 @@ class CalmLauncherRunner(
         if (editingClassicPageId == removed.id) {
             editingClassicPageId = null
         }
+        pendingClassicPlacementItemId = null
         removed.items
             .filter { item -> item.type == ClassicGridItemType.WIDGET }
             .forEach(classicWidgetHostController::deleteWidget)
@@ -490,6 +535,10 @@ class CalmLauncherRunner(
 
     /** Dismisses the expanded/focus card on back so it returns to the current page, not overview. */
     fun onBackPressed() {
+        if (pageOverviewOverlay != null) {
+            hidePageOverview()
+            return
+        }
         if (focusOverlay.isShowing()) {
             focusOverlay.dismiss(true)
         }
@@ -506,6 +555,8 @@ class CalmLauncherRunner(
     private fun render(state: LauncherRenderModel, animate: Boolean) {
         mainHandler.removeCallbacks(deferredRender)
         focusOverlay.dismiss(false)
+        pageOverviewOverlay = null
+        pageOverviewHiddenViews.clear()
         appSearchController.clear()
         launcherStateViewModel.publish(state)
         if (appCardSettingsSnapshot != state.preferences) {
@@ -523,8 +574,39 @@ class CalmLauncherRunner(
         renderedNotificationRevision = CalmNotificationListenerService.revision()
         val pages = state.pages
         val initialPage = resolveInitialPage(pages)
+        val reopenOverview = reopenPageOverviewAfterRender
+        reopenPageOverviewAfterRender = false
 
-        val screen = FrameLayout(activity).apply {
+        val screen = object : FrameLayout(activity) {
+            private var overviewScale = 1f
+            private val scaleDetector = ScaleGestureDetector(
+                activity,
+                object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                    override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                        overviewScale = 1f
+                        return true
+                    }
+
+                    override fun onScale(detector: ScaleGestureDetector): Boolean {
+                        overviewScale *= detector.scaleFactor
+                        if (overviewScale < PAGE_OVERVIEW_PINCH_THRESHOLD && pageOverviewOverlay == null) {
+                            val currentIndex = currentPager?.currentItem ?: initialPage
+                            currentScreen?.let { screen -> showPageOverview(screen, state, pages, currentIndex) }
+                            return true
+                        }
+                        return false
+                    }
+                },
+            )
+
+            override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                if (event.pointerCount > 1 || scaleDetector.isInProgress) {
+                    scaleDetector.onTouchEvent(event)
+                    if (pageOverviewOverlay != null) return true
+                }
+                return super.dispatchTouchEvent(event)
+            }
+        }.apply {
             currentScreen = this
             setBackgroundColor(Color.TRANSPARENT)
             addView(View(activity).apply { background = drawables.wallpaperShade() }, matchParentParams())
@@ -540,6 +622,7 @@ class CalmLauncherRunner(
         root.addView(createHeader())
 
         val pagerAdapter = ChapterPagerAdapter(pages) { page -> pageFactory.createPage(page, state) }
+        currentPagerAdapter = pagerAdapter
         val pager = ViewPager2(activity).apply {
             currentPager = this
             adapter = pagerAdapter
@@ -647,6 +730,9 @@ class CalmLauncherRunner(
             pager.post { entryAnimator.animateCurrentPage(pager) }
         }
         schedulePagePrewarm(pager, pagerAdapter, pages.size, initialPage)
+        if (reopenOverview) {
+            screen.post { showPageOverview(screen, state, pages, pager.currentItem, haptic = false) }
+        }
     }
 
     private fun resolveInitialPage(pages: List<ChapterPage>): Int {
@@ -797,6 +883,839 @@ class CalmLauncherRunner(
         }
     }
 
+    private fun showPageOverview(
+        screen: FrameLayout,
+        state: LauncherRenderModel,
+        pages: List<ChapterPage>,
+        selectedIndex: Int,
+        haptic: Boolean = true,
+    ) {
+        if (pageOverviewOverlay != null || pages.isEmpty()) return
+        focusOverlay.dismiss(false)
+        hideLauncherContentForPageOverview(screen)
+        if (haptic) screen.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        val overlay = FrameLayout(activity).apply {
+            alpha = 0f
+            isClickable = true
+            setBackgroundColor(Color.argb(92, 0, 0, 0))
+            setOnClickListener { hidePageOverview() }
+        }
+        val content = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+            setPadding(activity.dp(18), activity.statusBarHeightFallback() + activity.dp(26), activity.dp(18), activity.dp(28))
+        }
+        content.addView(pageOverviewHeader())
+        val row = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            clipChildren = false
+            clipToPadding = false
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(activity.dp(6), 0, activity.dp(18), 0)
+        }
+        row.setOnClickListener { }
+        val cardWidth = (activity.resources.displayMetrics.widthPixels * 0.66f).toInt()
+            .coerceIn(activity.dp(224), activity.dp(320))
+        val cardHeight = (activity.resources.displayMetrics.heightPixels * 0.58f).toInt()
+            .coerceIn(activity.dp(360), activity.dp(540))
+        val snapshotAdapter = currentPagerAdapter
+        pages.forEachIndexed { index, page ->
+            val card = pageOverviewCard(page, state, index, pages, snapshotAdapter, cardWidth, cardHeight, index == selectedIndex)
+            installPageOverviewCardGestures(card, page, index, pages, state, cardWidth)
+            row.addView(
+                card,
+                LinearLayout.LayoutParams(cardWidth, cardHeight).apply {
+                    rightMargin = activity.dp(14)
+                },
+            )
+        }
+        row.addView(pageOverviewAddCard("New page", "Choose page type", cardWidth, cardHeight) { source ->
+            showPageOverviewAddMenu(source, state, pages)
+        }, LinearLayout.LayoutParams(cardWidth, cardHeight).apply { rightMargin = activity.dp(14) })
+        val scroller = HorizontalScrollView(activity).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            clipToPadding = false
+            addView(row, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            setOnClickListener { }
+        }
+        installPageOverviewScrollMagnet(scroller, cardWidth)
+        content.addView(scroller, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        overlay.addView(content, matchParentParams())
+        screen.addView(overlay, matchParentParams())
+        pageOverviewOverlay = overlay
+        overlay.animate().alpha(1f).setDuration(160L).start()
+        scroller.post {
+            scrollPageOverviewToCard(scroller, selectedIndex, cardWidth, smooth = true)
+        }
+    }
+
+    private fun hidePageOverview() {
+        val overlay = pageOverviewOverlay ?: return
+        pageOverviewOverlay = null
+        restoreLauncherContentAfterPageOverview()
+        overlay.animate()
+            .alpha(0f)
+            .setDuration(120L)
+            .withEndAction { (overlay.parent as? ViewGroup)?.removeView(overlay) }
+            .start()
+    }
+
+    private fun hideLauncherContentForPageOverview(screen: FrameLayout) {
+        pageOverviewHiddenViews.clear()
+        for (index in 1 until screen.childCount) {
+            val child = screen.getChildAt(index)
+            if (child === pageOverviewOverlay) continue
+            pageOverviewHiddenViews += child
+            child.animate().cancel()
+            child.alpha = 0f
+        }
+    }
+
+    private fun restoreLauncherContentAfterPageOverview() {
+        pageOverviewHiddenViews.forEach { view ->
+            if (view.parent != null) {
+                view.animate().cancel()
+                view.alpha = 1f
+            }
+        }
+        pageOverviewHiddenViews.clear()
+    }
+
+    private fun pageOverviewHeader(): View {
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(activity.dp(4), 0, 0, activity.dp(18))
+            addView(label("Pages", 28, CalmTheme.INK, Typeface.NORMAL), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+    }
+
+    private fun pageOverviewAddCard(
+        title: String,
+        subtitle: String,
+        cardWidth: Int,
+        cardHeight: Int,
+        action: (View) -> Unit,
+    ): View {
+        val colors = GoogleInteractionStyle.palette(activity)
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            clipChildren = false
+            clipToPadding = false
+            setPadding(activity.dp(16), activity.dp(16), activity.dp(16), activity.dp(16))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = activity.dp(26).toFloat()
+                setColor(Color.TRANSPARENT)
+                setStroke(activity.dp(1), colors.outlineVariant)
+            }
+            addView(TextView(activity).apply {
+                text = "+"
+                setTextColor(colors.primary)
+                textSize = 48f
+                typeface = Typeface.DEFAULT
+                setTypeface(typeface, Typeface.NORMAL)
+                gravity = Gravity.CENTER
+                includeFontPadding = false
+                background = GoogleInteractionStyle.chipBackground(activity, selected = true)
+            }, LinearLayout.LayoutParams(activity.dp(76), activity.dp(76)).apply {
+                bottomMargin = activity.dp(18)
+            })
+            addView(label(title, 17, colors.onSurface, Typeface.BOLD).apply {
+                gravity = Gravity.CENTER
+            })
+            addView(label(subtitle, 13, colors.onSurfaceVariant, Typeface.NORMAL).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, activity.dp(6), 0, 0)
+            })
+            minimumWidth = cardWidth
+            minimumHeight = cardHeight
+            setOnClickListener {
+                performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                action(this)
+            }
+        }
+    }
+
+    private fun showPageOverviewAddMenu(source: View, state: LauncherRenderModel, pages: List<ChapterPage>) {
+        val actions = listOf(
+            ContextAction("Classic page", Runnable { addClassicPageFromOverview() }),
+            ContextAction("People page", Runnable { addPeoplePageFromOverview(pages) }),
+            ContextAction("Apps page", Runnable { addExistingOrLivePageFromOverview(PageSlot.APPS, pages, "Apps page") }),
+            ContextAction("Pinned page", Runnable { addPinnedPageFromOverview(state, pages) }),
+            ContextAction("Overview page", Runnable { addExistingOrLivePageFromOverview(PageSlot.OVERVIEW, pages, "Overview page") }),
+            ContextAction("Work overview", Runnable { addWorkOverviewFromOverview(state, pages) }),
+            ContextAction("Notification pages", Runnable { addNotificationPagesFromOverview(state, pages) }),
+        )
+        GoogleInteractionStyle.popupMenu(activity, source, source.screenCenter(), actions)
+    }
+
+    private fun addClassicPageFromOverview() {
+        val page = settings.addClassicPage()
+        editingClassicPageId = page.id
+        selectPage(page.key)
+        Toast.makeText(activity, "Added ${page.title}", Toast.LENGTH_SHORT).show()
+        renderAndReopenPageOverview()
+    }
+
+    private fun addPeoplePageFromOverview(pages: List<ChapterPage>) {
+        if (settings.contactsPageEnabled()) {
+            addExistingOrLivePageFromOverview(PageSlot.CONTACTS, pages, "People page")
+            return
+        }
+        settings.toggleContactsPage()
+        Toast.makeText(activity, "Added People page", Toast.LENGTH_SHORT).show()
+        renderAndReopenPageOverview()
+    }
+
+    private fun addPinnedPageFromOverview(state: LauncherRenderModel, pages: List<ChapterPage>) {
+        if (state.pinnedApps.isEmpty()) {
+            Toast.makeText(activity, "Pin an app to add a Pinned page", Toast.LENGTH_SHORT).show()
+            return
+        }
+        addExistingOrLivePageFromOverview(PageSlot.PINNED, pages, "Pinned page")
+    }
+
+    private fun addWorkOverviewFromOverview(state: LauncherRenderModel, pages: List<ChapterPage>) {
+        if (state.notificationChapters.none { it.isWorkProfile }) {
+            Toast.makeText(activity, "Work overview appears when work notifications arrive", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!settings.splitAppsByProfile()) {
+            settings.toggleSplitAppsByProfile()
+            Toast.makeText(activity, "Added Work overview", Toast.LENGTH_SHORT).show()
+            renderAndReopenPageOverview()
+            return
+        }
+        addExistingOrLivePageFromOverview(PageSlot.WORK_OVERVIEW, pages, "Work overview")
+    }
+
+    private fun addNotificationPagesFromOverview(state: LauncherRenderModel, pages: List<ChapterPage>) {
+        if (state.notificationChapters.isEmpty()) {
+            Toast.makeText(activity, "Notification pages appear when notifications arrive", Toast.LENGTH_SHORT).show()
+            return
+        }
+        addExistingOrLivePageFromOverview(PageSlot.NOTIFICATIONS, pages, "Notification pages")
+    }
+
+    private fun addExistingOrLivePageFromOverview(slot: PageSlot, pages: List<ChapterPage>, label: String) {
+        val index = pages.indexOfFirst { page -> PageArranger.slotOf(page) == slot }
+        if (index == -1) {
+            Toast.makeText(activity, "$label is not available yet", Toast.LENGTH_SHORT).show()
+            return
+        }
+        Toast.makeText(activity, "$label is already added", Toast.LENGTH_SHORT).show()
+        selectPage(pages[index].key)
+        renderAndReopenPageOverview()
+    }
+
+    private fun renderAndReopenPageOverview() {
+        reopenPageOverviewAfterRender = true
+        render()
+    }
+
+    private fun installPageOverviewCardGestures(
+        card: View,
+        page: ChapterPage,
+        index: Int,
+        pages: List<ChapterPage>,
+        state: LauncherRenderModel,
+        cardWidth: Int,
+    ) {
+        val touchSlop = ViewConfiguration.get(activity).scaledTouchSlop
+        var downRawX = 0f
+        var downRawY = 0f
+        var dragArmed = false
+        var dragging = false
+        val longPress = Runnable {
+            dragArmed = true
+            card.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            card.parent?.requestDisallowInterceptTouchEvent(true)
+            card.animate().scaleX(1.03f).scaleY(1.03f).setDuration(110L).start()
+        }
+        card.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    dragArmed = false
+                    dragging = false
+                    view.animate().cancel()
+                    view.postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - downRawX
+                    val dy = event.rawY - downRawY
+                    if (!dragArmed) {
+                        if (kotlin.math.hypot(dx.toDouble(), dy.toDouble()) > touchSlop) {
+                            view.removeCallbacks(longPress)
+                        }
+                        return@setOnTouchListener true
+                    }
+                    if (!dragging && kotlin.math.hypot(dx.toDouble(), dy.toDouble()) > touchSlop) {
+                        dragging = true
+                        view.parent?.requestDisallowInterceptTouchEvent(true)
+                    }
+                    if (dragArmed) {
+                        view.translationX = dx
+                        view.translationY = dy.coerceIn(-activity.dp(18).toFloat(), activity.dp(18).toFloat())
+                        view.scaleX = 1.03f
+                        view.scaleY = 1.03f
+                        autoScrollPageOverviewWhileDragging(view, event.rawX)
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    view.removeCallbacks(longPress)
+                    view.parent?.requestDisallowInterceptTouchEvent(false)
+                    val dx = event.rawX - downRawX
+                    val dy = event.rawY - downRawY
+                    view.animate().translationX(0f).translationY(0f).scaleX(1f).scaleY(1f).setDuration(120L).start()
+                    if (dragArmed && dragging) {
+                        val targetIndex = (index + (dx / (cardWidth * 0.72f)).roundToInt()).coerceIn(0, pages.lastIndex)
+                        if (targetIndex != index) {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            reorderPageFromOverview(page, pages, targetIndex, state)
+                        } else {
+                            magnetizePageOverviewToCard(view, index, cardWidth)
+                        }
+                    } else if (dragArmed) {
+                        showPageOverviewActions(view, page, index, pages, state)
+                    } else if (kotlin.math.hypot(dx.toDouble(), dy.toDouble()) <= touchSlop) {
+                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        hidePageOverview()
+                        navigateToChapterPage(index)
+                    }
+                    true
+                }
+                else -> true
+            }
+        }
+    }
+
+    private fun installPageOverviewScrollMagnet(scroller: HorizontalScrollView, cardWidth: Int) {
+        var snap: Runnable? = null
+        scroller.setOnTouchListener { view, event ->
+            snap?.let(view::removeCallbacks)
+            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                snap = Runnable { snapPageOverviewScroll(scroller, cardWidth) }.also {
+                    view.postDelayed(it, PAGE_OVERVIEW_MAGNET_DELAY_MS)
+                }
+            }
+            false
+        }
+    }
+
+    private fun autoScrollPageOverviewWhileDragging(card: View, rawX: Float) {
+        val scroller = card.parent?.parent as? HorizontalScrollView ?: return
+        val location = IntArray(2)
+        scroller.getLocationOnScreen(location)
+        val leftEdge = location[0] + activity.dp(44)
+        val rightEdge = location[0] + scroller.width - activity.dp(44)
+        val delta = when {
+            rawX < leftEdge -> -activity.dp(14)
+            rawX > rightEdge -> activity.dp(14)
+            else -> 0
+        }
+        if (delta != 0) scroller.scrollBy(delta, 0)
+    }
+
+    private fun magnetizePageOverviewToCard(card: View, index: Int, cardWidth: Int) {
+        val scroller = card.parent?.parent as? HorizontalScrollView ?: return
+        scroller.post { scrollPageOverviewToCard(scroller, index, cardWidth, smooth = true) }
+    }
+
+    private fun snapPageOverviewScroll(scroller: HorizontalScrollView, cardWidth: Int) {
+        val stride = pageOverviewCardStride(cardWidth)
+        val index = ((scroller.scrollX + activity.dp(24)) / stride.toFloat()).roundToInt().coerceAtLeast(0)
+        scrollPageOverviewToCard(scroller, index, cardWidth, smooth = true)
+    }
+
+    private fun scrollPageOverviewToCard(
+        scroller: HorizontalScrollView,
+        index: Int,
+        cardWidth: Int,
+        smooth: Boolean,
+    ) {
+        val target = (index * pageOverviewCardStride(cardWidth) - activity.dp(24)).coerceAtLeast(0)
+        if (smooth) scroller.smoothScrollTo(target, 0) else scroller.scrollTo(target, 0)
+    }
+
+    private fun pageOverviewCardStride(cardWidth: Int): Int = cardWidth + activity.dp(14)
+
+    private fun showPageOverviewActions(
+        source: View,
+        page: ChapterPage,
+        index: Int,
+        pages: List<ChapterPage>,
+        state: LauncherRenderModel,
+    ) {
+        val actions = mutableListOf<ContextAction>()
+        if (canUseAsDefaultHome(page)) {
+            actions += ContextAction("Set as home", Runnable {
+                setPageAsDefaultHome(page)
+            })
+        }
+        actions += ContextAction("Customise", Runnable {
+            customisePageFromOverview(page)
+        })
+        deletePageAction(source, page, index, pages)?.let { actions += it }
+        GoogleInteractionStyle.popupMenu(activity, source, source.screenCenter(), actions, destructiveLabels = setOf("Delete", "Remove"))
+    }
+
+    private fun canUseAsDefaultHome(page: ChapterPage): Boolean {
+        return PageArranger.slotOf(page) != PageSlot.NOTIFICATIONS
+    }
+
+    private fun setPageAsDefaultHome(page: ChapterPage) {
+        page.classicPage?.let {
+            if (!settings.setDefaultClassicPage(it.id)) return
+            settings.setDefaultHomeSlot(PageSlot.CLASSIC_PAGES)
+            Toast.makeText(activity, "${it.title} is now home", Toast.LENGTH_SHORT).show()
+            renderAndReopenPageOverview()
+            return
+        }
+        val slot = PageArranger.slotOf(page)
+        if (slot == PageSlot.NOTIFICATIONS) return
+        settings.setDefaultHomeSlot(slot)
+        Toast.makeText(activity, "${page.title} is now home", Toast.LENGTH_SHORT).show()
+        renderAndReopenPageOverview()
+    }
+
+    private fun customisePageFromOverview(page: ChapterPage) {
+        hidePageOverview()
+        page.classicPage?.let {
+            editingClassicPageId = it.id
+            selectPage(it.key)
+            render()
+            return
+        }
+        selectPage(page.key)
+        openSettingsActivity()
+    }
+
+    private fun deletePageAction(source: View, page: ChapterPage, index: Int, pages: List<ChapterPage>): ContextAction? {
+        page.classicPage?.let { classicPage ->
+            return ContextAction("Delete", Runnable {
+                animatePageOverviewRemoval(source, index, pages) {
+                    removeClassicPageFromOverview(classicPage)
+                }
+            }, ContextActionCloseBehavior.REMOVE_CARD)
+        }
+        page.chapter?.let { chapter ->
+            return ContextAction("Remove", Runnable {
+                animatePageOverviewRemoval(source, index, pages) {
+                    hideNotificationPageFromOverview(chapter)
+                }
+            }, ContextActionCloseBehavior.REMOVE_CARD)
+        }
+        val slot = PageArranger.slotOf(page)
+        if (slot != PageSlot.CONTACTS) return null
+        return ContextAction("Remove", Runnable {
+            animatePageOverviewRemoval(source, index, pages) {
+                if (settings.contactsPageEnabled()) settings.toggleContactsPage()
+                Toast.makeText(activity, "Removed People page", Toast.LENGTH_SHORT).show()
+                renderAndReopenPageOverview()
+            }
+        }, ContextActionCloseBehavior.REMOVE_CARD)
+    }
+
+    private fun animatePageOverviewRemoval(card: View, index: Int, pages: List<ChapterPage>, removeAction: () -> Unit) {
+        val row = card.parent as? ViewGroup
+        val stride = card.width.takeIf { it > 0 }?.let(::pageOverviewCardStride) ?: pageOverviewCardStride(card.measuredWidth)
+        val nextFocus = pages.getOrNull(index + 1) ?: pages.getOrNull(index - 1)
+        if (nextFocus != null) {
+            selectPage(nextFocus.key)
+        }
+        card.isEnabled = false
+        card.parent?.requestDisallowInterceptTouchEvent(true)
+        card.animate()
+            .alpha(0f)
+            .scaleX(0.92f)
+            .scaleY(0.92f)
+            .translationY(activity.dp(18).toFloat())
+            .setDuration(PAGE_OVERVIEW_REMOVE_ANIMATION_MS)
+            .start()
+        if (row != null) {
+            for (childIndex in index + 1 until row.childCount) {
+                row.getChildAt(childIndex)
+                    .animate()
+                    .translationX(-stride.toFloat())
+                    .setDuration(PAGE_OVERVIEW_REMOVE_ANIMATION_MS)
+                    .start()
+            }
+            if (index > 0) {
+                row.getChildAt(index - 1)
+                    .animate()
+                    .scaleX(1.015f)
+                    .scaleY(1.015f)
+                    .setDuration(PAGE_OVERVIEW_REMOVE_ANIMATION_MS / 2)
+                    .withEndAction {
+                        row.getChildAt(index - 1)?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(90L)?.start()
+                    }
+                    .start()
+            }
+        }
+        mainHandler.postDelayed({
+            card.parent?.requestDisallowInterceptTouchEvent(false)
+            removeAction()
+        }, PAGE_OVERVIEW_REMOVE_ANIMATION_MS)
+    }
+
+    private fun removeClassicPageFromOverview(page: ClassicLauncherPageDefinition) {
+        val removed = settings.removeClassicPage(page.id) ?: return
+        if (editingClassicPageId == removed.id) {
+            editingClassicPageId = null
+        }
+        pendingClassicPlacementItemId = null
+        removed.items
+            .filter { item -> item.type == ClassicGridItemType.WIDGET }
+            .forEach(classicWidgetHostController::deleteWidget)
+        Toast.makeText(activity, "Removed ${removed.title}", Toast.LENGTH_SHORT).show()
+        renderAndReopenPageOverview()
+    }
+
+    private fun hideNotificationPageFromOverview(chapter: AppChapter) {
+        settings.exclude(chapter)
+        Toast.makeText(activity, "Removed ${chapter.label}", Toast.LENGTH_SHORT).show()
+        renderAndReopenPageOverview()
+    }
+
+    private fun reorderPageFromOverview(
+        page: ChapterPage,
+        pages: List<ChapterPage>,
+        targetPageIndex: Int,
+        state: LauncherRenderModel,
+    ) {
+        val targetPage = pages.getOrNull(targetPageIndex) ?: return
+        val sourceSlot = PageArranger.slotOf(page)
+        val targetSlot = PageArranger.slotOf(targetPage)
+        if (sourceSlot == PageSlot.CLASSIC_PAGES && targetSlot == PageSlot.CLASSIC_PAGES) {
+            val classic = page.classicPage ?: return
+            val targetClassic = targetPage.classicPage ?: return
+            val targetIndex = state.classicPages.indexOfFirst { it.id == targetClassic.id }
+            if (targetIndex != -1) {
+                if (settings.moveClassicPage(classic.id, targetIndex)) {
+                    selectPage(classic.key)
+                    Toast.makeText(activity, "Moved ${classic.title}", Toast.LENGTH_SHORT).show()
+                    renderAndReopenPageOverview()
+                }
+            }
+            return
+        }
+        if (sourceSlot == targetSlot) return
+        val layout = settings.pageLayout()
+        val from = layout.order.indexOf(sourceSlot)
+        val to = layout.order.indexOf(targetSlot)
+        if (from == -1 || to == -1 || from == to) return
+        val next = layout.order.toMutableList().apply { add(to, removeAt(from)) }
+        settings.setPageLayoutOrder(next)
+        Toast.makeText(activity, "Moved ${page.title}", Toast.LENGTH_SHORT).show()
+        renderAndReopenPageOverview()
+    }
+
+    private fun pageOverviewCard(
+        page: ChapterPage,
+        state: LauncherRenderModel,
+        index: Int,
+        pages: List<ChapterPage>,
+        adapter: ChapterPagerAdapter?,
+        cardWidth: Int,
+        cardHeight: Int,
+        selected: Boolean,
+    ): View {
+        val colors = GoogleInteractionStyle.palette(activity)
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+            setPadding(activity.dp(12), activity.dp(12), activity.dp(12), activity.dp(12))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = activity.dp(26).toFloat()
+                setColor(if (selected) withAlpha(colors.primaryContainer, 86) else Color.TRANSPARENT)
+                setStroke(activity.dp(if (selected) 2 else 1), if (selected) colors.primary else colors.outlineVariant)
+            }
+            addView(
+                FrameLayout(activity).apply {
+                    clipChildren = false
+                    clipToPadding = false
+                    val snapshot = pageOverviewSnapshot(adapter, index, cardWidth - activity.dp(24), cardHeight - activity.dp(74))
+                    if (snapshot != null) {
+                        addView(
+                            ImageView(activity).apply {
+                                setImageBitmap(snapshot)
+                                scaleType = ImageView.ScaleType.CENTER_CROP
+                                alpha = 0.96f
+                            },
+                            matchParentParams(),
+                        )
+                    } else {
+                        addView(pageOverviewSurface(page, state, selected), matchParentParams())
+                    }
+                    addView(pageOverviewBadge(page, pages, selected), FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+            )
+            addView(label(page.title, 15, if (selected) colors.onPrimaryContainer else colors.onSurface, Typeface.BOLD).apply {
+                gravity = Gravity.CENTER
+                maxLines = 1
+                setPadding(activity.dp(4), activity.dp(12), activity.dp(4), 0)
+            })
+        }
+    }
+
+    private fun pageOverviewSnapshot(
+        adapter: ChapterPagerAdapter?,
+        index: Int,
+        targetWidth: Int,
+        targetHeight: Int,
+    ): Bitmap? {
+        val view = adapter?.pageView(index) ?: return null
+        val sourceWidth = currentPager?.width?.takeIf { it > 0 } ?: activity.resources.displayMetrics.widthPixels
+        val sourceHeight = currentPager?.height?.takeIf { it > 0 }
+            ?: (activity.resources.displayMetrics.heightPixels - activity.statusBarHeightFallback()).coerceAtLeast(activity.dp(320))
+        return runCatching {
+            if (view.width <= 0 || view.height <= 0 || view.parent == null) {
+                view.measure(
+                    View.MeasureSpec.makeMeasureSpec(sourceWidth, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(sourceHeight, View.MeasureSpec.EXACTLY),
+                )
+                view.layout(0, 0, sourceWidth, sourceHeight)
+            }
+            val bitmap = Bitmap.createBitmap(targetWidth.coerceAtLeast(1), targetHeight.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            val scale = maxOf(
+                targetWidth / sourceWidth.toFloat(),
+                targetHeight / sourceHeight.toFloat(),
+            )
+            val dx = (targetWidth - sourceWidth * scale) / 2f
+            val dy = (targetHeight - sourceHeight * scale) / 2f
+            canvas.translate(dx, dy)
+            canvas.scale(scale, scale)
+            val suppressedBackgrounds = suppressPageBackgrounds(view)
+            try {
+                view.draw(canvas)
+            } finally {
+                restoreSuppressedBackgrounds(suppressedBackgrounds)
+            }
+            bitmap
+        }.getOrNull()
+    }
+
+    private fun suppressPageBackgrounds(view: View): List<SuppressedBackground> {
+        val suppressed = ArrayList<SuppressedBackground>()
+        suppressPageBackgrounds(view, suppressed)
+        return suppressed
+    }
+
+    private fun suppressPageBackgrounds(view: View, suppressed: MutableList<SuppressedBackground>) {
+        if (view.tag == CalmAnimationTags.PAGE_PANEL && view.background != null) {
+            suppressed += SuppressedBackground(view, view.background)
+            view.background = null
+        }
+        if (view !is ViewGroup) return
+        for (index in 0 until view.childCount) {
+            suppressPageBackgrounds(view.getChildAt(index), suppressed)
+        }
+    }
+
+    private fun restoreSuppressedBackgrounds(suppressed: List<SuppressedBackground>) {
+        suppressed.forEach { it.view.background = it.background }
+    }
+
+    private fun pageOverviewBadge(page: ChapterPage, pages: List<ChapterPage>, selected: Boolean): View {
+        val slot = PageArranger.slotOf(page)
+        val home = isDefaultHomePage(page)
+        val detail = when {
+            page.classicPage != null -> "${page.classicPage.items.size} items"
+            page.chapter != null -> "${page.chapter.notifications.size} notifications"
+            page.appScope != null -> "App page"
+            slot == PageSlot.PINNED -> "Pinned"
+            slot == PageSlot.CONTACTS -> "People"
+            else -> if (selected) "Current" else "${pages.indexOf(page) + 1} of ${pages.size}"
+        }
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(activity.dp(10), activity.dp(8), activity.dp(10), activity.dp(8))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                setColor(withAlpha(Color.BLACK, 114))
+                cornerRadii = floatArrayOf(
+                    activity.dp(18).toFloat(), activity.dp(18).toFloat(),
+                    activity.dp(18).toFloat(), activity.dp(18).toFloat(),
+                    0f, 0f,
+                    0f, 0f,
+                )
+            }
+            addView(label(if (home) "Home" else page.marker, 12, Color.WHITE, Typeface.BOLD), LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                rightMargin = activity.dp(8)
+            })
+            addView(label(detail, 12, Color.WHITE, Typeface.NORMAL).apply { maxLines = 1 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+    }
+
+    private fun isDefaultHomePage(page: ChapterPage): Boolean {
+        val layout = settings.pageLayout()
+        page.classicPage?.let { classicPage ->
+            return layout.defaultHome == PageSlot.CLASSIC_PAGES && settings.homeClassicPage()?.id == classicPage.id
+        }
+        val slot = PageArranger.slotOf(page)
+        return slot != PageSlot.NOTIFICATIONS && slot == layout.defaultHome
+    }
+
+    private fun pageOverviewSurface(page: ChapterPage, state: LauncherRenderModel, selected: Boolean): View {
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+            setPadding(activity.dp(18), activity.dp(22), activity.dp(18), activity.dp(18))
+            addView(label(page.marker, 26, CalmTheme.INK, Typeface.NORMAL).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, 0, 0, activity.dp(16))
+            })
+            when {
+                page.classicPage != null -> addClassicOverviewPreview(this, page.classicPage, state.classicGridConfig)
+                page.appScope != null -> addAppsOverviewPreview(this, page, state)
+                page.key == CalmTheme.PINNED_KEY -> addAppRows(this, state.pinnedApps.take(5).map { it.label }, CalmTheme.ACCENT)
+                page.key == CalmTheme.CONTACTS_KEY -> addGenericRows(this, listOf("Favourite people", "Recent contact", "Quick action"), CalmTheme.ACCENT)
+                page.key == CalmTheme.WORK_OVERVIEW_KEY -> addOverviewRows(this, state, work = true)
+                page.chapter != null -> addNotificationOverviewPreview(this, page.chapter)
+                else -> addOverviewRows(this, state, work = false)
+            }
+            if (selected) {
+                addView(label("Current", 12, CalmTheme.ACCENT, Typeface.BOLD).apply {
+                    gravity = Gravity.CENTER
+                    setPadding(0, activity.dp(12), 0, 0)
+                })
+            }
+        }
+    }
+
+    private fun addOverviewRows(parent: LinearLayout, state: LauncherRenderModel, work: Boolean) {
+        val notifications = state.notificationChapters
+            .filter { chapter -> chapter.isWorkProfile == work || !work }
+            .take(3)
+            .map { chapter -> "${chapter.label}  ${chapter.notifications.size}" }
+        val rows = buildList {
+            addAll(notifications)
+            if (state.calendarEvents.isNotEmpty()) add(state.calendarEvents.first().title.ifBlank { "Calendar" })
+            if (state.pinnedApps.isNotEmpty()) add("Pinned apps  ${state.pinnedApps.size}")
+        }.ifEmpty { listOf(if (work) "Work overview" else "Overview") }
+        addGenericRows(parent, rows.take(5), CalmTheme.ACCENT)
+    }
+
+    private fun addNotificationOverviewPreview(parent: LinearLayout, chapter: AppChapter) {
+        val rows = chapter.notifications.take(5).mapIndexed { index, _ -> "Notification ${index + 1}" }
+            .ifEmpty { listOf("No notifications") }
+        addGenericRows(parent, rows, chapter.hueColor)
+    }
+
+    private fun addAppsOverviewPreview(parent: LinearLayout, page: ChapterPage, state: LauncherRenderModel) {
+        val apps = state.appEntries
+            .filter { app ->
+                when (page.appScope) {
+                    AppLibraryScope.PERSONAL -> !app.isWorkProfile
+                    AppLibraryScope.WORK -> app.isWorkProfile
+                    else -> true
+                }
+            }
+            .take(5)
+            .map { it.label }
+        addAppRows(parent, apps.ifEmpty { listOf("Apps") }, CalmTheme.ACCENT)
+    }
+
+    private fun addClassicOverviewPreview(
+        parent: LinearLayout,
+        classicPage: ClassicLauncherPageDefinition,
+        gridConfig: ClassicGridConfig,
+    ) {
+        val preview = FrameLayout(activity).apply {
+            clipChildren = false
+            clipToPadding = false
+            background = overviewRounded(withAlpha(CalmTheme.GLASS, 116), activity.dp(18))
+        }
+        classicPage.items.take(24).forEach { item ->
+            val xFraction = item.x / gridConfig.columns.toFloat()
+            val yFraction = item.y / gridConfig.rows.toFloat()
+            val widthFraction = item.width / gridConfig.columns.toFloat()
+            val heightFraction = item.height / gridConfig.rows.toFloat()
+            preview.addView(
+                View(activity).apply {
+                    background = overviewRounded(
+                        when (item.type) {
+                            ClassicGridItemType.APP -> GoogleInteractionStyle.primary(activity)
+                            ClassicGridItemType.WIDGET -> CalmTheme.INK
+                            ClassicGridItemType.STATIC -> CalmTheme.MUTED_INK
+                        },
+                        activity.dp(10),
+                    )
+                },
+                FrameLayout.LayoutParams(
+                    maxOf(activity.dp(12), (activity.dp(190) * widthFraction).toInt()),
+                    maxOf(activity.dp(12), (activity.dp(300) * heightFraction).toInt()),
+                ).apply {
+                    leftMargin = (activity.dp(190) * xFraction).toInt()
+                    topMargin = (activity.dp(300) * yFraction).toInt()
+                },
+            )
+        }
+        parent.addView(preview, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+    }
+
+    private fun addAppRows(parent: LinearLayout, labels: List<String>, color: Int) {
+        labels.take(5).forEach { text ->
+            parent.addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(View(activity).apply {
+                    background = overviewRounded(color, activity.dp(12))
+                }, LinearLayout.LayoutParams(activity.dp(22), activity.dp(22)).apply {
+                    rightMargin = activity.dp(10)
+                })
+                addView(label(text, 12, CalmTheme.INK, Typeface.BOLD).apply { maxLines = 1 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = activity.dp(12)
+            })
+        }
+    }
+
+    private fun addGenericRows(parent: LinearLayout, labels: List<String>, color: Int) {
+        labels.take(5).forEachIndexed { index, text ->
+            parent.addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                background = overviewRounded(withAlpha(color, if (index == 0) 180 else 124), activity.dp(16))
+                setPadding(activity.dp(12), activity.dp(9), activity.dp(12), activity.dp(9))
+                addView(label(text, 12, Color.WHITE, Typeface.BOLD).apply { maxLines = 1 })
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = activity.dp(10)
+            })
+        }
+    }
+
+    private fun overviewRounded(color: Int, radius: Int): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(color)
+            cornerRadius = radius.toFloat()
+        }
+    }
+
+    private fun View.screenCenter(): Pair<Int, Int> {
+        val location = IntArray(2)
+        getLocationOnScreen(location)
+        return location[0] + width / 2 to location[1] + height / 2
+    }
+
+    private fun withAlpha(color: Int, alpha: Int): Int {
+        return (color and 0x00FFFFFF) or (alpha.coerceIn(0, 255) shl 24)
+    }
+
     private fun emptyNote(text: String): TextView {
         return label(text, 15, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
             setPadding(activity.dp(14), activity.dp(12), activity.dp(14), activity.dp(12))
@@ -893,6 +1812,11 @@ class CalmLauncherRunner(
         return CalmVibrator.defaultVibrator(activity)
     }
 
+    private data class SuppressedBackground(
+        val view: View,
+        val background: Drawable,
+    )
+
     private fun registerPackageChangeReceiver() {
         if (packageChangeReceiverRegistered) return
         activity.registerReceiver(packageChangeReceiver, IntentFilter().apply {
@@ -922,6 +1846,9 @@ class CalmLauncherRunner(
     }
 
     private companion object {
+        const val PAGE_OVERVIEW_PINCH_THRESHOLD = 0.82f
+        const val PAGE_OVERVIEW_MAGNET_DELAY_MS = 70L
+        const val PAGE_OVERVIEW_REMOVE_ANIMATION_MS = 190L
         const val PAGE_PREWARM_INITIAL_DELAY_MS = 260L
         const val PAGE_PREWARM_STEP_DELAY_MS = 120L
         const val PAGE_PREWARM_MAX_PAGES = 3

@@ -19,11 +19,19 @@ object CalmSystemBars {
     }
 
     fun applySettingsWindow(activity: ComponentActivity) {
+        val background = GoogleInteractionStyle.background(activity)
         activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
-        activity.window.setBackgroundDrawable(ColorDrawable(CalmTheme.SURFACE))
-        activity.enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(CalmTheme.SURFACE),
-        )
+        activity.window.setBackgroundDrawable(ColorDrawable(background))
+        if (GoogleInteractionStyle.isDarkMode(activity)) {
+            activity.enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+                navigationBarStyle = SystemBarStyle.dark(background),
+            )
+        } else {
+            activity.enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+                navigationBarStyle = SystemBarStyle.light(background, background),
+            )
+        }
     }
 }

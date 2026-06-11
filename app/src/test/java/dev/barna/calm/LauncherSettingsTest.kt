@@ -183,7 +183,7 @@ class LauncherSettingsTest {
     }
 
     @Test
-    fun disablingClassicPagesKeepsDefinitionButDisablesIt() {
+    fun disablingClassicPagesKeepsDefinitionAsAddedPage() {
         settings.setClassicPagesEnabled(true)
 
         settings.setClassicPagesEnabled(false)
@@ -191,7 +191,7 @@ class LauncherSettingsTest {
         val pages = settings.classicPages()
         assertEquals(1, pages.size)
         assertFalse(pages.single().enabled)
-        assertFalse(settings.classicPagesEnabled())
+        assertTrue(settings.classicPagesEnabled())
     }
 
     @Test
@@ -267,7 +267,7 @@ class LauncherSettingsTest {
     }
 
     @Test
-    fun homeClassicPageFallsBackWhenPreferredPageDisabled() {
+    fun homeClassicPageKeepsPreferredPageWithLegacyDisabledFlag() {
         settings.setClassicPages(
             listOf(
                 ClassicLauncherPageDefinition(id = "classic-1", title = "Classic"),
@@ -277,7 +277,7 @@ class LauncherSettingsTest {
         settings.setDefaultClassicPage("classic-2")
         settings.setClassicPageEnabled("classic-2", false)
 
-        assertEquals("classic-1", settings.homeClassicPage()?.id)
+        assertEquals("classic-2", settings.homeClassicPage()?.id)
     }
 
     @Test
@@ -1026,19 +1026,19 @@ class LauncherSettingsTest {
     // ---- page layout ----
 
     @Test
-    fun disablingDefaultHomeMovesHomeToFirstEnabledSlot() {
+    fun disablingPageSlotClearsLegacyDisabledStateWithoutMovingHome() {
         settings.setPageLayoutOrder(listOf(PageSlot.APPS, PageSlot.OVERVIEW, PageSlot.NOTIFICATIONS))
         settings.setDefaultHomeSlot(PageSlot.OVERVIEW)
 
         settings.setPageSlotEnabled(PageSlot.OVERVIEW, false)
 
         val layout = settings.pageLayout()
-        assertEquals(PageSlot.APPS, layout.defaultHome)
-        assertTrue(PageSlot.OVERVIEW in layout.disabled)
+        assertEquals(PageSlot.OVERVIEW, layout.defaultHome)
+        assertTrue(layout.disabled.isEmpty())
     }
 
     @Test
-    fun settingDisabledSlotAsHomeReEnablesIt() {
+    fun settingDefaultHomeClearsLegacyDisabledState() {
         settings.setPageSlotEnabled(PageSlot.CONTACTS, false)
 
         settings.setDefaultHomeSlot(PageSlot.CONTACTS)
@@ -1049,11 +1049,11 @@ class LauncherSettingsTest {
     }
 
     @Test
-    fun storedDisabledHomeIsNormalizedOnRead() {
+    fun storedDisabledHomeIsPreservedOnRead() {
         settings.setPageLayoutOrder(listOf(PageSlot.APPS, PageSlot.OVERVIEW, PageSlot.NOTIFICATIONS))
         settings.setDefaultHomeSlot(PageSlot.OVERVIEW)
         settings.setPageSlotEnabled(PageSlot.OVERVIEW, false)
 
-        assertEquals(PageSlot.APPS, settings.pageLayout().defaultHome)
+        assertEquals(PageSlot.OVERVIEW, settings.pageLayout().defaultHome)
     }
 }

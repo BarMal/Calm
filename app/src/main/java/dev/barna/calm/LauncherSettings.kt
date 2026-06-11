@@ -89,18 +89,18 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     }
 
     fun classicPagesEnabled(): Boolean {
-        return classicPages().any { it.enabled }
+        return classicPages().isNotEmpty()
     }
 
     fun firstEnabledClassicPage(): ClassicLauncherPageDefinition? {
-        return classicPages().firstOrNull { it.enabled }
+        return classicPages().firstOrNull()
     }
 
     fun homeClassicPage(): ClassicLauncherPageDefinition? {
         val pages = classicPages()
         val preferredId = preferences.getString(PREF_CLASSIC_HOME_PAGE_ID, null)
-        return pages.firstOrNull { page -> page.id == preferredId && page.enabled }
-            ?: pages.firstOrNull { it.enabled }
+        return pages.firstOrNull { page -> page.id == preferredId }
+            ?: pages.firstOrNull()
     }
 
     fun setClassicPagesEnabled(enabled: Boolean) {
@@ -185,7 +185,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         val updatedPages = pages.filterNot { it.id == pageId }
         setClassicPages(updatedPages)
         if (preferences.getString(PREF_CLASSIC_HOME_PAGE_ID, null) == pageId) {
-            val nextHomeId = updatedPages.firstOrNull { it.enabled }?.id
+            val nextHomeId = updatedPages.firstOrNull()?.id
             preferences.edit().apply {
                 if (nextHomeId == null) remove(PREF_CLASSIC_HOME_PAGE_ID) else putString(PREF_CLASSIC_HOME_PAGE_ID, nextHomeId)
             }.apply()
@@ -208,7 +208,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     fun addAppToClassicPage(identityKey: String): Boolean {
         if (isClassicPageApp(identityKey)) return false
         val pages = classicPages().ifEmpty { listOf(ClassicLauncherPageDefinition.default()) }
-        val target = pages.firstOrNull { it.enabled } ?: pages.first().copy(enabled = true)
+        val target = pages.first()
         return addAppToClassicPage(target.id, identityKey, pages)
     }
 
@@ -220,13 +220,14 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     fun addWidgetToClassicPage(
         pageId: String,
         appWidgetId: Int,
-        width: Int = ClassicGridItem.GRID_COLUMNS,
+        width: Int = classicGridConfig().columns,
         height: Int = 2,
     ): Boolean {
         if (isClassicPageWidget(appWidgetId)) return false
         val pages = classicPages()
+        val gridConfig = classicGridConfig()
         val updatedPages = pages.map { page ->
-            if (page.id == pageId) page.withWidget(appWidgetId, width, height) ?: return false else page
+            if (page.id == pageId) page.withWidget(appWidgetId, width, height, gridConfig) ?: return false else page
         }
         if (updatedPages == pages) return false
         setClassicPages(updatedPages)
@@ -236,13 +237,14 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     fun addStaticItemToClassicPage(
         pageId: String,
         staticItem: ClassicStaticItem,
-        width: Int = ClassicGridItem.GRID_COLUMNS,
+        width: Int = classicGridConfig().columns,
         height: Int = 1,
     ): Boolean {
         if (isClassicPageStaticItem(staticItem)) return false
         val pages = classicPages()
+        val gridConfig = classicGridConfig()
         val updatedPages = pages.map { page ->
-            if (page.id == pageId) page.withStaticItem(staticItem, width, height) ?: return false else page
+            if (page.id == pageId) page.withStaticItem(staticItem, width, height, gridConfig) ?: return false else page
         }
         if (updatedPages == pages) return false
         setClassicPages(updatedPages)
@@ -268,9 +270,10 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         val sourcePage = pages.firstOrNull { page -> page.id == sourcePageId } ?: return false
         val item = sourcePage.items.firstOrNull { candidate -> candidate.id == itemId } ?: return false
         val targetPage = pages.firstOrNull { page -> page.id == targetPageId } ?: return false
+        val gridConfig = classicGridConfig()
         val updatedTarget = targetPage
             .copy(enabled = true)
-            .withItemAtNextFreeArea(item)
+            .withItemAtNextFreeArea(item, gridConfig)
             ?: return false
         setClassicPages(
             pages.map { page ->
@@ -286,10 +289,11 @@ class LauncherSettings(private val preferences: SharedPreferences) {
 
     fun moveClassicGridItemWithinPage(pageId: String, itemId: String, x: Int, y: Int): Boolean {
         val pages = classicPages()
+        val gridConfig = classicGridConfig()
         var changed = false
         val updatedPages = pages.map { page ->
             if (page.id != pageId) return@map page
-            val updatedPage = page.withMovedItem(itemId, x, y) ?: return false
+            val updatedPage = page.withMovedItem(itemId, x, y, gridConfig) ?: return false
             changed = updatedPage != page
             updatedPage
         }
@@ -300,10 +304,11 @@ class LauncherSettings(private val preferences: SharedPreferences) {
 
     fun resizeClassicGridItem(pageId: String, itemId: String, width: Int, height: Int): Boolean {
         val pages = classicPages()
+        val gridConfig = classicGridConfig()
         var changed = false
         val updatedPages = pages.map { page ->
             if (page.id != pageId) return@map page
-            val updatedPage = page.withResizedItem(itemId, width, height) ?: return false
+            val updatedPage = page.withResizedItem(itemId, width, height, gridConfig) ?: return false
             changed = updatedPage != page
             updatedPage
         }
@@ -318,10 +323,11 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         pages: List<ClassicLauncherPageDefinition>,
     ): Boolean {
         var changed = false
+        val gridConfig = classicGridConfig()
         val updatedPages = pages.map { page ->
             if (page.id == pageId) {
                 val enabledPage = page.copy(enabled = true)
-                val updatedPage = enabledPage.withApp(identityKey) ?: return false
+                val updatedPage = enabledPage.withApp(identityKey, gridConfig) ?: return false
                 changed = updatedPage != page
                 updatedPage
             } else {
@@ -331,6 +337,25 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         if (!changed) return false
         setClassicPages(updatedPages)
         return true
+    }
+
+    fun classicGridConfig(): ClassicGridConfig {
+        return ClassicGridConfig.from(
+            columns = preferences.getInt(PREF_CLASSIC_GRID_COLUMNS, ClassicGridConfig.DEFAULT_COLUMNS),
+            rows = preferences.getInt(PREF_CLASSIC_GRID_ROWS, ClassicGridConfig.DEFAULT_ROWS),
+        )
+    }
+
+    fun setClassicGridColumns(columns: Int) {
+        preferences.edit()
+            .putInt(PREF_CLASSIC_GRID_COLUMNS, columns.coerceIn(ClassicGridConfig.MIN_COLUMNS, ClassicGridConfig.MAX_COLUMNS))
+            .apply()
+    }
+
+    fun setClassicGridRows(rows: Int) {
+        preferences.edit()
+            .putInt(PREF_CLASSIC_GRID_ROWS, rows.coerceIn(ClassicGridConfig.MIN_ROWS, ClassicGridConfig.MAX_ROWS))
+            .apply()
     }
 
     fun dockConfig(): DockConfig {
@@ -511,14 +536,10 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             .orEmpty()
         // Append any slots missing from the stored order (e.g. added in a later version).
         val order = storedOrder + LauncherPageLayout.DEFAULT_ORDER.filter { it !in storedOrder }
-        val disabled = preferences.getStringSet(PREF_PAGE_LAYOUT_DISABLED, emptySet())
-            .orEmpty()
-            .mapNotNull { name -> runCatching { PageSlot.valueOf(name) }.getOrNull() }
-            .toSet()
         val home = preferences.getString(PREF_PAGE_LAYOUT_HOME, null)
             ?.let { name -> runCatching { PageSlot.valueOf(name) }.getOrNull() }
             ?: PageSlot.OVERVIEW
-        val layout = LauncherPageLayout(order, disabled, home)
+        val layout = LauncherPageLayout(order, emptySet(), home)
         return layout.copy(defaultHome = PageLayoutPolicy.firstEnabledHome(layout))
     }
 
@@ -527,20 +548,14 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     }
 
     fun setPageSlotEnabled(slot: PageSlot, enabled: Boolean) {
-        val layout = pageLayout()
-        val disabled = layout.disabled.toMutableSet()
-        if (enabled) disabled.remove(slot) else disabled.add(slot)
-        val home = PageLayoutPolicy.firstEnabledHome(layout.copy(disabled = disabled))
         preferences.edit()
-            .putStringSet(PREF_PAGE_LAYOUT_DISABLED, disabled.map { it.name }.toSet())
-            .putString(PREF_PAGE_LAYOUT_HOME, home.name)
+            .remove(PREF_PAGE_LAYOUT_DISABLED)
             .apply()
     }
 
     fun setDefaultHomeSlot(slot: PageSlot) {
-        val disabled = pageLayout().disabled - slot
         preferences.edit()
-            .putStringSet(PREF_PAGE_LAYOUT_DISABLED, disabled.map { it.name }.toSet())
+            .remove(PREF_PAGE_LAYOUT_DISABLED)
             .putString(PREF_PAGE_LAYOUT_HOME, slot.name)
             .apply()
     }
@@ -605,6 +620,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             hiddenAppKeys(),
             splitNotificationPackages(),
             classicPages(),
+            classicGridConfig(),
             dockConfig(),
             dockKeys(),
         ).hashCode()
@@ -862,6 +878,8 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_CONTACTS_PAGE = "contacts_page"
         private const val PREF_CLASSIC_PAGES = "classic_pages"
         private const val PREF_CLASSIC_HOME_PAGE_ID = "classic_home_page_id"
+        private const val PREF_CLASSIC_GRID_COLUMNS = "classic_grid_columns"
+        private const val PREF_CLASSIC_GRID_ROWS = "classic_grid_rows"
         private const val PREF_LAST_PAGE_KEY = "last_page_key"
         private const val PREF_DOCK_ENABLED = "dock_enabled"
         private const val PREF_DOCK_ITEM_COUNT = "dock_item_count"

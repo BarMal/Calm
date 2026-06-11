@@ -15,7 +15,7 @@ object PageLayoutPreviewModel {
                 slot = slot,
                 label = label(slot),
                 shortLabel = shortLabel(slot),
-                enabled = slot !in layout.disabled,
+                enabled = true,
                 home = slot == layout.defaultHome,
             )
         }

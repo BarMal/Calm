@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Handler
 import android.text.TextUtils
 import android.util.TypedValue
+import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
@@ -34,6 +35,7 @@ class FocusOverlayController(
 
     fun show(sourceCard: TextView, actions: List<ContextAction>, focusedText: String = sourceCard.text.toString()) {
         dismiss(false)
+        sourceCard.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         focusedExpanded = false
         val content = activity.findViewById<FrameLayout>(android.R.id.content) ?: return
         val startBounds = sourceBoundsInContent(content, sourceCard)
@@ -97,6 +99,7 @@ class FocusOverlayController(
      */
     fun showExpandedCard(sourceCard: View, content: View, actions: List<ContextAction>) {
         dismiss(false)
+        sourceCard.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         val container = activity.findViewById<FrameLayout>(android.R.id.content) ?: return
         if (container.width <= 0 || container.height <= 0) return
         val startBounds = sourceBoundsInContent(container, sourceCard)
@@ -470,6 +473,7 @@ class FocusOverlayController(
             setPadding(activity.dp(10), activity.dp(12), activity.dp(10), activity.dp(12))
             background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(999))
             setOnClickListener {
+                performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                 dismissWithAction(
                     animate = true,
                     removeFocusedCard = action.closeBehavior == ContextActionCloseBehavior.REMOVE_CARD,

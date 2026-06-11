@@ -1,7 +1,7 @@
 package dev.barna.calm
 
 /**
- * Top-level page groupings the user can reorder, enable/disable, and pick a default home from.
+ * Top-level page groupings the user can reorder and pick a default home from.
  * Notification pages collapse into a single movable NOTIFICATIONS "cluster".
  */
 enum class PageSlot {
@@ -15,8 +15,11 @@ enum class PageSlot {
 }
 
 /**
- * The user's page layout: slot order, disabled slots, and the default home slot. The defaults
+ * The user's page layout: slot order, legacy disabled slots, and the default home slot. The defaults
  * reproduce the planner's current ordering exactly, so an unconfigured layout changes nothing.
+ *
+ * Disabled slots are kept only so older preferences can still be decoded. Page visibility now
+ * comes from added page instances and live data, not from a secondary enabled/disabled filter.
  */
 data class LauncherPageLayout(
     val order: List<PageSlot>,
@@ -24,7 +27,7 @@ data class LauncherPageLayout(
     val defaultHome: PageSlot,
 ) {
     val isDefaultArrangement: Boolean
-        get() = order == DEFAULT_ORDER && disabled.isEmpty()
+        get() = order == DEFAULT_ORDER
 
     companion object {
         val DEFAULT_ORDER: List<PageSlot> = listOf(
@@ -58,8 +61,8 @@ object PageArranger {
 
     /**
      * Reorders [pages] to match [layout]: groups them by slot (preserving each slot's internal
-     * order), emits slots in the configured order, and drops disabled slots. Returns the input
-     * unchanged for the default arrangement, and never returns an empty list.
+     * order) and emits slots in the configured order. Returns the input unchanged for the default
+     * arrangement, and never returns an empty list.
      */
     fun arrange(pages: List<ChapterPage>, layout: LauncherPageLayout): List<ChapterPage> {
         if (layout.isDefaultArrangement) return pages
@@ -67,18 +70,16 @@ object PageArranger {
         pages.forEach { bySlot.getOrPut(slotOf(it)) { ArrayList() }.add(it) }
         val result = ArrayList<ChapterPage>()
         layout.order.forEach { slot ->
-            if (slot in layout.disabled) return@forEach
             bySlot.remove(slot)?.let(result::addAll)
         }
         // Any slot not named in the configured order keeps its pages at the end (forward-compatible).
-        bySlot.forEach { (slot, slotPages) -> if (slot !in layout.disabled) result.addAll(slotPages) }
+        bySlot.forEach { (_, slotPages) -> result.addAll(slotPages) }
         return result.ifEmpty { pages }
     }
 }
 
 object PageLayoutPolicy {
     fun firstEnabledHome(layout: LauncherPageLayout): PageSlot {
-        if (layout.defaultHome !in layout.disabled) return layout.defaultHome
-        return layout.order.firstOrNull { slot -> slot !in layout.disabled } ?: layout.defaultHome
+        return layout.defaultHome
     }
 }

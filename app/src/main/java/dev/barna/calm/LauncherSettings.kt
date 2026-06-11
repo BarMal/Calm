@@ -89,6 +89,8 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             enabled = preferences.getBoolean(PREF_DOCK_ENABLED, false),
             itemCount = preferences.getInt(PREF_DOCK_ITEM_COUNT, DockConfig.DEFAULT_ITEM_COUNT)
                 .coerceIn(DockConfig.MIN_ITEM_COUNT, DockConfig.MAX_ITEM_COUNT),
+            itemSpan = preferences.getInt(PREF_DOCK_ITEM_SPAN, DockConfig.DEFAULT_ITEM_SPAN)
+                .coerceIn(DockConfig.MIN_ITEM_SPAN, DockConfig.MAX_ITEM_SPAN),
             verticalPaddingDp = preferences.getInt(PREF_DOCK_VERTICAL_PADDING, DockConfig.DEFAULT_VERTICAL_PADDING_DP)
                 .coerceIn(DockConfig.MIN_VERTICAL_PADDING_DP, DockConfig.MAX_VERTICAL_PADDING_DP),
             horizontalPaddingDp = preferences.getInt(PREF_DOCK_HORIZONTAL_PADDING, DockConfig.DEFAULT_HORIZONTAL_PADDING_DP)
@@ -103,6 +105,12 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     fun setDockItemCount(count: Int) {
         preferences.edit()
             .putInt(PREF_DOCK_ITEM_COUNT, count.coerceIn(DockConfig.MIN_ITEM_COUNT, DockConfig.MAX_ITEM_COUNT))
+            .apply()
+    }
+
+    fun setDockItemSpan(span: Int) {
+        preferences.edit()
+            .putInt(PREF_DOCK_ITEM_SPAN, span.coerceIn(DockConfig.MIN_ITEM_SPAN, DockConfig.MAX_ITEM_SPAN))
             .apply()
     }
 
@@ -596,6 +604,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_LAST_PAGE_KEY = "last_page_key"
         private const val PREF_DOCK_ENABLED = "dock_enabled"
         private const val PREF_DOCK_ITEM_COUNT = "dock_item_count"
+        private const val PREF_DOCK_ITEM_SPAN = "dock_item_span"
         private const val PREF_DOCK_VERTICAL_PADDING = "dock_vertical_padding"
         private const val PREF_DOCK_HORIZONTAL_PADDING = "dock_horizontal_padding"
         private const val PREF_DOCK_KEYS = "dock_keys"

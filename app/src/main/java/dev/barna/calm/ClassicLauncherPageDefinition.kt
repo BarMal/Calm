@@ -7,6 +7,7 @@ data class ClassicLauncherPageDefinition(
     val id: String,
     val title: String,
     val enabled: Boolean = true,
+    val items: List<ClassicGridItem> = emptyList(),
 ) {
     val key: String
         get() = "$KEY_PREFIX$id"
@@ -16,6 +17,31 @@ data class ClassicLauncherPageDefinition(
             .put(FIELD_ID, id)
             .put(FIELD_TITLE, title)
             .put(FIELD_ENABLED, enabled)
+            .put(FIELD_ITEMS, encodeItems(items))
+    }
+
+    fun containsApp(identityKey: String): Boolean {
+        return items.any { item -> item.type == ClassicGridItemType.APP && item.target == identityKey }
+    }
+
+    fun withApp(identityKey: String): ClassicLauncherPageDefinition? {
+        if (containsApp(identityKey)) return this
+        val position = nextFreeCell() ?: return null
+        return copy(items = items + ClassicGridItem.app(identityKey, position.first, position.second))
+    }
+
+    private fun nextFreeCell(): Pair<Int, Int>? {
+        val occupied = items.flatMap { item ->
+            (item.x until item.x + item.width).flatMap { x ->
+                (item.y until item.y + item.height).map { y -> x to y }
+            }
+        }.toSet()
+        for (y in 0 until ClassicGridItem.DEFAULT_GRID_ROWS) {
+            for (x in 0 until ClassicGridItem.GRID_COLUMNS) {
+                if ((x to y) !in occupied) return x to y
+            }
+        }
+        return null
     }
 
     companion object {
@@ -24,6 +50,7 @@ data class ClassicLauncherPageDefinition(
         private const val FIELD_ID = "id"
         private const val FIELD_TITLE = "title"
         private const val FIELD_ENABLED = "enabled"
+        private const val FIELD_ITEMS = "items"
 
         fun default(index: Int = 1): ClassicLauncherPageDefinition {
             return ClassicLauncherPageDefinition(id = "classic-$index", title = "Classic")
@@ -36,7 +63,24 @@ data class ClassicLauncherPageDefinition(
                 id = id,
                 title = title,
                 enabled = json.optBoolean(FIELD_ENABLED, true),
+                items = decodeItems(json.optJSONArray(FIELD_ITEMS)),
             )
+        }
+
+        private fun encodeItems(items: List<ClassicGridItem>): JSONArray {
+            val array = JSONArray()
+            items.forEach { item -> array.put(item.encode()) }
+            return array
+        }
+
+        private fun decodeItems(array: JSONArray?): List<ClassicGridItem> {
+            if (array == null) return emptyList()
+            return buildList {
+                for (index in 0 until array.length()) {
+                    val item = ClassicGridItem.decode(array.optJSONObject(index) ?: continue) ?: continue
+                    add(item)
+                }
+            }.distinctBy { it.id }
         }
 
         fun encodeList(pages: List<ClassicLauncherPageDefinition>): String {

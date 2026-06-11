@@ -195,6 +195,50 @@ class LauncherSettingsTest {
     }
 
     @Test
+    fun addAppToClassicPageCreatesDefaultPage() {
+        assertTrue(settings.addAppToClassicPage("com.example"))
+
+        val page = settings.classicPages().single()
+        assertTrue(page.enabled)
+        assertEquals("classic:classic-1", page.key)
+        assertEquals(listOf("com.example"), page.items.map { it.target })
+        assertTrue(settings.isClassicPageApp("com.example"))
+    }
+
+    @Test
+    fun addAppToClassicPageEnablesFirstPageWhenAllDisabled() {
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition(id = "classic-1", title = "Classic", enabled = false)))
+
+        assertTrue(settings.addAppToClassicPage("com.example"))
+
+        val page = settings.classicPages().single()
+        assertTrue(page.enabled)
+        assertTrue(page.containsApp("com.example"))
+        assertEquals(page, settings.firstEnabledClassicPage())
+    }
+
+    @Test
+    fun addAppToClassicPageReturnsFalseForDuplicate() {
+        assertTrue(settings.addAppToClassicPage("com.example"))
+
+        assertFalse(settings.addAppToClassicPage("com.example"))
+
+        assertEquals(1, settings.classicPages().single().items.size)
+    }
+
+    @Test
+    fun addAppToClassicPageReturnsFalseWhenFull() {
+        val full = (0 until ClassicGridItem.DEFAULT_GRID_ROWS).fold(ClassicLauncherPageDefinition.default()) { page, row ->
+            (0 until ClassicGridItem.GRID_COLUMNS).fold(page) { current, column ->
+                current.copy(items = current.items + ClassicGridItem.app("com.$row.$column", column, row))
+            }
+        }
+        settings.setClassicPages(listOf(full))
+
+        assertFalse(settings.addAppToClassicPage("com.extra"))
+    }
+
+    @Test
     fun cardStackCurveRoundTrips() {
         settings.setCardStackCurve(75)
         assertEquals(75, settings.cardStackTuning().curve)

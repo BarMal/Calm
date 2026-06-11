@@ -19,6 +19,8 @@ data class LauncherContextActionCallbacks(
     val isDockItem: (String) -> Boolean,
     val addDockItem: (String, String) -> Unit,
     val removeDockItem: (String, String) -> Unit,
+    val isClassicPageApp: (String) -> Boolean,
+    val addAppToClassicPage: (AppEntry) -> Unit,
 )
 
 class LauncherContextActionFactory(
@@ -86,6 +88,9 @@ class LauncherContextActionFactory(
             }
         }))
         actions.add(dockAction(app.identityKey, app.label))
+        if (!callbacks.isClassicPageApp(app.identityKey)) {
+            actions.add(ContextAction("Add to Classic page", Runnable { callbacks.addAppToClassicPage(app) }))
+        }
         callbacks.appShortcuts(app).take(MAX_SHORTCUTS).forEach { shortcut ->
             actions.add(ContextAction(shortcut.label, Runnable { callbacks.launchShortcut(shortcut) }))
         }

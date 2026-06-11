@@ -64,6 +64,21 @@ data class ClassicLauncherPageDefinition(
         return copy(items = items.map { candidate -> if (candidate.id == itemId) resizedItem else candidate })
     }
 
+    fun availablePositionsForItem(itemId: String): List<Pair<Int, Int>> {
+        val item = items.firstOrNull { candidate -> candidate.id == itemId } ?: return emptyList()
+        val otherItems = items.filterNot { candidate -> candidate.id == itemId }
+        return positionsFor(item.width, item.height)
+            .filter { position -> areaIsClear(otherItems, position.first, position.second, item.width, item.height) }
+    }
+
+    fun withMovedItem(itemId: String, x: Int, y: Int): ClassicLauncherPageDefinition? {
+        val item = items.firstOrNull { candidate -> candidate.id == itemId } ?: return null
+        val otherItems = items.filterNot { candidate -> candidate.id == itemId }
+        if (!areaIsClear(otherItems, x, y, item.width, item.height)) return null
+        val movedItem = item.copy(x = x, y = y)
+        return copy(items = items.map { candidate -> if (candidate.id == itemId) movedItem else candidate })
+    }
+
     fun withoutItem(itemId: String): ClassicLauncherPageDefinition {
         return copy(items = items.filterNot { item -> item.id == itemId })
     }
@@ -73,12 +88,18 @@ data class ClassicLauncherPageDefinition(
     }
 
     private fun firstFreeArea(placedItems: List<ClassicGridItem>, width: Int, height: Int): Pair<Int, Int>? {
-        for (y in 0..ClassicGridItem.DEFAULT_GRID_ROWS - height) {
-            for (x in 0..ClassicGridItem.GRID_COLUMNS - width) {
-                if (areaIsClear(placedItems, x, y, width, height)) return x to y
-            }
+        for ((x, y) in positionsFor(width, height)) {
+            if (areaIsClear(placedItems, x, y, width, height)) return x to y
         }
         return null
+    }
+
+    private fun positionsFor(width: Int, height: Int): List<Pair<Int, Int>> {
+        if (width < 1 || height < 1) return emptyList()
+        if (width > ClassicGridItem.GRID_COLUMNS || height > ClassicGridItem.DEFAULT_GRID_ROWS) return emptyList()
+        return (0..ClassicGridItem.DEFAULT_GRID_ROWS - height).flatMap { y ->
+            (0..ClassicGridItem.GRID_COLUMNS - width).map { x -> x to y }
+        }
     }
 
     private fun areaIsClear(

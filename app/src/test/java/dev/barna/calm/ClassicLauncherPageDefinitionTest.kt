@@ -1,6 +1,7 @@
 package dev.barna.calm
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -165,5 +166,48 @@ class ClassicLauncherPageDefinitionTest {
         val page = ClassicLauncherPageDefinition.default().copy(items = listOf(app) + blockers)
 
         assertNull(page.withResizedItem(app.id, width = 2, height = 2))
+    }
+
+    @Test
+    fun availablePositionsForItemRespectsSpanAndCollisions() {
+        val widget = ClassicGridItem.widget(appWidgetId = 42, x = 0, y = 0, width = 2, height = 2)
+        val blocker = ClassicGridItem.app("com.blocker", x = 2, y = 0)
+        val page = ClassicLauncherPageDefinition.default().copy(items = listOf(widget, blocker))
+
+        val positions = page.availablePositionsForItem(widget.id)
+
+        assertTrue(positions.contains(0 to 0))
+        assertTrue(positions.contains(0 to 1))
+        assertFalse(positions.contains(1 to 0))
+        assertFalse(positions.contains(ClassicGridItem.GRID_COLUMNS - 1 to 0))
+    }
+
+    @Test
+    fun withMovedItemUpdatesPositionWhenAreaIsClear() {
+        val app = ClassicGridItem.app("com.example", x = 0, y = 0)
+        val page = ClassicLauncherPageDefinition.default().copy(items = listOf(app))
+
+        val moved = page.withMovedItem(app.id, x = 2, y = 3)?.items?.single()
+
+        assertEquals(app.id, moved?.id)
+        assertEquals(2, moved?.x)
+        assertEquals(3, moved?.y)
+    }
+
+    @Test
+    fun withMovedItemReturnsNullWhenTargetCollides() {
+        val app = ClassicGridItem.app("com.example", x = 0, y = 0)
+        val blocker = ClassicGridItem.app("com.blocker", x = 1, y = 0)
+        val page = ClassicLauncherPageDefinition.default().copy(items = listOf(app, blocker))
+
+        assertNull(page.withMovedItem(app.id, x = 1, y = 0))
+    }
+
+    @Test
+    fun withMovedItemReturnsNullWhenTargetIsOutOfBounds() {
+        val widget = ClassicGridItem.widget(appWidgetId = 42, x = 0, y = 0, width = 2, height = 2)
+        val page = ClassicLauncherPageDefinition.default().copy(items = listOf(widget))
+
+        assertNull(page.withMovedItem(widget.id, x = ClassicGridItem.GRID_COLUMNS - 1, y = 0))
     }
 }

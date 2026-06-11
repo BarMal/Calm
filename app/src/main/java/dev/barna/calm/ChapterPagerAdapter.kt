@@ -33,6 +33,8 @@ class ChapterPagerAdapter(
         return pageViews.getOrPut(page.key) { pageFactory(page) }
     }
 
+    fun pageView(position: Int): View? = preload(position)
+
     override fun onViewRecycled(holder: PageHolder) {
         holder.container.removeAllViews()
         super.onViewRecycled(holder)

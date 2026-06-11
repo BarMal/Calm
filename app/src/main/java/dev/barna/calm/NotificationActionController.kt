@@ -117,7 +117,7 @@ class NotificationActionController(
             })
         }
 
-        AlertDialog.Builder(activity)
+        GoogleInteractionStyle.dialogBuilder(activity)
             .setTitle("Hide notifications")
             .setItems(options.map { it.first }.toTypedArray()) { _, which ->
                 options[which].second.invoke()
@@ -150,12 +150,12 @@ class NotificationActionController(
             setSingleLine(false)
             minLines = 1
             maxLines = 4
-            setTextColor(CalmTheme.INK)
-            setHintTextColor(CalmTheme.MUTED_INK)
+            setTextColor(GoogleInteractionStyle.onSurface(activity))
+            setHintTextColor(GoogleInteractionStyle.onSurfaceVariant(activity))
             hint = action.remoteInputs.firstOrNull()?.label ?: action.label
             setPadding(activity.dp(18), activity.dp(12), activity.dp(18), activity.dp(12))
         }
-        AlertDialog.Builder(activity)
+        GoogleInteractionStyle.dialogBuilder(activity)
             .setTitle(action.label)
             .setView(input)
             .setNegativeButton("Cancel", null)

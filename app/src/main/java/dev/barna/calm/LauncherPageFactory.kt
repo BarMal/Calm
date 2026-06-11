@@ -4,6 +4,8 @@ import android.app.AlertDialog
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.MotionEvent
@@ -48,6 +50,9 @@ class LauncherPageFactory(
     private val moveClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem, ClassicLauncherPageDefinition) -> Unit,
     private val moveClassicGridItemWithinPage: (ClassicLauncherPageDefinition, ClassicGridItem, Int, Int) -> Unit,
     private val resizeClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem, Int, Int) -> Unit,
+    private val resetClassicGridItemSize: (ClassicLauncherPageDefinition, ClassicGridItem) -> Unit,
+    private val pendingClassicPlacementItemId: () -> String?,
+    private val finishClassicItemPlacement: (String) -> Unit,
     private val addClassicPage: () -> Unit,
     private val moveClassicPage: (ClassicLauncherPageDefinition, Int) -> Unit,
     private val isClassicPageEditing: (ClassicLauncherPageDefinition) -> Boolean,
@@ -58,6 +63,8 @@ class LauncherPageFactory(
     private val barePagePanel: (Int) -> LinearLayout,
     private val label: (String, Int, Int, Int) -> TextView,
 ) {
+    private var classicMenuAnchor: Pair<Int, Int>? = null
+
     fun createPage(page: ChapterPage, state: LauncherRenderModel): View {
         return when {
             page.appScope != null -> createAppLibraryPage(page, state.appEntries)
@@ -85,29 +92,25 @@ class LauncherPageFactory(
             }
         }
         return barePagePanel(activity.dp(20)).apply {
-            setOnLongClickListener {
-                if (editing) {
-                    showClassicPageActions(this, classicPage, state)
-                } else {
-                    setClassicPageEditing(classicPage, true)
+            setOnTouchListener { _, event ->
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                    classicMenuAnchor = event.rawX.toInt() to event.rawY.toInt()
                 }
+                false
+            }
+            setOnLongClickListener {
+                showClassicPageActions(this, classicPage, state)
                 true
             }
             addView(classicHeader(classicPage, state, editing))
             if (gridItems.isEmpty()) {
                 addView(
-                    LinearLayout(activity).apply {
-                        orientation = LinearLayout.VERTICAL
-                        gravity = Gravity.CENTER
-                        addView(label("No items yet", 22, CalmTheme.INK, Typeface.NORMAL).apply {
-                            gravity = Gravity.CENTER
-                        })
-                    },
+                    View(activity),
                     LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
                 )
             } else {
                 addView(
-                    classicGrid(gridItems),
+                    classicGrid(classicPage, state, gridItems),
                     LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
                 )
             }
@@ -151,21 +154,6 @@ class LauncherPageFactory(
                         }
                     },
                     LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
-                )
-                addView(
-                    LinearLayout(activity).apply {
-                        orientation = LinearLayout.HORIZONTAL
-                        gravity = Gravity.CENTER_VERTICAL
-                        val actionRow = this
-                        if (editing) {
-                            addHeaderActionButton("Page") { showClassicPageActions(actionRow, classicPage, state) }
-                        }
-                        addHeaderActionButton("Add app") { showClassicAppPicker(classicPage, state) }
-                        addHeaderActionButton("Add widget") { addWidgetToClassicPage(classicPage) }
-                    },
-                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                        topMargin = activity.dp(12)
-                    },
                 )
             },
         )
@@ -256,20 +244,7 @@ class LauncherPageFactory(
                 ContextActionCloseBehavior.REMOVE_CARD,
             ),
         )
-        val content = TextView(activity).apply {
-            text = classicPage.title
-            setTextColor(CalmTheme.INK)
-            textSize = 22f
-            typeface = Typeface.DEFAULT
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.CENTER
-            includeFontPadding = false
-        }
-        focusOverlay.showExpandedCard(
-            source,
-            content,
-            actions,
-        )
+        showClassicPopupActions(source, actions)
     }
 
     private fun showRenameClassicPageDialog(classicPage: ClassicLauncherPageDefinition) {
@@ -278,7 +253,7 @@ class LauncherPageFactory(
             setSingleLine(true)
             setSelection(0, text.length)
         }
-        AlertDialog.Builder(activity)
+        GoogleInteractionStyle.dialogBuilder(activity)
             .setTitle("Rename Classic page")
             .setView(input)
             .setNegativeButton("Cancel", null)
@@ -293,7 +268,7 @@ class LauncherPageFactory(
         } else {
             "Remove ${classicPage.title} and its $itemCount ${if (itemCount == 1) "item" else "items"}?"
         }
-        AlertDialog.Builder(activity)
+        GoogleInteractionStyle.dialogBuilder(activity)
             .setTitle("Remove Classic page")
             .setMessage(message)
             .setNegativeButton("Cancel", null)
@@ -340,7 +315,7 @@ class LauncherPageFactory(
         val scroll = ScrollView(activity).apply {
             addView(grid, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
-        dialog = AlertDialog.Builder(activity)
+        dialog = GoogleInteractionStyle.dialogBuilder(activity)
             .setTitle("Add app to ${classicPage.title}")
             .setView(scroll)
             .setNegativeButton("Cancel", null)
@@ -358,7 +333,7 @@ class LauncherPageFactory(
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(16))
+            background = GoogleInteractionStyle.rowBackground(activity, 18)
             contentDescription = pickerLabel
             setPadding(activity.dp(10), activity.dp(12), activity.dp(10), activity.dp(12))
             addView(
@@ -374,7 +349,7 @@ class LauncherPageFactory(
                     } ?: addView(
                         TextView(activity).apply {
                             text = app.label.firstOrNull()?.uppercaseChar()?.toString().orEmpty()
-                            setTextColor(CalmTheme.INK)
+                            setTextColor(GoogleInteractionStyle.onSurface(activity))
                             textSize = 28f
                             typeface = Typeface.DEFAULT
                             setTypeface(typeface, Typeface.BOLD)
@@ -389,7 +364,7 @@ class LauncherPageFactory(
             addView(
                 TextView(activity).apply {
                     text = app.label
-                    setTextColor(CalmTheme.INK)
+                    setTextColor(GoogleInteractionStyle.onSurface(activity))
                     textSize = 13f
                     typeface = Typeface.DEFAULT
                     setTypeface(typeface, Typeface.BOLD)
@@ -405,7 +380,7 @@ class LauncherPageFactory(
                 addView(
                     TextView(activity).apply {
                         text = profile
-                        setTextColor(CalmTheme.MUTED_INK)
+                        setTextColor(GoogleInteractionStyle.onSurfaceVariant(activity))
                         textSize = 11f
                         maxLines = 1
                         ellipsize = TextUtils.TruncateAt.END
@@ -421,39 +396,303 @@ class LauncherPageFactory(
         }
     }
 
-    private fun classicGrid(gridItems: List<Pair<ClassicGridItem, View>>): View {
-        val cellWidth = activity.dp(78)
+    private fun classicGrid(
+        classicPage: ClassicLauncherPageDefinition,
+        state: LauncherRenderModel,
+        gridItems: List<Pair<ClassicGridItem, View>>,
+    ): View {
+        val gridConfig = state.classicGridConfig
+        val screenWidth = activity.resources.displayMetrics.widthPixels
+        val horizontalInsets = activity.dp(56)
+        val cellWidth = ((screenWidth - horizontalInsets).coerceAtLeast(activity.dp(160)) / gridConfig.columns)
+            .coerceIn(activity.dp(42), activity.dp(92))
         val cellHeight = activity.dp(92)
-        val grid = GridLayout(activity).apply {
-            columnCount = ClassicGridItem.GRID_COLUMNS
-            rowCount = ClassicGridItem.DEFAULT_GRID_ROWS
-            alignmentMode = GridLayout.ALIGN_BOUNDS
-            useDefaultMargins = false
+        val gap = activity.dp(2)
+        val workspaceWidth = cellWidth * gridConfig.columns
+        val workspaceHeight = cellHeight * gridConfig.rows
+        val grid = FrameLayout(activity).apply {
             clipChildren = false
             clipToPadding = false
-            setPadding(0, activity.dp(4), 0, activity.dp(12))
             gridItems.sortedWith(compareBy<Pair<ClassicGridItem, View>> { it.first.y }.thenBy { it.first.x })
                 .forEach { (item, view) ->
-                    val columnSpec = GridLayout.spec(item.x, item.width, GridLayout.FILL)
-                    val rowSpec = GridLayout.spec(item.y, item.height, GridLayout.FILL)
+                    val boundedWidth = item.width.coerceIn(1, gridConfig.columns)
+                    val boundedHeight = item.height.coerceIn(1, gridConfig.rows)
+                    val boundedX = item.x.coerceIn(0, (gridConfig.columns - boundedWidth).coerceAtLeast(0))
+                    val boundedY = item.y.coerceIn(0, (gridConfig.rows - boundedHeight).coerceAtLeast(0))
                     addView(
-                        view,
-                        GridLayout.LayoutParams(rowSpec, columnSpec).apply {
-                            width = cellWidth * item.width
-                            height = cellHeight * item.height
-                            setMargins(activity.dp(2), activity.dp(2), activity.dp(2), activity.dp(2))
+                        classicGridItemFrame(
+                            classicPage = classicPage,
+                            item = item.copy(x = boundedX, y = boundedY, width = boundedWidth, height = boundedHeight),
+                            content = view,
+                            title = classicGridItemTitle(item, state),
+                            state = state,
+                            gridConfig = gridConfig,
+                            cellWidth = cellWidth,
+                            cellHeight = cellHeight,
+                            gap = gap,
+                        ),
+                        FrameLayout.LayoutParams(
+                            cellWidth * boundedWidth,
+                            cellHeight * boundedHeight,
+                        ).apply {
+                            leftMargin = cellWidth * boundedX
+                            topMargin = cellHeight * boundedY
                         },
                     )
                 }
+            layoutParams = FrameLayout.LayoutParams(workspaceWidth, workspaceHeight)
         }
         return FrameLayout(activity).apply {
             clipChildren = false
             clipToPadding = false
             addView(
                 grid,
-                FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL),
+                FrameLayout.LayoutParams(workspaceWidth, workspaceHeight, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+                    topMargin = activity.dp(4)
+                    bottomMargin = activity.dp(12)
+                },
             )
         }
+    }
+
+    private fun classicGridItemFrame(
+        classicPage: ClassicLauncherPageDefinition,
+        item: ClassicGridItem,
+        content: View,
+        title: String,
+        state: LauncherRenderModel,
+        gridConfig: ClassicGridConfig,
+        cellWidth: Int,
+        cellHeight: Int,
+        gap: Int,
+    ): View {
+        return object : FrameLayout(activity) {
+            private var downRawX = 0f
+            private var downRawY = 0f
+            private var dragging = false
+            private var resizing = false
+            private var selected = pendingClassicPlacementItemId() == item.id
+            private var draftChanged = false
+            private var draftX = item.x
+            private var draftY = item.y
+            private var draftWidth = item.width
+            private var draftHeight = item.height
+            private val longPressTimeout = ViewConfiguration.getLongPressTimeout().toLong()
+            private val longPressRunnable = Runnable {
+                selected = true
+                dragging = true
+                classicMenuAnchor = downRawX.toInt() to downRawY.toInt()
+                performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                showSelectionChrome()
+                parent?.requestDisallowInterceptTouchEvent(true)
+            }
+
+            init {
+                tag = CLASSIC_GRID_ITEM_FRAME_TAG
+                clipChildren = false
+                clipToPadding = false
+                setPadding(gap, gap, gap, gap)
+                addView(content, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                if (selected) {
+                    post { showSelectionChrome() }
+                }
+            }
+
+            override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downRawX = event.rawX
+                        downRawY = event.rawY
+                        dragging = false
+                        draftChanged = false
+                        draftX = item.x
+                        draftY = item.y
+                        draftWidth = item.width
+                        draftHeight = item.height
+                        resizing = event.x >= width - activity.dp(28) && event.y >= height - activity.dp(28) && selected
+                        removeCallbacks(longPressRunnable)
+                        if (resizing) {
+                            parent?.requestDisallowInterceptTouchEvent(true)
+                            return true
+                        }
+                        if (selected) {
+                            dragging = true
+                            classicMenuAnchor = downRawX.toInt() to downRawY.toInt()
+                            parent?.requestDisallowInterceptTouchEvent(true)
+                            return true
+                        }
+                        postDelayed(longPressRunnable, longPressTimeout)
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        if (resizing) {
+                            updateResizeDraft(event.rawX, event.rawY, gridConfig, cellWidth, cellHeight)
+                            return true
+                        }
+                        if (dragging) {
+                            updateMoveDraft(event.rawX, event.rawY, gridConfig, cellWidth, cellHeight)
+                            return true
+                        }
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        removeCallbacks(longPressRunnable)
+                        parent?.requestDisallowInterceptTouchEvent(false)
+                        if (resizing) {
+                            val valid = isDraftValid(gridConfig)
+                            resizing = false
+                            if (valid && draftChanged) {
+                                commitResizeVisualState()
+                                resizeClassicGridItem(classicPage, item, draftWidth, draftHeight)
+                            } else {
+                                resetVisualState()
+                            }
+                            return true
+                        }
+                        if (dragging) {
+                            val valid = isDraftValid(gridConfig)
+                            dragging = false
+                            if (!draftChanged) {
+                                resetVisualState()
+                                showClassicItemActions(this, classicPage, item, title, state)
+                                return true
+                            }
+                            if (valid) {
+                                commitMoveVisualState()
+                                moveClassicGridItemWithinPage(classicPage, item, draftX, draftY)
+                                finishClassicItemPlacement(item.id)
+                            } else {
+                                resetVisualState()
+                            }
+                            return true
+                        }
+                        if (selected) {
+                            showClassicItemActions(this, classicPage, item, title, state)
+                            return true
+                        }
+                    }
+                    MotionEvent.ACTION_CANCEL -> {
+                        removeCallbacks(longPressRunnable)
+                        parent?.requestDisallowInterceptTouchEvent(false)
+                        resetVisualState()
+                        dragging = false
+                        resizing = false
+                    }
+                }
+                return super.dispatchTouchEvent(event)
+            }
+
+            private fun updateMoveDraft(rawX: Float, rawY: Float, gridConfig: ClassicGridConfig, cellWidth: Int, cellHeight: Int) {
+                val dx = rawX - downRawX
+                val dy = rawY - downRawY
+                translationX = dx
+                translationY = dy
+                draftX = kotlin.math.round((item.x * cellWidth + dx) / cellWidth.toFloat()).toInt()
+                draftY = kotlin.math.round((item.y * cellHeight + dy) / cellHeight.toFloat()).toInt()
+                draftChanged = draftChanged || kotlin.math.abs(dx) > activity.dp(6) || kotlin.math.abs(dy) > activity.dp(6)
+                setInvalidTint(!isDraftValid(gridConfig))
+            }
+
+            private fun updateResizeDraft(rawX: Float, rawY: Float, gridConfig: ClassicGridConfig, cellWidth: Int, cellHeight: Int) {
+                val dx = rawX - downRawX
+                val dy = rawY - downRawY
+                draftWidth = kotlin.math.round((item.width * cellWidth + dx) / cellWidth.toFloat()).toInt().coerceAtLeast(1)
+                draftHeight = kotlin.math.round((item.height * cellHeight + dy) / cellHeight.toFloat()).toInt().coerceAtLeast(1)
+                draftChanged = draftChanged || draftWidth != item.width || draftHeight != item.height
+                layoutParams = (layoutParams as FrameLayout.LayoutParams).apply {
+                    width = cellWidth * draftWidth.coerceAtMost(gridConfig.columns)
+                    height = cellHeight * draftHeight.coerceAtMost(gridConfig.rows)
+                }
+                requestLayout()
+                setInvalidTint(!isDraftValid(gridConfig))
+            }
+
+            private fun isDraftValid(gridConfig: ClassicGridConfig): Boolean {
+                return classicPage.canPlaceItem(item.id, draftX, draftY, draftWidth, draftHeight, gridConfig)
+            }
+
+            private fun resetVisualState() {
+                translationX = 0f
+                translationY = 0f
+                foreground = null
+                layoutParams = (layoutParams as FrameLayout.LayoutParams).apply {
+                    width = cellWidth * item.width
+                    height = cellHeight * item.height
+                }
+                requestLayout()
+            }
+
+            private fun commitMoveVisualState() {
+                foreground = null
+                translationX = 0f
+                translationY = 0f
+                layoutParams = (layoutParams as FrameLayout.LayoutParams).apply {
+                    leftMargin = cellWidth * draftX
+                    topMargin = cellHeight * draftY
+                    width = cellWidth * item.width
+                    height = cellHeight * item.height
+                }
+                requestLayout()
+            }
+
+            private fun commitResizeVisualState() {
+                foreground = null
+                translationX = 0f
+                translationY = 0f
+                layoutParams = (layoutParams as FrameLayout.LayoutParams).apply {
+                    width = cellWidth * draftWidth.coerceAtMost(gridConfig.columns)
+                    height = cellHeight * draftHeight.coerceAtMost(gridConfig.rows)
+                }
+                requestLayout()
+            }
+
+            private fun setInvalidTint(invalid: Boolean) {
+                foreground = if (invalid) {
+                    ColorDrawable(Color.argb(90, 244, 67, 54))
+                } else {
+                    null
+                }
+            }
+
+            private fun showSelectionChrome() {
+                if (findViewWithTag<View>(CLASSIC_SELECTION_TAG) != null) return
+                addView(selectionChrome(), FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            }
+        }
+    }
+
+    private fun classicGridItemTitle(item: ClassicGridItem, state: LauncherRenderModel): String {
+        return when (item.type) {
+            ClassicGridItemType.APP -> state.appEntries.firstOrNull { app -> app.identityKey == item.target }?.label ?: "App"
+            ClassicGridItemType.WIDGET -> "Widget"
+            ClassicGridItemType.STATIC -> runCatching { ClassicStaticItem.valueOf(item.target) }.getOrNull()?.label ?: "Static item"
+        }
+    }
+
+    private fun selectionChrome(): FrameLayout {
+        return FrameLayout(activity).apply {
+            tag = CLASSIC_SELECTION_TAG
+            isClickable = false
+            background = GradientDrawable().apply {
+                setColor(Color.TRANSPARENT)
+                setStroke(activity.dp(2), GoogleInteractionStyle.primary(activity))
+                cornerRadius = activity.dp(14).toFloat()
+            }
+            addResizeHandle(Gravity.BOTTOM or Gravity.END)
+        }
+    }
+
+    private fun FrameLayout.addResizeHandle(gravity: Int) {
+        addView(
+            View(activity).apply {
+                background = GradientDrawable().apply {
+                    setColor(GoogleInteractionStyle.primary(activity))
+                    cornerRadius = activity.dp(999).toFloat()
+                }
+                isClickable = false
+            },
+            FrameLayout.LayoutParams(activity.dp(16), activity.dp(16), gravity).apply {
+                setMargins(activity.dp(3), activity.dp(3), activity.dp(3), activity.dp(3))
+            },
+        )
     }
 
     private fun classicWidgetTile(
@@ -462,11 +701,7 @@ class LauncherPageFactory(
         state: LauncherRenderModel,
         editing: Boolean,
     ): View {
-        lateinit var tile: FrameLayout
-        val showActions = {
-            showClassicItemActions(tile, classicPage, item, "Widget", state)
-        }
-        tile = classicLongPressFrame(showActions).apply {
+        val tile = FrameLayout(activity).apply {
             clipChildren = false
             clipToPadding = false
             val widgetView = createWidgetView(item)
@@ -494,51 +729,6 @@ class LauncherPageFactory(
             }
         } else {
             tile
-        }
-    }
-
-    private fun classicLongPressFrame(showActions: () -> Unit): FrameLayout {
-        val longPressTimeout = ViewConfiguration.getLongPressTimeout().toLong()
-        val touchSlop = ViewConfiguration.get(activity).scaledTouchSlop
-        return object : FrameLayout(activity) {
-            private var downX = 0f
-            private var downY = 0f
-            private var longPressTriggered = false
-            private val longPressRunnable = Runnable {
-                longPressTriggered = true
-                performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-                showActions()
-            }
-
-            override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> {
-                        downX = event.x
-                        downY = event.y
-                        longPressTriggered = false
-                        removeCallbacks(longPressRunnable)
-                        postDelayed(longPressRunnable, longPressTimeout)
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        if (kotlin.math.abs(event.x - downX) > touchSlop || kotlin.math.abs(event.y - downY) > touchSlop) {
-                            removeCallbacks(longPressRunnable)
-                        }
-                    }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        removeCallbacks(longPressRunnable)
-                        if (longPressTriggered) {
-                            longPressTriggered = false
-                            return true
-                        }
-                    }
-                }
-                return super.dispatchTouchEvent(event)
-            }
-
-            override fun onDetachedFromWindow() {
-                removeCallbacks(longPressRunnable)
-                super.onDetachedFromWindow()
-            }
         }
     }
 
@@ -712,15 +902,6 @@ class LauncherPageFactory(
         title: String,
         state: LauncherRenderModel,
     ) {
-        val content = TextView(activity).apply {
-            text = title
-            setTextColor(CalmTheme.INK)
-            textSize = 22f
-            typeface = Typeface.DEFAULT
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.CENTER
-            includeFontPadding = false
-        }
         val actions = mutableListOf<ContextAction>()
         val moveTargets = state.classicPages.filter { page -> page.id != classicPage.id }
         if (item.type == ClassicGridItemType.WIDGET && canConfigureClassicWidget(item)) {
@@ -734,15 +915,8 @@ class LauncherPageFactory(
         }
         actions.add(
             ContextAction(
-                "Position",
-                Runnable { showClassicPositionDialog(classicPage, item) },
-                ContextActionCloseBehavior.REMOVE_CARD,
-            ),
-        )
-        actions.add(
-            ContextAction(
-                "Resize",
-                Runnable { showClassicResizeDialog(classicPage, item) },
+                "Default size",
+                Runnable { resetClassicGridItemSize(classicPage, item) },
                 ContextActionCloseBehavior.REMOVE_CARD,
             ),
         )
@@ -758,15 +932,47 @@ class LauncherPageFactory(
         actions.add(
             ContextAction(
                 "Remove",
-                Runnable { removeClassicGridItem(classicPage, item) },
+                Runnable {
+                    removeClassicItemFrameImmediately(source)
+                    removeClassicGridItem(classicPage, item)
+                },
                 ContextActionCloseBehavior.REMOVE_CARD,
             ),
         )
-        focusOverlay.showExpandedCard(
-            source,
-            content,
-            actions,
-        )
+        showClassicPopupActions(source, actions)
+    }
+
+    private fun removeClassicItemFrameImmediately(source: View) {
+        val frame = source.closestClassicItemFrame() ?: source
+        frame.animate()
+            .alpha(0f)
+            .scaleX(0.96f)
+            .scaleY(0.96f)
+            .setDuration(90L)
+            .withEndAction { (frame.parent as? ViewGroup)?.removeView(frame) }
+            .start()
+    }
+
+    private fun View.closestClassicItemFrame(): View? {
+        var cursor: View? = this
+        while (cursor != null) {
+            if (cursor.tag == CLASSIC_GRID_ITEM_FRAME_TAG) return cursor
+            cursor = cursor.parent as? View
+        }
+        return null
+    }
+
+    private fun showClassicPopupActions(source: View, actions: List<ContextAction>) {
+        focusOverlay.dismiss(false)
+        val anchor = classicMenuAnchor ?: source.screenCenter()
+        classicMenuAnchor = null
+        GoogleInteractionStyle.popupMenu(activity, source, anchor, actions)
+    }
+
+    private fun View.screenCenter(): Pair<Int, Int> {
+        val location = IntArray(2)
+        getLocationOnScreen(location)
+        return location[0] + width / 2 to location[1] + height / 2
     }
 
     private fun showClassicMoveDialog(
@@ -774,7 +980,7 @@ class LauncherPageFactory(
         item: ClassicGridItem,
         moveTargets: List<ClassicLauncherPageDefinition>,
     ) {
-        AlertDialog.Builder(activity)
+        GoogleInteractionStyle.dialogBuilder(activity)
             .setTitle("Move to")
             .setItems(moveTargets.map { page -> page.title }.toTypedArray()) { _, which ->
                 moveClassicGridItem(classicPage, item, moveTargets[which])
@@ -827,7 +1033,7 @@ class LauncherPageFactory(
         val scroll = ScrollView(activity).apply {
             addView(grid, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
-        dialog = AlertDialog.Builder(activity)
+        dialog = GoogleInteractionStyle.dialogBuilder(activity)
             .setTitle("Position")
             .setView(scroll)
             .setNegativeButton("Cancel", null)
@@ -842,21 +1048,22 @@ class LauncherPageFactory(
         current: Boolean,
         onClick: () -> Unit,
     ): TextView {
-        val color = when {
-            current -> Color.argb(68, Color.red(CalmTheme.ACCENT), Color.green(CalmTheme.ACCENT), Color.blue(CalmTheme.ACCENT))
-            available -> CalmTheme.QUIET_GLASS
-            else -> Color.argb(22, 255, 255, 255)
-        }
         return TextView(activity).apply {
             text = label
             this.contentDescription = contentDescription
-            setTextColor(if (available) CalmTheme.INK else CalmTheme.MUTED_INK)
+            setTextColor(
+                if (available) {
+                    GoogleInteractionStyle.onSurface(activity)
+                } else {
+                    GoogleInteractionStyle.onSurfaceVariant(activity)
+                },
+            )
             textSize = if (current) 12f else 11f
             typeface = Typeface.DEFAULT
             setTypeface(typeface, if (current) Typeface.BOLD else Typeface.NORMAL)
             gravity = Gravity.CENTER
             includeFontPadding = false
-            background = drawables.glass(color, activity.dp(12))
+            background = GoogleInteractionStyle.chipBackground(activity, selected = current, radiusDp = 12)
             alpha = if (available) 1f else 0.42f
             isEnabled = available
             if (available) {
@@ -876,7 +1083,7 @@ class LauncherPageFactory(
 
     private fun showClassicResizeDialog(classicPage: ClassicLauncherPageDefinition, item: ClassicGridItem) {
         val options = CLASSIC_ITEM_SIZE_OPTIONS
-        AlertDialog.Builder(activity)
+        GoogleInteractionStyle.dialogBuilder(activity)
             .setTitle("Resize")
             .setItems(options.map { option -> option.label(item) }.toTypedArray()) { _, which ->
                 val option = options[which]
@@ -957,6 +1164,8 @@ class LauncherPageFactory(
 
     private companion object {
         private const val CLASSIC_PICKER_COLUMNS = 2
+        private const val CLASSIC_SELECTION_TAG = "classic-selection"
+        private const val CLASSIC_GRID_ITEM_FRAME_TAG = "classic-grid-item-frame"
 
         val CLASSIC_ITEM_SIZE_OPTIONS = listOf(
             ClassicItemSizeOption("Icon", 1, 1),

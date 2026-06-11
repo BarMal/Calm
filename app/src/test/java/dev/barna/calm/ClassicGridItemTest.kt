@@ -80,22 +80,22 @@ class ClassicGridItemTest {
     }
 
     @Test
-    fun decodeClampsItemsIntoGridBounds() {
+    fun decodePreservesCoordinatesForConfigurableGrid() {
         val decoded = ClassicGridItem.decode(
             JSONObject()
                 .put("id", "widget-1")
                 .put("type", "WIDGET")
                 .put("target", "clock")
-                .put("x", 99)
-                .put("y", 99)
-                .put("width", 99)
-                .put("height", 99),
+                .put("x", 8)
+                .put("y", 20)
+                .put("width", 9)
+                .put("height", 21),
         )
 
-        assertEquals(ClassicGridItem.GRID_COLUMNS - 1, decoded?.x)
-        assertEquals(ClassicGridItem.DEFAULT_GRID_ROWS - 1, decoded?.y)
-        assertEquals(1, decoded?.width)
-        assertEquals(1, decoded?.height)
+        assertEquals(8, decoded?.x)
+        assertEquals(20, decoded?.y)
+        assertEquals(9, decoded?.width)
+        assertEquals(21, decoded?.height)
     }
 
     @Test

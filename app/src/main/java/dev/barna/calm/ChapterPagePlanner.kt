@@ -68,7 +68,7 @@ class ChapterPagePlanner {
             pages.add(ChapterPage.workOverview(CalmTheme.WORK_OVERVIEW_KEY, roman(chapterNumber)))
             chapterNumber++
         }
-        classicPages.filter { it.enabled }.forEach { classicPage ->
+        classicPages.forEach { classicPage ->
             pages.add(ChapterPage.classic(classicPage, roman(chapterNumber)))
             chapterNumber++
         }

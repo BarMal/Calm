@@ -8,6 +8,7 @@ class LauncherAppMutationHandler(
     private val render: () -> Unit,
     private val selectPage: (String) -> Unit,
     private val loadPinnedApps: () -> List<AppEntry>,
+    private val beginClassicItemPlacement: (ClassicLauncherPageDefinition, String) -> Unit = { _, _ -> },
 ) {
     fun pinApp(app: AppEntry) {
         settings.pinPackage(app.identityKey)
@@ -86,7 +87,8 @@ class LauncherAppMutationHandler(
         }
         if (settings.addAppToClassicPage(page.id, app.identityKey)) {
             selectPage(page.key)
-            Toast.makeText(activity, "Added ${app.label} to ${page.title}", Toast.LENGTH_SHORT).show()
+            beginClassicItemPlacement(page, ClassicGridItem.app(app.identityKey, x = 0, y = 0).id)
+            Toast.makeText(activity, "Added ${app.label}; drag to place", Toast.LENGTH_SHORT).show()
             render()
         } else {
             Toast.makeText(activity, "${page.title} is full", Toast.LENGTH_SHORT).show()

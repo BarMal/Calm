@@ -7,6 +7,7 @@ import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.GridLayout
 import android.widget.ImageView
@@ -40,6 +41,9 @@ class LauncherPageFactory(
     private val removeClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem) -> Unit,
     private val moveClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem, ClassicLauncherPageDefinition) -> Unit,
     private val resizeClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem, Int, Int) -> Unit,
+    private val renameClassicPage: (ClassicLauncherPageDefinition, String) -> Unit,
+    private val setDefaultClassicPage: (ClassicLauncherPageDefinition) -> Unit,
+    private val removeClassicPage: (ClassicLauncherPageDefinition) -> Unit,
     private val barePagePanel: (Int) -> LinearLayout,
     private val label: (String, Int, Int, Int) -> TextView,
 ) {
@@ -68,6 +72,10 @@ class LauncherPageFactory(
             }
         }
         return barePagePanel(activity.dp(20)).apply {
+            setOnLongClickListener {
+                showClassicPageActions(this, classicPage, state)
+                true
+            }
             addView(classicHeader(classicPage, state))
             if (gridItems.isEmpty()) {
                 addView(
@@ -95,8 +103,17 @@ class LauncherPageFactory(
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(0, activity.dp(8), 0, activity.dp(24))
+                setOnLongClickListener {
+                    showClassicPageActions(this, classicPage, state)
+                    true
+                }
                 addView(
-                    label(classicPage.title, 30, CalmTheme.INK, Typeface.NORMAL),
+                    label(classicPage.title, 30, CalmTheme.INK, Typeface.NORMAL).apply {
+                        setOnLongClickListener {
+                            showClassicPageActions(this, classicPage, state)
+                            true
+                        }
+                    },
                     LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
                 )
                 addView(classicHeaderButton("Add app") { showClassicAppPicker(classicPage, state) }.apply {
@@ -123,6 +140,82 @@ class LauncherPageFactory(
             minWidth = activity.dp(104)
             setOnClickListener { action() }
         }
+    }
+
+    private fun showClassicPageActions(
+        source: View,
+        classicPage: ClassicLauncherPageDefinition,
+        state: LauncherRenderModel,
+    ) {
+        val content = TextView(activity).apply {
+            text = classicPage.title
+            setTextColor(CalmTheme.INK)
+            textSize = 22f
+            typeface = Typeface.DEFAULT
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+        }
+        focusOverlay.showExpandedCard(
+            source,
+            content,
+            listOf(
+                ContextAction(
+                    "Add app",
+                    Runnable { showClassicAppPicker(classicPage, state) },
+                    ContextActionCloseBehavior.REMOVE_CARD,
+                ),
+                ContextAction(
+                    "Add widget",
+                    Runnable { addWidgetToClassicPage(classicPage) },
+                    ContextActionCloseBehavior.REMOVE_CARD,
+                ),
+                ContextAction(
+                    "Rename",
+                    Runnable { showRenameClassicPageDialog(classicPage) },
+                    ContextActionCloseBehavior.REMOVE_CARD,
+                ),
+                ContextAction(
+                    "Set home",
+                    Runnable { setDefaultClassicPage(classicPage) },
+                    ContextActionCloseBehavior.REMOVE_CARD,
+                ),
+                ContextAction(
+                    "Remove",
+                    Runnable { confirmRemoveClassicPage(classicPage) },
+                    ContextActionCloseBehavior.REMOVE_CARD,
+                ),
+            ),
+        )
+    }
+
+    private fun showRenameClassicPageDialog(classicPage: ClassicLauncherPageDefinition) {
+        val input = EditText(activity).apply {
+            setText(classicPage.title)
+            setSingleLine(true)
+            setSelection(0, text.length)
+        }
+        AlertDialog.Builder(activity)
+            .setTitle("Rename Classic page")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Save") { _, _ -> renameClassicPage(classicPage, input.text.toString()) }
+            .show()
+    }
+
+    private fun confirmRemoveClassicPage(classicPage: ClassicLauncherPageDefinition) {
+        val itemCount = classicPage.items.size
+        val message = if (itemCount == 0) {
+            "Remove ${classicPage.title}?"
+        } else {
+            "Remove ${classicPage.title} and its $itemCount ${if (itemCount == 1) "item" else "items"}?"
+        }
+        AlertDialog.Builder(activity)
+            .setTitle("Remove Classic page")
+            .setMessage(message)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Remove") { _, _ -> removeClassicPage(classicPage) }
+            .show()
     }
 
     private fun showClassicAppPicker(classicPage: ClassicLauncherPageDefinition, state: LauncherRenderModel) {

@@ -1,8 +1,10 @@
 package dev.barna.calm
 
 import android.app.AlertDialog
+import android.content.ClipData
 import android.graphics.Bitmap
 import android.graphics.Typeface
+import android.view.DragEvent
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -13,7 +15,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 
-/** Renders a custom home page: a fixed-column grid of app icons and widgets placed by the user. */
+/** Renders a custom home page: a fixed-column grid of app icons and widgets, drag-to-reposition. */
 class CustomHomePageController(
     private val activity: MainActivity,
     private val settings: LauncherSettings,
@@ -42,9 +44,9 @@ class CustomHomePageController(
         val byApp = appEntries().associateBy { it.identityKey }
         grid.items.forEach { item ->
             when (item.type) {
-                GridItemType.APP -> byApp[item.ref]?.let { app -> gridView.addView(appCell(grid, item, app)) }
+                GridItemType.APP -> byApp[item.ref]?.let { app -> gridView.addView(appCell(item, app)) }
                 GridItemType.WIDGET -> item.ref.toIntOrNull()?.let { id ->
-                    widgetHost.createView(id)?.let { hostView -> gridView.addView(widgetCell(grid, item, id, hostView)) }
+                    widgetHost.createView(id)?.let { hostView -> gridView.addView(widgetCell(item, hostView)) }
                 }
             }
         }
@@ -57,7 +59,51 @@ class CustomHomePageController(
             },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
         )
+
+        val removeZone = removeZone()
+        page.addView(removeZone)
+        installDrag(page, gridView, removeZone, grid)
         return page
+    }
+
+    private fun installDrag(page: View, gridView: GridLayout, removeZone: View, grid: HomeGrid) {
+        page.setOnDragListener { _, event ->
+            when (event.action) {
+                DragEvent.ACTION_DRAG_STARTED -> { removeZone.visibility = View.VISIBLE; true }
+                DragEvent.ACTION_DRAG_ENDED -> { removeZone.visibility = View.GONE; true }
+                else -> true
+            }
+        }
+        gridView.setOnDragListener { view, event ->
+            if (event.action == DragEvent.ACTION_DROP) handleGridDrop(view as GridLayout, grid, event)
+            true
+        }
+        removeZone.setOnDragListener { _, event ->
+            if (event.action == DragEvent.ACTION_DROP) (event.localState as? HomeGridItem)?.let { removeItem(grid, it) }
+            true
+        }
+    }
+
+    private fun handleGridDrop(gridView: GridLayout, grid: HomeGrid, event: DragEvent) {
+        val item = event.localState as? HomeGridItem ?: return
+        val cellWidth = (gridView.width / grid.columns).coerceAtLeast(1)
+        val column = (event.x / cellWidth).toInt().coerceIn(0, grid.columns - 1)
+        val row = (event.y / cellHeight.coerceAtLeast(1)).toInt().coerceAtLeast(0)
+        if (column == item.column && row == item.row) return
+        if (grid.canPlace(item, column, row)) {
+            settings.setHomeGrid(grid.moving(item, column, row))
+            onChanged()
+        }
+    }
+
+    private fun removeItem(grid: HomeGrid, item: HomeGridItem) {
+        if (item.type == GridItemType.WIDGET) item.ref.toIntOrNull()?.let { widgetHost.deleteWidgetId(it) }
+        settings.setHomeGrid(grid.without(item))
+        onChanged()
+    }
+
+    private fun startDrag(view: View, item: HomeGridItem) {
+        view.startDragAndDrop(ClipData.newPlainText("", ""), View.DragShadowBuilder(view), item, 0)
     }
 
     private fun headerRow(grid: HomeGrid): View {
@@ -87,7 +133,19 @@ class CustomHomePageController(
         }
     }
 
-    private fun appCell(grid: HomeGrid, item: HomeGridItem, app: AppEntry): View {
+    private fun removeZone(): View {
+        return label("✕  Drag here to remove", 14, CalmTheme.INK, Typeface.NORMAL).apply {
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+            setPadding(activity.dp(16), activity.dp(14), activity.dp(16), activity.dp(14))
+            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(16))
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = activity.dp(10)
+            }
+        }
+    }
+
+    private fun appCell(item: HomeGridItem, app: AppEntry): View {
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -107,26 +165,17 @@ class CustomHomePageController(
                 },
             )
             setOnClickListener { openAppEntry(app) }
-            setOnLongClickListener {
-                settings.setHomeGrid(grid.withoutItem(item.column, item.row))
-                onChanged()
-                true
-            }
+            setOnLongClickListener { startDrag(this, item); true }
             layoutParams = cellParams(item)
         }
     }
 
-    private fun widgetCell(grid: HomeGrid, item: HomeGridItem, widgetId: Int, hostView: View): View {
+    private fun widgetCell(item: HomeGridItem, hostView: View): View {
         return FrameLayout(activity).apply {
             background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(14))
             setPadding(activity.dp(4), activity.dp(4), activity.dp(4), activity.dp(4))
             addView(hostView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-            setOnLongClickListener {
-                widgetHost.deleteWidgetId(widgetId)
-                settings.setHomeGrid(grid.withoutItem(item.column, item.row))
-                onChanged()
-                true
-            }
+            setOnLongClickListener { startDrag(this, item); true }
             layoutParams = cellParams(item)
         }
     }

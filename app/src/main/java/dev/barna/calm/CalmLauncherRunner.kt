@@ -77,7 +77,7 @@ class CalmLauncherRunner(
             unpinApp = appMutationHandler::unpinApp,
             openAppInfo = { app -> openAppInfo(app.packageName, app.userHandle, app.componentName) },
             hideApp = appMutationHandler::hideApp,
-            appShortcuts = { chapter -> notificationRepository.getAppShortcuts(chapter) },
+            appShortcuts = { app -> notificationRepository.getAppShortcuts(app) },
             launchShortcut = { shortcut ->
                 if (!notificationRepository.launchShortcut(shortcut)) {
                     Toast.makeText(activity, "Shortcut unavailable", Toast.LENGTH_SHORT).show()

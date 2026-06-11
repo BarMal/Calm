@@ -22,6 +22,7 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -37,6 +38,7 @@ class CalmSettingsActivity : ComponentActivity() {
     private var settingsScrollY = 0
     private var cachedAppEntries: List<AppEntry>? = null
     private var destroyed = false
+    private var currentSettingsPage = SettingsPage.ROOT
     private val calendarPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
         render()
     }
@@ -49,6 +51,16 @@ class CalmSettingsActivity : ComponentActivity() {
         }
         appRepository = NotificationChapterRepository(this, settings)
         drawables = CalmDrawables(this)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (currentSettingsPage != SettingsPage.ROOT) {
+                    openSettingsPage(SettingsPage.ROOT)
+                    return
+                }
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+            }
+        })
         configureWindow()
         render()
         appLoadExecutor.execute {
@@ -96,10 +108,71 @@ class CalmSettingsActivity : ComponentActivity() {
         screen.addView(scrollView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(screen)
 
-        content.addView(label("Settings", 32, CalmTheme.INK, Typeface.NORMAL).apply {
+        renderSettingsContent(content)
+        scrollView.post { scrollView.scrollTo(0, settingsScrollY) }
+    }
+
+    private fun renderSettingsContent(content: LinearLayout) {
+        content.addView(settingsTitle())
+        when (currentSettingsPage) {
+            SettingsPage.ROOT -> renderSettingsHome(content)
+            SettingsPage.APPEARANCE -> renderAppearanceSettings(content)
+            SettingsPage.PAGES -> renderPageSettings(content)
+            SettingsPage.APPS -> renderAppSettings(content)
+            SettingsPage.DOCK -> renderDockSettings(content)
+            SettingsPage.CARD_STACK -> renderCardStackSettings(content)
+            SettingsPage.ACCESS -> renderAccessSettings(content)
+        }
+    }
+
+    private fun settingsTitle(): TextView {
+        val title = if (currentSettingsPage == SettingsPage.ROOT) "Settings" else currentSettingsPage.title
+        return label(title, 32, CalmTheme.INK, Typeface.NORMAL).apply {
             setPadding(0, dp(2), 0, dp(18))
-        })
-        content.addView(section("Appearance"))
+        }
+    }
+
+    private fun renderSettingsHome(content: LinearLayout) {
+        content.addView(section("Launcher"))
+        content.addView(settingsGroupRow(
+            SettingsPage.PAGES,
+            "Pages",
+            "Order pages, choose the home page, and manage page-level features.",
+        ))
+        content.addView(settingsGroupRow(
+            SettingsPage.APPS,
+            "Apps and icons",
+            "Pin apps, manage hidden apps, choose dock apps, and use app shortcuts.",
+        ))
+        content.addView(settingsGroupRow(
+            SettingsPage.DOCK,
+            "Dock",
+            dockAppsSummary(),
+        ))
+
+        content.addView(section("Look and feel"))
+        content.addView(settingsGroupRow(
+            SettingsPage.APPEARANCE,
+            "Appearance",
+            "Card colours, effects, icons, haptics, and focus blur.",
+        ))
+        content.addView(settingsGroupRow(
+            SettingsPage.CARD_STACK,
+            "Card stack",
+            "Path, spacing, fade, snap, tilt, and visible-card controls.",
+        ))
+
+        content.addView(section("System"))
+        content.addView(settingsGroupRow(
+            SettingsPage.ACCESS,
+            "Access",
+            "Wallpaper, notification access, and calendar access.",
+        ))
+    }
+
+    private fun renderAppearanceSettings(content: LinearLayout) {
+        content.addView(backRow())
+        content.addView(section("Cards"))
         content.addView(switchRow(
             title = "Tint notification cards",
             summary = "Move app colour from chapter panels onto cards.",
@@ -158,12 +231,29 @@ class CalmSettingsActivity : ComponentActivity() {
             max = 4,
             valueText = { "Very light / ${it + 1} of 5" },
         ) { settings.setCardHapticStrength(it + 1) })
+    }
 
+    private fun renderPageSettings(content: LinearLayout) {
+        content.addView(backRow())
         content.addView(section("Pages"))
         content.addView(actionRow("Page layout", "Reorder pages, toggle presets, and set the home page.") {
             showPageLayoutDialog()
         })
+        content.addView(switchRow(
+            title = "Favourite contacts page",
+            summary = "Add a People page with your starred contacts and ways to reach them.",
+            checked = settings.contactsPageEnabled(),
+        ) { settings.toggleContactsPage(); requestRender() })
+        content.addView(actionRow(
+            "Page order",
+            "Sorted by ${pageSortLabel(settings.pageSortOrder())}.",
+        ) {
+            showPageSortDialog()
+        })
+    }
 
+    private fun renderAppSettings(content: LinearLayout) {
+        content.addView(backRow())
         content.addView(section("Apps"))
         content.addView(switchRow(
             title = "Split personal and work apps",
@@ -180,19 +270,23 @@ class CalmSettingsActivity : ComponentActivity() {
             summary = "Place work notification chapters before the app chapters.",
             checked = settings.placeWorkNotificationChaptersBeforeApps(),
         ) { settings.toggleWorkNotificationChaptersBeforeApps(); requestRender() })
-        content.addView(actionRow(
-            "Page order",
-            "Sorted by ${pageSortLabel(settings.pageSortOrder())}.",
-        ) {
-            showPageSortDialog()
+        content.addView(actionRow("Pinned apps", "Long-press an app card and choose Pin to add it to the Pinned page.") {
+            Toast.makeText(this, "Long-press an app card, then choose Pin", Toast.LENGTH_SHORT).show()
         })
+        content.addView(actionRow("App shortcuts", "Long-press an app card to launch its available shortcuts.") {
+            Toast.makeText(this, "Long-press an app card to see shortcuts", Toast.LENGTH_SHORT).show()
+        })
+        content.addView(actionRow("Dock apps", dockAppsSummary()) { showDockAppsDialog() })
         content.addView(actionRow(
             "Hidden apps",
             hiddenAppsSummary(),
         ) {
             showHiddenAppsDialog()
         })
+    }
 
+    private fun renderDockSettings(content: LinearLayout) {
+        content.addView(backRow())
         content.addView(section("Dock"))
         val dock = settings.dockConfig()
         content.addView(switchRow(
@@ -219,7 +313,10 @@ class CalmSettingsActivity : ComponentActivity() {
             max = DockConfig.MAX_HORIZONTAL_PADDING_DP,
             valueText = { "${it}dp padding" },
         ) { settings.setDockHorizontalPadding(it); requestRender() })
+    }
 
+    private fun renderCardStackSettings(content: LinearLayout) {
+        content.addView(backRow())
         content.addView(section("Card stack"))
         content.addView(actionRow("Apply Timescape preset", "Restore the curved stacked-card defaults.") {
             settings.applyTimescapeStackPreset()
@@ -254,7 +351,10 @@ class CalmSettingsActivity : ComponentActivity() {
             content.addView(sliderRow("Vertical spacing", advancedTuning.verticalSpacing, 100, { "${it}% spread" }) { settings.setCardStackSpacing(it) })
             content.addView(stepperRow("Visible cards", advancedTuning.visibleCards, 1, 5) { settings.setVisibleCardCount(it); requestRender() })
         }
+    }
 
+    private fun renderAccessSettings(content: LinearLayout) {
+        content.addView(backRow())
         content.addView(section("Access"))
         content.addView(actionRow("Set wallpaper", "Open Android's wallpaper picker.") {
             startActivity(Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Set wallpaper"))
@@ -271,7 +371,20 @@ class CalmSettingsActivity : ComponentActivity() {
         ) {
             calendarRepository.requestCalendarAccess()
         })
-        scrollView.post { scrollView.scrollTo(0, settingsScrollY) }
+    }
+
+    private fun settingsGroupRow(page: SettingsPage, title: String, summary: String): View {
+        return actionRow(title, summary) { openSettingsPage(page) }
+    }
+
+    private fun backRow(): View {
+        return actionRow("All settings", "Back to grouped settings.") { openSettingsPage(SettingsPage.ROOT) }
+    }
+
+    private fun openSettingsPage(page: SettingsPage) {
+        currentSettingsPage = page
+        settingsScrollY = 0
+        render()
     }
 
     private fun switchRow(
@@ -687,5 +800,15 @@ class CalmSettingsActivity : ComponentActivity() {
 
     private companion object {
         const val SETTINGS_RENDER_DELAY_MS = 80L
+    }
+
+    private enum class SettingsPage(val title: String) {
+        ROOT("Settings"),
+        APPEARANCE("Appearance"),
+        PAGES("Pages"),
+        APPS("Apps and icons"),
+        DOCK("Dock"),
+        CARD_STACK("Card stack"),
+        ACCESS("Access"),
     }
 }

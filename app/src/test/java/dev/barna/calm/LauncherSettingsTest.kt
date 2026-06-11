@@ -444,6 +444,75 @@ class LauncherSettingsTest {
     }
 
     @Test
+    fun moveClassicGridItemMovesItemToTargetPage() {
+        val app = ClassicGridItem.app("com.example", x = 0, y = 0)
+        val targetExisting = ClassicGridItem.app("com.target", x = 0, y = 0)
+        settings.setClassicPages(
+            listOf(
+                ClassicLauncherPageDefinition(id = "classic-1", title = "Classic").copy(items = listOf(app)),
+                ClassicLauncherPageDefinition(id = "classic-2", title = "Second").copy(items = listOf(targetExisting)),
+            ),
+        )
+
+        assertTrue(settings.moveClassicGridItem("classic-1", app.id, "classic-2"))
+
+        val pages = settings.classicPages()
+        assertTrue(pages[0].items.isEmpty())
+        val moved = pages[1].items.single { item -> item.id == app.id }
+        assertEquals(app.target, moved.target)
+        assertEquals(1, moved.x)
+        assertEquals(0, moved.y)
+    }
+
+    @Test
+    fun moveClassicGridItemEnablesDisabledTargetPage() {
+        val app = ClassicGridItem.app("com.example", x = 0, y = 0)
+        settings.setClassicPages(
+            listOf(
+                ClassicLauncherPageDefinition(id = "classic-1", title = "Classic").copy(items = listOf(app)),
+                ClassicLauncherPageDefinition(id = "classic-2", title = "Second", enabled = false),
+            ),
+        )
+
+        assertTrue(settings.moveClassicGridItem("classic-1", app.id, "classic-2"))
+
+        val target = settings.classicPages().single { page -> page.id == "classic-2" }
+        assertTrue(target.enabled)
+        assertTrue(target.containsApp("com.example"))
+    }
+
+    @Test
+    fun moveClassicGridItemReturnsFalseWhenTargetFullAndKeepsSource() {
+        val app = ClassicGridItem.app("com.example", x = 0, y = 0)
+        val full = (0 until ClassicGridItem.DEFAULT_GRID_ROWS).flatMap { row ->
+            (0 until ClassicGridItem.GRID_COLUMNS).map { column ->
+                ClassicGridItem.app("com.$row.$column", column, row)
+            }
+        }
+        settings.setClassicPages(
+            listOf(
+                ClassicLauncherPageDefinition(id = "classic-1", title = "Classic").copy(items = listOf(app)),
+                ClassicLauncherPageDefinition(id = "classic-2", title = "Second").copy(items = full),
+            ),
+        )
+
+        assertFalse(settings.moveClassicGridItem("classic-1", app.id, "classic-2"))
+
+        val pages = settings.classicPages()
+        assertEquals(listOf(app), pages[0].items)
+        assertEquals(full, pages[1].items)
+    }
+
+    @Test
+    fun moveClassicGridItemReturnsFalseForSamePage() {
+        val app = ClassicGridItem.app("com.example", x = 0, y = 0)
+        settings.setClassicPages(listOf(ClassicLauncherPageDefinition.default().copy(items = listOf(app))))
+
+        assertFalse(settings.moveClassicGridItem("classic-1", app.id, "classic-1"))
+        assertEquals(listOf(app), settings.classicPages().single().items)
+    }
+
+    @Test
     fun cardStackCurveRoundTrips() {
         settings.setCardStackCurve(75)
         assertEquals(75, settings.cardStackTuning().curve)

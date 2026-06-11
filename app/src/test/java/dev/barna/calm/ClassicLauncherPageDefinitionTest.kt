@@ -101,4 +101,29 @@ class ClassicLauncherPageDefinitionTest {
 
         assertEquals(listOf(widget), updated.items)
     }
+
+    @Test
+    fun withItemAtNextFreeAreaPreservesMovedItemIdentityAndSpan() {
+        val target = ClassicLauncherPageDefinition.default().withApp("com.a")
+        val widget = ClassicGridItem.widget(appWidgetId = 42, x = 3, y = 5, width = 4, height = 2)
+
+        val updated = target?.withItemAtNextFreeArea(widget)
+        val moved = updated?.items?.single { it.id == widget.id }
+
+        assertEquals(widget.id, moved?.id)
+        assertEquals(widget.type, moved?.type)
+        assertEquals(widget.target, moved?.target)
+        assertEquals(0, moved?.x)
+        assertEquals(1, moved?.y)
+        assertEquals(4, moved?.width)
+        assertEquals(2, moved?.height)
+    }
+
+    @Test
+    fun withItemAtNextFreeAreaReturnsNullForDuplicateItem() {
+        val app = ClassicGridItem.app("com.example", x = 0, y = 0)
+        val page = ClassicLauncherPageDefinition.default().copy(items = listOf(app))
+
+        assertNull(page.withItemAtNextFreeArea(app.copy(x = 1, y = 0)))
+    }
 }

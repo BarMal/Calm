@@ -42,6 +42,14 @@ data class ClassicLauncherPageDefinition(
         return copy(items = items + ClassicGridItem.widget(appWidgetId, position.first, position.second, boundedWidth, boundedHeight))
     }
 
+    fun withItemAtNextFreeArea(item: ClassicGridItem): ClassicLauncherPageDefinition? {
+        if (items.any { existing -> existing.id == item.id }) return null
+        val boundedWidth = item.width.coerceIn(1, ClassicGridItem.GRID_COLUMNS)
+        val boundedHeight = item.height.coerceIn(1, ClassicGridItem.DEFAULT_GRID_ROWS)
+        val position = nextFreeArea(boundedWidth, boundedHeight) ?: return null
+        return copy(items = items + item.copy(x = position.first, y = position.second, width = boundedWidth, height = boundedHeight))
+    }
+
     fun withoutItem(itemId: String): ClassicLauncherPageDefinition {
         return copy(items = items.filterNot { item -> item.id == itemId })
     }

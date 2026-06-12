@@ -168,16 +168,18 @@ jobs:
           RELEASE_TITLE: ${{ github.event_name == 'workflow_dispatch' && inputs.release_title || 'Latest Calm Alpha APKs' }}
         run: |
           set -euo pipefail
-          if [[ "${RELEASE_TAG}" == "apks-latest" ]] && gh release view debug-latest >/dev/null 2>&1; then
-            gh release delete debug-latest --yes --cleanup-tag
-          fi
-
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release delete "${RELEASE_TAG}" --yes --cleanup-tag
+            gh release edit "${RELEASE_TAG}" \
+              --title "${RELEASE_TITLE}" \
+              --notes-file release-notes.md \
+              --prerelease \
+              --target "$GITHUB_SHA"
+          else
+            gh release create "${RELEASE_TAG}" \
+              --title "${RELEASE_TITLE}" \
+              --notes-file release-notes.md \
+              --prerelease \
+              --target "$GITHUB_SHA"
           fi
 
-          gh release create "${RELEASE_TAG}" release-assets/*.apk \
-            --title "${RELEASE_TITLE}" \
-            --notes-file release-notes.md \
-            --prerelease \
-            --target "$GITHUB_SHA"
+          gh release upload "${RELEASE_TAG}" release-assets/*.apk --clobber

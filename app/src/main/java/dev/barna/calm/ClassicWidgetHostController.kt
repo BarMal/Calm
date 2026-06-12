@@ -9,6 +9,7 @@ import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Typeface
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -36,10 +37,12 @@ class ClassicWidgetHostController(
 
     fun startListening() {
         runCatching { appWidgetHost.startListening() }
+            .onFailure { Log.w(TAG, "Widget host startListening failed", it) }
     }
 
     fun stopListening() {
         runCatching { appWidgetHost.stopListening() }
+            .onFailure { Log.w(TAG, "Widget host stopListening failed", it) }
     }
 
     fun requestAddWidget(page: ClassicLauncherPageDefinition) {
@@ -157,7 +160,8 @@ class ClassicWidgetHostController(
         pendingRequest = PendingWidgetRequest(page.id, appWidgetId)
         val bound = runCatching {
             appWidgetManager.bindAppWidgetIdIfAllowed(appWidgetId, provider.provider)
-        }.getOrDefault(false)
+        }.onFailure { Log.w(TAG, "bindAppWidgetIdIfAllowed failed for ${provider.provider}", it) }
+            .getOrDefault(false)
         if (bound) {
             continueWidgetSetup(appWidgetId)
             return
@@ -314,5 +318,6 @@ class ClassicWidgetHostController(
     companion object {
         const val HOST_ID = 1017
         private const val WIDGET_PICKER_COLUMNS = 2
+        private const val TAG = "ClassicWidgetHost"
     }
 }

@@ -10,7 +10,7 @@ ENV PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tool
 
 RUN rm -f /etc/apt/sources.list.d/yarn.list \
     && apt-get update \
-    && apt-get install -y --no-install-recommends curl unzip zip \
+    && apt-get install -y --no-install-recommends curl nodejs npm unzip zip \
     && mkdir -p "${ANDROID_HOME}/cmdline-tools" \
     && curl -fsSL "https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_CMDLINE_TOOLS_VERSION}_latest.zip" -o /tmp/android-commandline-tools.zip \
     && unzip -q /tmp/android-commandline-tools.zip -d /tmp/android-commandline-tools \
@@ -23,5 +23,7 @@ RUN rm -f /etc/apt/sources.list.d/yarn.list \
     && yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --sdk_root="${ANDROID_HOME}" --licenses >/dev/null \
     && ln -s "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" /usr/local/bin/sdkmanager \
     && ln -s "${ANDROID_HOME}/platform-tools/adb" /usr/local/bin/adb \
+    && npm install -g @openai/codex \
+    && codex --version \
     && chown -R vscode:vscode "${ANDROID_HOME}" \
     && rm -rf /var/lib/apt/lists/* /tmp/android-commandline-tools /tmp/android-commandline-tools.zip

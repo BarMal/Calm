@@ -13,6 +13,7 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import java.util.Date
 import java.util.Locale
 
@@ -149,7 +150,9 @@ class ChapterPageBuilder(
         }
         notificationRepository.getAppShortcuts(chapter).take(MAX_EMPTY_CHAPTER_SHORTCUTS).forEach { shortcut ->
             cards.add(chapterAffordanceCard(shortcut.label, chapter, tintCards) {
-                notificationRepository.launchShortcut(shortcut)
+                if (!notificationRepository.launchShortcut(shortcut)) {
+                    Toast.makeText(activity, "Shortcut unavailable", Toast.LENGTH_SHORT).show()
+                }
             })
         }
         return cardStackController.cardStack(

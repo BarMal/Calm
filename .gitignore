@@ -7,9 +7,11 @@ build/
 captures/
 local.properties
 .calm-secrets/
+app/calm-signing-lineage
 
 # Android
 *.apk
+*.keystore
 *.ap_
 *.aab
 *.dex

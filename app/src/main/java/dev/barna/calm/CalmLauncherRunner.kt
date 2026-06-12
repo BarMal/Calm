@@ -80,7 +80,7 @@ class CalmLauncherRunner(
         beginClassicItemPlacement = ::beginClassicItemPlacement,
     )
     private val contextActionFactory = LauncherContextActionFactory(
-        LauncherContextActionCallbacks(
+        callbacks = LauncherContextActionCallbacks(
             openNotification = { notificationActionController.openNotification(it) },
             openPackage = ::openPackage,
             dismissNotificationItem = { notificationActionController.dismissNotificationItem(it) },
@@ -106,6 +106,7 @@ class CalmLauncherRunner(
             isClassicPageApp = appMutationHandler::isClassicPageApp,
             addAppToClassicPage = appMutationHandler::addAppToClassicPage,
         ),
+        labels = LauncherContextActionLabels.from(activity),
     )
     private val cardStackController = CardStackController(activity, mainHandler, ::performCardScrollHaptic)
     private val pageRemovalPlanner = ChapterPageRemovalPlanner()
@@ -259,10 +260,13 @@ class CalmLauncherRunner(
             val actions = ArrayList<ContextAction>()
             val latestNotification = target?.chapter?.notifications.orEmpty().maxByOrNull { notification -> notification.postTime }
             latestNotification?.let { notification ->
-                actions.add(ContextAction("Open notification", Runnable { notificationActionController.openNotification(notification) }))
+                actions.add(ContextAction(
+                    activity.getString(R.string.action_open_notification),
+                    Runnable { notificationActionController.openNotification(notification) },
+                ))
             }
             target?.chapter?.let { chapter ->
-                actions.add(ContextAction("Expand notifications", Runnable {
+                actions.add(ContextAction(activity.getString(R.string.action_expand_notifications), Runnable {
                     val pageIndex = currentUiState?.pages.orEmpty().indexOfFirst { page -> page.key == chapter.identityKey }
                     if (pageIndex >= 0) {
                         navigateToChapterPage(pageIndex)
@@ -278,7 +282,12 @@ class CalmLauncherRunner(
                 source = source,
                 anchor = anchor,
                 actions = actions,
-                destructiveLabels = setOf("Remove from dock", "Hide", "Dismiss", "Clear"),
+                destructiveLabels = setOf(
+                    activity.getString(R.string.action_remove_from_dock),
+                    activity.getString(R.string.action_hide),
+                    activity.getString(R.string.action_dismiss),
+                    activity.getString(R.string.action_clear),
+                ),
             )
         },
     )

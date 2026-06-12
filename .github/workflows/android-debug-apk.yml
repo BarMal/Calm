@@ -39,8 +39,9 @@ jobs:
         run: |
           set -euo pipefail
           VERSION_NAME_BASE="$(grep '^calm.versionNameBase=' gradle.properties | cut -d= -f2-)"
-          echo "VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
-          echo "VERSION_NAME=${VERSION_NAME_BASE}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          VERSION_CODE="$(date -u +%y%j%H%M)"
+          echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=${VERSION_NAME_BASE}.${VERSION_CODE}" >> "$GITHUB_ENV"
 
       - name: Run unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace

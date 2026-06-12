@@ -1314,11 +1314,19 @@ class CalmLauncherRunner(
         var downScrollX = 0
         var dragArmed = false
         var dragging = false
+        var previewTargetEntryIndex = entryIndex
+        var dropPlaceholder: GradientDrawable? = null
         val longPress = Runnable {
             dragArmed = true
+            previewTargetEntryIndex = entryIndex
+            dropPlaceholder = pageOverviewDropPlaceholder().also { placeholder ->
+                pageOverviewRowFor(card)?.overlay?.add(placeholder)
+                updatePageOverviewDropPreview(card, entryIndex, previewTargetEntryIndex, cardWidth, placeholder)
+            }
             card.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             card.parent?.requestDisallowInterceptTouchEvent(true)
-            card.animate().scaleX(1.03f).scaleY(1.03f).setDuration(110L).start()
+            card.elevation = activity.dp(14).toFloat()
+            card.animate().alpha(0.92f).scaleX(1.03f).scaleY(1.03f).setDuration(110L).start()
         }
         card.setOnTouchListener { view, event ->
             when (event.actionMasked) {
@@ -1346,12 +1354,20 @@ class CalmLauncherRunner(
                         view.parent?.requestDisallowInterceptTouchEvent(true)
                     }
                     if (dragArmed) {
+                        autoScrollPageOverviewWhileDragging(view, event.rawX)
                         val dragX = pageOverviewDragDistance(view, downScrollX, dx)
                         view.translationX = dragX
                         view.translationY = dy.coerceIn(-activity.dp(18).toFloat(), activity.dp(18).toFloat())
                         view.scaleX = 1.03f
                         view.scaleY = 1.03f
-                        autoScrollPageOverviewWhileDragging(view, event.rawX)
+                        val targetEntryIndex = pageOverviewTargetEntryIndex(entryIndex, entries, cardWidth, dragX)
+                        if (targetEntryIndex != previewTargetEntryIndex) {
+                            previewTargetEntryIndex = targetEntryIndex
+                            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        }
+                        dropPlaceholder?.let { placeholder ->
+                            updatePageOverviewDropPreview(view, entryIndex, previewTargetEntryIndex, cardWidth, placeholder)
+                        }
                     }
                     true
                 }
@@ -1361,9 +1377,12 @@ class CalmLauncherRunner(
                     val dx = event.rawX - downRawX
                     val dy = event.rawY - downRawY
                     val dragX = pageOverviewDragDistance(view, downScrollX, dx)
-                    view.animate().translationX(0f).translationY(0f).scaleX(1f).scaleY(1f).setDuration(120L).start()
+                    clearPageOverviewDropPreview(view, dropPlaceholder)
+                    dropPlaceholder = null
+                    view.elevation = 0f
+                    view.animate().translationX(0f).translationY(0f).alpha(1f).scaleX(1f).scaleY(1f).setDuration(120L).start()
                     if (dragArmed && dragging) {
-                        val targetEntryIndex = (entryIndex + (dragX / (cardWidth * 0.72f)).roundToInt()).coerceIn(0, entries.lastIndex)
+                        val targetEntryIndex = previewTargetEntryIndex
                         val targetIndex = entries[targetEntryIndex].firstPageIndex.coerceIn(0, pages.lastIndex)
                         if (targetEntryIndex != entryIndex && targetIndex != index) {
                             view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
@@ -1390,8 +1409,74 @@ class CalmLauncherRunner(
         return fingerDeltaX + (scroller.scrollX - downScrollX)
     }
 
+    private fun pageOverviewTargetEntryIndex(
+        entryIndex: Int,
+        entries: List<PageOverviewEntry>,
+        cardWidth: Int,
+        dragX: Float,
+    ): Int {
+        return (entryIndex + (dragX / (cardWidth * 0.72f)).roundToInt()).coerceIn(0, entries.lastIndex)
+    }
+
     private fun pageOverviewScrollerFor(card: View): HorizontalScrollView? {
         return card.parent?.parent as? HorizontalScrollView
+    }
+
+    private fun pageOverviewRowFor(card: View): ViewGroup? {
+        return card.parent as? ViewGroup
+    }
+
+    private fun pageOverviewDropPlaceholder(): GradientDrawable {
+        val colors = GoogleInteractionStyle.palette(activity)
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = activity.dp(26).toFloat()
+            setColor(withAlpha(colors.primaryContainer, 74))
+            setStroke(activity.dp(2), colors.primary)
+        }
+    }
+
+    private fun updatePageOverviewDropPreview(
+        card: View,
+        sourceEntryIndex: Int,
+        targetEntryIndex: Int,
+        cardWidth: Int,
+        placeholder: GradientDrawable,
+    ) {
+        val row = pageOverviewRowFor(card) ?: return
+        val stride = pageOverviewCardStride(cardWidth)
+        val targetChild = row.getChildAt(targetEntryIndex) ?: card
+        placeholder.setBounds(
+            targetChild.left,
+            card.top,
+            targetChild.left + cardWidth,
+            card.bottom,
+        )
+        for (childIndex in 0 until row.childCount) {
+            val child = row.getChildAt(childIndex)
+            if (child === card) continue
+            val translation = when {
+                sourceEntryIndex < targetEntryIndex && childIndex in (sourceEntryIndex + 1)..targetEntryIndex -> -stride.toFloat()
+                sourceEntryIndex > targetEntryIndex && childIndex in targetEntryIndex until sourceEntryIndex -> stride.toFloat()
+                else -> 0f
+            }
+            if (child.translationX != translation) {
+                child.animate().translationX(translation).setDuration(PAGE_OVERVIEW_REORDER_PREVIEW_MS).start()
+            }
+        }
+        row.invalidate()
+    }
+
+    private fun clearPageOverviewDropPreview(card: View, placeholder: GradientDrawable?) {
+        val row = pageOverviewRowFor(card) ?: return
+        placeholder?.let { row.overlay.remove(it) }
+        for (childIndex in 0 until row.childCount) {
+            val child = row.getChildAt(childIndex)
+            if (child !== card && child.translationX != 0f) {
+                child.animate().translationX(0f).setDuration(PAGE_OVERVIEW_REORDER_PREVIEW_MS).start()
+            }
+        }
+        row.invalidate()
     }
 
     private fun installPageOverviewScrollMagnet(scroller: HorizontalScrollView, cardWidth: Int) {
@@ -2070,6 +2155,7 @@ class CalmLauncherRunner(
         const val PAGE_OVERVIEW_MAGNET_DELAY_MS = 120L
         const val PAGE_OVERVIEW_MAGNET_THRESHOLD = 0.16f
         const val PAGE_OVERVIEW_REMOVE_ANIMATION_MS = 190L
+        const val PAGE_OVERVIEW_REORDER_PREVIEW_MS = 130L
         const val PAGE_PREWARM_INITIAL_DELAY_MS = 260L
         const val PAGE_PREWARM_STEP_DELAY_MS = 120L
         const val PAGE_PREWARM_MAX_PAGES = 3

@@ -32,6 +32,9 @@ data class DockConfig(
         const val MIN_ITEM_SPAN = 1
         const val MAX_ITEM_SPAN = 2
         const val ITEM_CELL_WIDTH_DP = 56
+        const val CLASSIC_ITEM_HEIGHT_DP = 56
+        const val FEATURED_DOCK_CONTENT_HEIGHT_DP = 90
+        const val HYBRID_DOCK_CONTENT_HEIGHT_DP = 142
 
         const val DEFAULT_VERTICAL_PADDING_DP = 12
         const val MIN_VERTICAL_PADDING_DP = 0
@@ -50,5 +53,31 @@ data class DockConfig(
         fun showsItemLabels(span: Int): Boolean {
             return span.coerceIn(MIN_ITEM_SPAN, MAX_ITEM_SPAN) > MIN_ITEM_SPAN
         }
+
+        fun itemSpacingDp(horizontalPaddingDp: Int): Int {
+            return horizontalPaddingDp
+                .coerceIn(MIN_HORIZONTAL_PADDING_DP, MAX_HORIZONTAL_PADDING_DP) / 2
+        }
+
+        fun featuredDockHeightDp(includeClassicRow: Boolean, verticalPaddingDp: Int): Int {
+            val contentHeight = if (includeClassicRow) {
+                HYBRID_DOCK_CONTENT_HEIGHT_DP
+            } else {
+                FEATURED_DOCK_CONTENT_HEIGHT_DP
+            }
+            val verticalPadding = verticalPaddingDp.coerceIn(MIN_VERTICAL_PADDING_DP, MAX_VERTICAL_PADDING_DP)
+            return contentHeight + (verticalPadding * 2)
+        }
+    }
+}
+
+internal object DockGesturePolicy {
+    fun nextAppIndex(currentIndex: Int, appCount: Int, direction: Int): Int {
+        if (appCount <= 0) return 0
+        return normalizedIndex(currentIndex + direction, appCount)
+    }
+
+    private fun normalizedIndex(index: Int, size: Int): Int {
+        return ((index % size) + size) % size
     }
 }

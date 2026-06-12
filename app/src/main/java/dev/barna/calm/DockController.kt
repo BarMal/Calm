@@ -2,6 +2,7 @@ package dev.barna.calm
 
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
@@ -53,12 +54,13 @@ class DockController(
             clipToPadding = false
             apps.take(config.itemCount).forEach { app ->
                 val width = DockConfig.itemWidthDp(config.itemSpan)
+                val spacing = DockConfig.itemSpacingDp(config.horizontalPaddingDp)
                 val target = notificationResolver.targetFor(app, chapters)
                 addView(
                     dockItem(app, config, target),
-                    LinearLayout.LayoutParams(activity.dp(width), activity.dp(56)).apply {
-                        marginStart = activity.dp(6)
-                        marginEnd = activity.dp(6)
+                    LinearLayout.LayoutParams(activity.dp(width), activity.dp(DockConfig.CLASSIC_ITEM_HEIGHT_DP)).apply {
+                        marginStart = activity.dp(spacing)
+                        marginEnd = activity.dp(spacing)
                     },
                 )
             }
@@ -69,7 +71,7 @@ class DockController(
         return if (apps.isEmpty()) {
             FrameLayout(activity).apply { tag = CalmAnimationTags.CHROME }
         } else {
-            val surface = FrameLayout(activity)
+            val surface = FeaturedDockSurface(activity)
             var selectedIndex = selectedFeaturedIndex(apps)
             fun bind(index: Int, transition: DockTransition? = null) {
                 selectedIndex = normalizedIndex(index, apps.size)
@@ -109,7 +111,7 @@ class DockController(
 
     private fun hybridDock(apps: List<AppEntry>, config: DockConfig, chapters: List<AppChapter>): View {
         var selectedIndex = selectedFeaturedIndex(apps)
-        val surface = FrameLayout(activity)
+        val surface = FeaturedDockSurface(activity)
         fun bind(index: Int, transition: DockTransition? = null) {
             selectedIndex = normalizedIndex(index, apps.size)
             rememberFeaturedDockApp(apps[selectedIndex])
@@ -153,7 +155,7 @@ class DockController(
         chapters: List<AppChapter>,
         selectedIndex: Int,
         includeClassicRow: Boolean,
-        config: DockConfig? = null,
+        config: DockConfig,
     ) {
         if (apps.isEmpty()) return
         surface.removeAllViews()
@@ -161,8 +163,12 @@ class DockController(
         surface.clipChildren = false
         surface.clipToPadding = false
         surface.background = null
-        surface.setPadding(0, 0, 0, 0)
-        surface.minimumHeight = activity.dp(if (includeClassicRow) 142 else 90)
+        val horizontalPadding = activity.dp(config.horizontalPaddingDp)
+        val verticalPadding = activity.dp(config.verticalPaddingDp)
+        surface.setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
+        surface.minimumHeight = activity.dp(
+            DockConfig.featuredDockHeightDp(includeClassicRow, config.verticalPaddingDp),
+        )
         val selectedApp = apps[normalizedIndex(selectedIndex, apps.size)]
         val selectedTarget = targetFor(selectedApp, chapters)
         val stack = LinearLayout(activity).apply {
@@ -172,9 +178,9 @@ class DockController(
         }
         stack.addView(
             tightDockStack(apps, chapters, selectedIndex),
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(90)),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(DockConfig.FEATURED_DOCK_CONTENT_HEIGHT_DP)),
         )
-        if (includeClassicRow && config != null) {
+        if (includeClassicRow) {
             stack.addView(
                 classicDockRow(apps, config, chapters),
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -185,11 +191,11 @@ class DockController(
         }
         surface.addView(
             stack,
-            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
         )
         surface.contentDescription = dockDescription(selectedApp, selectedTarget)
         surface.tooltipText = selectedApp.label
-        config?.let { surface.installDockInteractions(selectedApp, selectedTarget, it) }
+        surface.installDockInteractions(selectedApp, selectedTarget, config)
     }
 
     private fun tightDockStack(apps: List<AppEntry>, chapters: List<AppChapter>, selectedIndex: Int): FrameLayout {
@@ -531,14 +537,20 @@ class DockController(
                     if (max(abs(dx), abs(dy)) >= swipeThreshold) {
                         if (abs(dy) > abs(dx)) {
                             val direction = if (dy < 0) 1 else -1
-                            selectAppIndex(currentIndex() + direction, DockTransition.Vertical(direction))
+                            val cycled = cycleNotification(DockTransition.Vertical(direction))
+                            if (!cycled) {
+                                selectAppIndex(
+                                    DockGesturePolicy.nextAppIndex(currentIndex(), apps.size, direction),
+                                    DockTransition.Vertical(direction),
+                                )
+                            }
                             performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                         } else {
                             val direction = if (dx < 0) 1 else -1
-                            val cycled = cycleNotification(DockTransition.Horizontal(direction))
-                            if (!cycled) {
-                                selectAppIndex(currentIndex() + direction, DockTransition.Horizontal(direction))
-                            }
+                            selectAppIndex(
+                                DockGesturePolicy.nextAppIndex(currentIndex(), apps.size, direction),
+                                DockTransition.Horizontal(direction),
+                            )
                             performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                         }
                     } else if (!gestureMoved) {
@@ -681,4 +693,10 @@ class DockController(
 private sealed class DockTransition(val direction: Int) {
     class Vertical(direction: Int) : DockTransition(direction)
     class Horizontal(direction: Int) : DockTransition(direction)
+}
+
+private class FeaturedDockSurface(context: Context) : FrameLayout(context) {
+    override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
+        return true
+    }
 }

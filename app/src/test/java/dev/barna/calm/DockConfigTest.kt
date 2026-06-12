@@ -71,6 +71,26 @@ class DockConfigTest {
     }
 
     @Test
+    fun itemSpacingTracksConfiguredHorizontalPadding() {
+        assertEquals(0, DockConfig.itemSpacingDp(0))
+        assertEquals(12, DockConfig.itemSpacingDp(24))
+        assertEquals(24, DockConfig.itemSpacingDp(48))
+    }
+
+    @Test
+    fun cardDockHeightIncludesConfiguredVerticalPadding() {
+        assertEquals(90, DockConfig.featuredDockHeightDp(includeClassicRow = false, verticalPaddingDp = 0))
+        assertEquals(138, DockConfig.featuredDockHeightDp(includeClassicRow = false, verticalPaddingDp = 24))
+        assertEquals(190, DockConfig.featuredDockHeightDp(includeClassicRow = true, verticalPaddingDp = 24))
+    }
+
+    @Test
+    fun horizontalSwipeNavigatesCardDockApps() {
+        assertEquals(1, DockGesturePolicy.nextAppIndex(currentIndex = 0, appCount = 3, direction = 1))
+        assertEquals(2, DockGesturePolicy.nextAppIndex(currentIndex = 0, appCount = 3, direction = -1))
+    }
+
+    @Test
     fun enabledConfigCanBeConstructed() {
         val config = DockConfig(enabled = true, style = DockStyle.HYBRID, itemCount = 4, itemSpan = 2, verticalPaddingDp = 8, horizontalPaddingDp = 16)
         assertTrue(config.enabled)

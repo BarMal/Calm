@@ -95,7 +95,7 @@ class CalmNotificationListenerService : NotificationListenerService() {
         val actions = notificationActions(notification)
         val messages = messagingMessages(notification)
         if (messages.size > 1) {
-            return messages.mapIndexed { index, message ->
+            return messages.takeLast(MAX_MESSAGING_CARDS).mapIndexed { index, message ->
                 CalmNotification(
                     key = "${status.key}|message|$index|${message.timestamp}",
                     cancelKey = status.key,
@@ -191,6 +191,9 @@ class CalmNotificationListenerService : NotificationListenerService() {
         // notifications — and reconcile on resume instead of showing stale cards.
         private var revision = 0
         private const val SNAPSHOT_REFRESH_DELAY_MS = 80L
+        // Cap per-notification message expansion to prevent a high-volume messaging app from
+        // producing an unbounded number of CalmNotification entries from a single StatusBarNotification.
+        private const val MAX_MESSAGING_CARDS = 20
 
         @JvmStatic
         fun addListener(listener: Runnable) {

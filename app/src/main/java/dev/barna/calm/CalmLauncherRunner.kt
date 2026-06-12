@@ -277,6 +277,7 @@ class CalmLauncherRunner(
         createWidgetView = classicWidgetHostController::createWidgetView,
         addAppToClassicPage = appMutationHandler::addAppToClassicPage,
         addWidgetToClassicPage = classicWidgetHostController::requestAddWidget,
+        addStaticItemToClassicPage = ::addStaticItemToClassicPage,
         configureClassicWidget = classicWidgetHostController::requestConfigureWidget,
         canConfigureClassicWidget = classicWidgetHostController::canConfigureWidget,
         removeClassicGridItem = ::removeClassicGridItem,
@@ -523,6 +524,22 @@ class CalmLauncherRunner(
         Toast.makeText(activity, "Added ${page.title}", Toast.LENGTH_SHORT).show()
         render()
     }
+
+    private fun addStaticItemToClassicPage(page: ClassicLauncherPageDefinition, staticItem: ClassicStaticItem) {
+        if (settings.addStaticItemToClassicPage(page.id, staticItem)) {
+            beginClassicItemPlacement(page, ClassicGridItem.static(staticItem, x = 0, y = 0).id)
+            Toast.makeText(activity, "Added ${staticItem.displayLabel} to ${page.title}", Toast.LENGTH_SHORT).show()
+            render()
+        } else {
+            Toast.makeText(activity, "No room for ${staticItem.displayLabel}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private val ClassicStaticItem.displayLabel: String
+        get() = when (this) {
+            ClassicStaticItem.CLOCK -> "Clock"
+            ClassicStaticItem.SEARCH -> "Search"
+        }
 
     private fun moveClassicPage(page: ClassicLauncherPageDefinition, targetIndex: Int) {
         if (!settings.moveClassicPage(page.id, targetIndex)) return

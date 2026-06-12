@@ -48,6 +48,7 @@ class LauncherPageFactory(
     private val createWidgetView: (ClassicGridItem) -> View?,
     private val addAppToClassicPage: (ClassicLauncherPageDefinition, AppEntry) -> Unit,
     private val addWidgetToClassicPage: (ClassicLauncherPageDefinition) -> Unit,
+    private val addStaticItemToClassicPage: (ClassicLauncherPageDefinition, ClassicStaticItem) -> Unit,
     private val configureClassicWidget: (ClassicGridItem) -> Unit,
     private val canConfigureClassicWidget: (ClassicGridItem) -> Boolean,
     private val removeClassicGridItem: (ClassicLauncherPageDefinition, ClassicGridItem) -> Unit,
@@ -209,6 +210,17 @@ class LauncherPageFactory(
                 Runnable { addWidgetToClassicPage(classicPage) },
                 ContextActionCloseBehavior.REMOVE_CARD,
             ),
+        )
+        ClassicStaticItem.entries
+            .filterNot { staticItem -> state.classicPages.any { page -> page.containsStaticItem(staticItem) } }
+            .forEach { staticItem ->
+                actions += ContextAction(
+                    "Add ${staticItem.label}",
+                    Runnable { addStaticItemToClassicPage(classicPage, staticItem) },
+                    ContextActionCloseBehavior.REMOVE_CARD,
+                )
+            }
+        actions += listOf(
             ContextAction(
                 "New page",
                 Runnable { addClassicPage() },

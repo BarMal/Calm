@@ -401,7 +401,7 @@ class CalmSettingsActivity : ComponentActivity() {
         })
         content.addView(actionRow(getString(R.string.settings_dock_apps_title), dockAppsSummary()) { showDockAppsDialog() })
         content.addView(actionRow(
-            "Hidden apps",
+            getString(R.string.dialog_hidden_apps_title),
             hiddenAppsSummary(),
         ) {
             showHiddenAppsDialog()
@@ -653,7 +653,7 @@ class CalmSettingsActivity : ComponentActivity() {
                 requestRender()
                 dialog.dismiss()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.action_cancel, null)
             .show()
     }
 
@@ -670,7 +670,7 @@ class CalmSettingsActivity : ComponentActivity() {
                 requestRender()
                 dialog.dismiss()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.action_cancel, null)
             .show()
     }
 
@@ -690,7 +690,7 @@ class CalmSettingsActivity : ComponentActivity() {
         GoogleInteractionStyle.dialogBuilder(this)
             .setTitle("Page layout")
             .setView(ScrollView(this).apply { addView(list) })
-            .setPositiveButton("Done") { _, _ -> requestRender() }
+            .setPositiveButton(R.string.action_done) { _, _ -> requestRender() }
             .show()
     }
 
@@ -1322,7 +1322,7 @@ class CalmSettingsActivity : ComponentActivity() {
         GoogleInteractionStyle.dialogBuilder(this)
             .setTitle("Classic pages")
             .setView(ScrollView(this).apply { addView(list) })
-            .setPositiveButton("Done") { _, _ -> requestRender() }
+            .setPositiveButton(R.string.action_done) { _, _ -> requestRender() }
             .show()
             .setOnDismissListener { requestRender() }
     }
@@ -1381,7 +1381,7 @@ class CalmSettingsActivity : ComponentActivity() {
         GoogleInteractionStyle.dialogBuilder(this)
             .setTitle("Rename Classic page")
             .setView(input)
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.action_cancel, null)
             .setPositiveButton("Save") { _, _ ->
                 if (!settings.renameClassicPage(page.id, input.text.toString())) {
                     Toast.makeText(this, "Page name can't be empty", Toast.LENGTH_SHORT).show()
@@ -1401,7 +1401,7 @@ class CalmSettingsActivity : ComponentActivity() {
         GoogleInteractionStyle.dialogBuilder(this)
             .setTitle("Remove Classic page")
             .setMessage(message)
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.action_cancel, null)
             .setPositiveButton("Remove") { _, _ ->
                 settings.removeClassicPage(page.id)?.let { removed ->
                     cleanupClassicPageWidgets(removed)
@@ -1431,11 +1431,11 @@ class CalmSettingsActivity : ComponentActivity() {
 
     private fun showHiddenAppsDialog() {
         val apps = cachedAppEntries ?: run {
-            Toast.makeText(this, "App list is loading, try again shortly", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.toast_app_list_loading, Toast.LENGTH_SHORT).show()
             return
         }
         if (apps.isEmpty()) {
-            Toast.makeText(this, "No apps are available to hide", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.toast_hidden_no_apps_available, Toast.LENGTH_SHORT).show()
             return
         }
         val hidden = settings.hiddenAppKeys()
@@ -1445,12 +1445,12 @@ class CalmSettingsActivity : ComponentActivity() {
         }
         val labels = apps.map(::hiddenAppLabel).toTypedArray()
         GoogleInteractionStyle.dialogBuilder(this)
-            .setTitle("Hidden apps")
+            .setTitle(R.string.dialog_hidden_apps_title)
             .setMultiChoiceItems(labels, selected) { _, which, isChecked ->
                 selected[which] = isChecked
             }
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Done") { _, _ ->
+            .setNegativeButton(R.string.action_cancel, null)
+            .setPositiveButton(R.string.action_done) { _, _ ->
                 settings.setHiddenAppKeys(apps.filterIndexed { index, _ -> selected[index] }.map { it.identityKey }.toSet())
                 requestRender()
             }
@@ -1573,7 +1573,7 @@ class CalmSettingsActivity : ComponentActivity() {
         GoogleInteractionStyle.dialogBuilder(this)
             .setTitle("RSS feeds")
             .setView(ScrollView(this).apply { addView(list) })
-            .setPositiveButton("Done") { _, _ -> requestRender() }
+            .setPositiveButton(R.string.action_done) { _, _ -> requestRender() }
             .show()
             .setOnDismissListener { requestRender() }
     }
@@ -1586,7 +1586,7 @@ class CalmSettingsActivity : ComponentActivity() {
         GoogleInteractionStyle.dialogBuilder(this)
             .setTitle("Add RSS feed")
             .setView(input)
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.action_cancel, null)
             .setPositiveButton("Add") { _, _ ->
                 if (!settings.addRssFeedUrl(input.text?.toString().orEmpty())) {
                     Toast.makeText(this, "Enter a new feed URL", Toast.LENGTH_SHORT).show()

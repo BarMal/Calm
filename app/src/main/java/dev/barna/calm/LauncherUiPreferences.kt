@@ -17,6 +17,7 @@ data class LauncherUiPreferences(
     val expandedCardsEnabled: Boolean = true,
     val contactsPageEnabled: Boolean = false,
     val agendaPageEnabled: Boolean = false,
+    val alarmsPageEnabled: Boolean = false,
     val cardAppearance: CardAppearance = CardAppearance.DEFAULT,
     val pageLayout: LauncherPageLayout = LauncherPageLayout.DEFAULT,
 )

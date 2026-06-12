@@ -19,6 +19,8 @@ data class LauncherUiPreferences(
     val contactsPageEnabled: Boolean = false,
     val agendaPageEnabled: Boolean = false,
     val alarmsPageEnabled: Boolean = false,
+    val agendaSectionMode: CardStackSectionMode = CardStackSectionMode.TITLE_CARDS,
+    val agendaSectionTitleStyle: SectionTitleCardStyle = SectionTitleCardStyle(),
     val cardAppearance: CardAppearance = CardAppearance.DEFAULT,
     val pageLayout: LauncherPageLayout = LauncherPageLayout.DEFAULT,
 )

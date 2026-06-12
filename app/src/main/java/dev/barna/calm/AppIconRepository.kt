@@ -23,6 +23,7 @@ class AppIconRepository(
     private val maskedIconCache = ConcurrentHashMap<String, Bitmap>()
     private val pendingHueKeys = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
     private val hueExecutor = Executors.newSingleThreadExecutor()
+    @Volatile
     private var onHueResolved: Runnable? = null
 
     fun setOnHueResolved(listener: Runnable) {

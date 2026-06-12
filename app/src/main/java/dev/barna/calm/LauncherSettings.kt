@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import java.text.Collator
 
 class LauncherSettings(private val preferences: SharedPreferences) {
+    private val mutationLock = Any()
+
     constructor(context: Context) : this(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE))
 
     fun excludedPackages(): Set<String> {
@@ -26,7 +28,9 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     }
 
     fun setHiddenAppKeys(appKeys: Set<String>) {
-        preferences.edit().putStringSet(PREF_HIDDEN_APP_KEYS, HashSet(appKeys)).apply()
+        synchronized(mutationLock) {
+            preferences.edit().putStringSet(PREF_HIDDEN_APP_KEYS, HashSet(appKeys)).apply()
+        }
     }
 
     fun isAppHidden(app: AppEntry): Boolean {
@@ -34,17 +38,21 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     }
 
     fun hideApp(appKey: String, label: String) {
-        preferences.edit()
-            .putStringSet(PREF_HIDDEN_APP_KEYS, hiddenAppKeys() + appKey)
-            .putString(PREF_HIDDEN_APP_LABEL_PREFIX + appKey, label)
-            .apply()
+        synchronized(mutationLock) {
+            preferences.edit()
+                .putStringSet(PREF_HIDDEN_APP_KEYS, hiddenAppKeys() + appKey)
+                .putString(PREF_HIDDEN_APP_LABEL_PREFIX + appKey, label)
+                .apply()
+        }
     }
 
     fun showApp(appKey: String) {
-        preferences.edit()
-            .putStringSet(PREF_HIDDEN_APP_KEYS, hiddenAppKeys() - appKey)
-            .remove(PREF_HIDDEN_APP_LABEL_PREFIX + appKey)
-            .apply()
+        synchronized(mutationLock) {
+            preferences.edit()
+                .putStringSet(PREF_HIDDEN_APP_KEYS, hiddenAppKeys() - appKey)
+                .remove(PREF_HIDDEN_APP_LABEL_PREFIX + appKey)
+                .apply()
+        }
     }
 
     fun hiddenApps(): List<ExcludedSource> {
@@ -57,15 +65,19 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     }
 
     fun pinPackage(packageName: String) {
-        val pinned = pinnedPackages().toMutableSet()
-        pinned.add(packageName)
-        preferences.edit().putStringSet(PREF_PINNED_PACKAGES, pinned).apply()
+        synchronized(mutationLock) {
+            val pinned = pinnedPackages().toMutableSet()
+            pinned.add(packageName)
+            preferences.edit().putStringSet(PREF_PINNED_PACKAGES, pinned).apply()
+        }
     }
 
     fun unpinPackage(packageName: String) {
-        val pinned = pinnedPackages().toMutableSet()
-        pinned.remove(packageName)
-        preferences.edit().putStringSet(PREF_PINNED_PACKAGES, pinned).apply()
+        synchronized(mutationLock) {
+            val pinned = pinnedPackages().toMutableSet()
+            pinned.remove(packageName)
+            preferences.edit().putStringSet(PREF_PINNED_PACKAGES, pinned).apply()
+        }
     }
 
     fun pinnedChapterPackages(): Set<String> {
@@ -73,15 +85,19 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     }
 
     fun pinChapter(packageName: String) {
-        preferences.edit()
-            .putStringSet(PREF_PINNED_CHAPTER_PACKAGES, pinnedChapterPackages() + packageName)
-            .apply()
+        synchronized(mutationLock) {
+            preferences.edit()
+                .putStringSet(PREF_PINNED_CHAPTER_PACKAGES, pinnedChapterPackages() + packageName)
+                .apply()
+        }
     }
 
     fun unpinChapter(packageName: String) {
-        preferences.edit()
-            .putStringSet(PREF_PINNED_CHAPTER_PACKAGES, pinnedChapterPackages() - packageName)
-            .apply()
+        synchronized(mutationLock) {
+            preferences.edit()
+                .putStringSet(PREF_PINNED_CHAPTER_PACKAGES, pinnedChapterPackages() - packageName)
+                .apply()
+        }
     }
 
     fun classicPages(): List<ClassicLauncherPageDefinition> {
@@ -406,36 +422,46 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     }
 
     fun addDockKey(identityKey: String): Boolean {
-        val config = dockConfig()
-        val current = dockKeys()
-        if (current.size >= config.itemCount || identityKey in current) return false
-        preferences.edit().putString(PREF_DOCK_KEYS, (current + identityKey).joinToString("\n")).apply()
-        return true
+        synchronized(mutationLock) {
+            val config = dockConfig()
+            val current = dockKeys()
+            if (current.size >= config.itemCount || identityKey in current) return false
+            preferences.edit().putString(PREF_DOCK_KEYS, (current + identityKey).joinToString("\n")).apply()
+            return true
+        }
     }
 
     fun removeDockKey(identityKey: String) {
-        preferences.edit().putString(PREF_DOCK_KEYS, (dockKeys() - identityKey).joinToString("\n")).apply()
+        synchronized(mutationLock) {
+            preferences.edit().putString(PREF_DOCK_KEYS, (dockKeys() - identityKey).joinToString("\n")).apply()
+        }
     }
 
     fun setDockKeys(identityKeys: List<String>) {
-        preferences.edit().putString(PREF_DOCK_KEYS, identityKeys.joinToString("\n")).apply()
+        synchronized(mutationLock) {
+            preferences.edit().putString(PREF_DOCK_KEYS, identityKeys.joinToString("\n")).apply()
+        }
     }
 
     fun moveDockKey(identityKey: String, toIndex: Int) {
-        val current = dockKeys().toMutableList()
-        val from = current.indexOf(identityKey)
-        if (from == -1) return
-        current.removeAt(from)
-        current.add(toIndex.coerceIn(0, current.size), identityKey)
-        preferences.edit().putString(PREF_DOCK_KEYS, current.joinToString("\n")).apply()
+        synchronized(mutationLock) {
+            val current = dockKeys().toMutableList()
+            val from = current.indexOf(identityKey)
+            if (from == -1) return
+            current.removeAt(from)
+            current.add(toIndex.coerceIn(0, current.size), identityKey)
+            preferences.edit().putString(PREF_DOCK_KEYS, current.joinToString("\n")).apply()
+        }
     }
 
     fun addNotificationFilter(filter: NotificationFilter) {
-        val filters = preferences.getStringSet(PREF_NOTIFICATION_FILTERS, emptySet())
-            .orEmpty()
-            .toMutableSet()
-        filters.add(filter.encode())
-        preferences.edit().putStringSet(PREF_NOTIFICATION_FILTERS, filters).apply()
+        synchronized(mutationLock) {
+            val filters = preferences.getStringSet(PREF_NOTIFICATION_FILTERS, emptySet())
+                .orEmpty()
+                .toMutableSet()
+            filters.add(filter.encode())
+            preferences.edit().putStringSet(PREF_NOTIFICATION_FILTERS, filters).apply()
+        }
     }
 
     fun cachedAppHue(packageName: String): Int {
@@ -477,21 +503,25 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     }
 
     fun exclude(chapter: AppChapter) {
-        val packages = excludedPackages().toMutableSet()
-        packages.add(chapter.identityKey)
-        preferences.edit()
-            .putStringSet(PREF_EXCLUDED_PACKAGES, packages)
-            .putString(PREF_EXCLUDED_LABEL_PREFIX + chapter.identityKey, chapter.label)
-            .apply()
+        synchronized(mutationLock) {
+            val packages = excludedPackages().toMutableSet()
+            packages.add(chapter.identityKey)
+            preferences.edit()
+                .putStringSet(PREF_EXCLUDED_PACKAGES, packages)
+                .putString(PREF_EXCLUDED_LABEL_PREFIX + chapter.identityKey, chapter.label)
+                .apply()
+        }
     }
 
     fun restore(packageName: String) {
-        val packages = excludedPackages().toMutableSet()
-        packages.remove(packageName)
-        preferences.edit()
-            .putStringSet(PREF_EXCLUDED_PACKAGES, packages)
-            .remove(PREF_EXCLUDED_LABEL_PREFIX + packageName)
-            .apply()
+        synchronized(mutationLock) {
+            val packages = excludedPackages().toMutableSet()
+            packages.remove(packageName)
+            preferences.edit()
+                .putStringSet(PREF_EXCLUDED_PACKAGES, packages)
+                .remove(PREF_EXCLUDED_LABEL_PREFIX + packageName)
+                .apply()
+        }
     }
 
     fun useTintedNotificationCards(): Boolean {
@@ -807,16 +837,18 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     }
 
     fun toggleNotificationGrouping(packageName: String): Boolean {
-        val splitPackages = splitNotificationPackages().toMutableSet()
-        val nextGrouped = if (packageName in splitPackages) {
-            splitPackages.remove(packageName)
-            true
-        } else {
-            splitPackages.add(packageName)
-            false
+        synchronized(mutationLock) {
+            val splitPackages = splitNotificationPackages().toMutableSet()
+            val nextGrouped = if (packageName in splitPackages) {
+                splitPackages.remove(packageName)
+                true
+            } else {
+                splitPackages.add(packageName)
+                false
+            }
+            preferences.edit().putStringSet(PREF_SPLIT_NOTIFICATION_PACKAGES, splitPackages).apply()
+            return nextGrouped
         }
-        preferences.edit().putStringSet(PREF_SPLIT_NOTIFICATION_PACKAGES, splitPackages).apply()
-        return nextGrouped
     }
 
     private fun splitNotificationPackages(): Set<String> {

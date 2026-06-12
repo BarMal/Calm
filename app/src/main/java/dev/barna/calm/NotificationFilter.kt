@@ -7,6 +7,11 @@ data class NotificationFilter(
     val sourceKey: String = AppIdentity.packageOnly(packageName).notificationSourceKey,
     val matchMode: MatchMode = MatchMode.EXACT,
 ) {
+    private val normalizedValue: String by lazy { normalized(value) }
+    private val wildcardPattern: Regex? by lazy {
+        if (matchMode == MatchMode.WILDCARD) wildcardRegex(normalizedValue) else null
+    }
+
     enum class Kind {
         APP,
         TITLE,
@@ -40,17 +45,17 @@ data class NotificationFilter(
 
     private fun textMatches(candidate: String): Boolean {
         val normalizedCandidate = normalized(candidate)
-        val normalizedValue = normalized(value)
         return when (matchMode) {
             MatchMode.EXACT -> normalizedCandidate == normalizedValue
             MatchMode.CONTAINS -> normalizedValue.isNotEmpty() && normalizedCandidate.contains(normalizedValue)
-            MatchMode.WILDCARD -> wildcardRegex(normalizedValue).matches(normalizedCandidate)
+            MatchMode.WILDCARD -> wildcardPattern?.matches(normalizedCandidate) == true
         }
     }
 
     companion object {
         private const val SEPARATOR = "\u001f"
         private const val ANY_PLACEHOLDER = "{?}"
+        private val whitespace = Regex("\\s+")
 
         fun decode(encoded: String): NotificationFilter? {
             val parts = encoded.split(SEPARATOR, limit = 5)
@@ -111,7 +116,7 @@ data class NotificationFilter(
         }
 
         private fun normalized(value: String): String {
-            return value.trim().replace(Regex("\\s+"), " ").lowercase()
+            return value.trim().replace(whitespace, " ").lowercase()
         }
 
         private fun wildcardRegex(pattern: String): Regex {

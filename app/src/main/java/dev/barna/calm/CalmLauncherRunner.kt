@@ -246,7 +246,14 @@ class CalmLauncherRunner(
         drawables = drawables,
         resolveIcon = { notificationRepository.resolveAppIconBitmap(it) },
         openAppEntry = ::openAppEntry,
-        openNotificationPage = { chapter -> selectPage(chapter.identityKey) },
+        openNotificationPage = { chapter ->
+            val pageIndex = currentUiState?.pages.orEmpty().indexOfFirst { page -> page.key == chapter.identityKey }
+            if (pageIndex >= 0) {
+                navigateToChapterPage(pageIndex)
+            } else {
+                selectPage(chapter.identityKey)
+            }
+        },
     )
     private val classicWidgetHostController = ClassicWidgetHostController(
         activity = activity,

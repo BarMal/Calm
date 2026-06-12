@@ -5,8 +5,12 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
+import android.view.GestureDetector
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
@@ -14,6 +18,8 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import kotlin.math.abs
+import kotlin.math.max
 
 /** Renders the persistent dock: a cross-page surface for favourite app entries. */
 class DockController(
@@ -24,6 +30,7 @@ class DockController(
     private val openNotificationPage: (AppChapter) -> Unit,
 ) {
     private val notificationResolver = DockNotificationResolver()
+    private var featuredDockIdentityKey: String? = null
 
     fun buildDock(apps: List<AppEntry>, config: DockConfig, chapters: List<AppChapter>): View {
         return when (config.style) {
@@ -55,24 +62,42 @@ class DockController(
     }
 
     private fun cardDock(apps: List<AppEntry>, chapters: List<AppChapter>): View {
-        val app = apps.firstOrNull()
-        return if (app == null) {
+        return if (apps.isEmpty()) {
             FrameLayout(activity).apply { tag = CalmAnimationTags.CHROME }
         } else {
-            featuredDockSurface(app, notificationResolver.targetFor(app, chapters), activity.dp(72))
+            val surface = FrameLayout(activity)
+            var selectedIndex = selectedFeaturedIndex(apps)
+            fun bind(index: Int) {
+                selectedIndex = normalizedIndex(index, apps.size)
+                rememberFeaturedDockApp(apps[selectedIndex])
+                bindFeaturedDockSurface(surface, apps[selectedIndex], targetFor(apps[selectedIndex], chapters), activity.dp(72))
+            }
+            bind(selectedIndex)
+            surface.installFeaturedDockGestures(
+                apps = apps,
+                chapters = chapters,
+                currentIndex = { selectedIndex },
+                selectIndex = { bind(it) },
+            )
+            surface
         }
     }
 
     private fun hybridDock(apps: List<AppEntry>, config: DockConfig, chapters: List<AppChapter>): View {
-        val featuredApp = apps.firstOrNull()
-        val featuredTarget = featuredApp?.let { notificationResolver.targetFor(it, chapters) }
-        return FrameLayout(activity).apply {
+        var selectedIndex = selectedFeaturedIndex(apps)
+        val surface = FrameLayout(activity).apply {
             tag = CalmAnimationTags.CHROME
             clipChildren = false
             clipToPadding = false
             background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(22))
             setPadding(activity.dp(12), activity.dp(8), activity.dp(12), activity.dp(10))
-            addView(
+        }
+        fun bind(index: Int) {
+            selectedIndex = normalizedIndex(index, apps.size)
+            val featuredApp = apps.getOrNull(selectedIndex)
+            val featuredTarget = featuredApp?.let { targetFor(it, chapters) }
+            surface.removeAllViews()
+            surface.addView(
                 LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER
@@ -93,27 +118,46 @@ class DockController(
                 },
                 FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
             )
-            addNotificationBadge(featuredTarget)
-            installNotificationLongPress(featuredTarget)
+            featuredApp?.let { app ->
+                rememberFeaturedDockApp(app)
+                surface.contentDescription = dockDescription(app, featuredTarget)
+                surface.tooltipText = app.label
+                surface.setOnClickListener { openAppEntry(app) }
+            } ?: run {
+                surface.contentDescription = null
+                surface.tooltipText = null
+                surface.setOnClickListener(null)
+            }
+            surface.addNotificationBadge(featuredTarget)
+            surface.installNotificationLongPress(featuredTarget)
         }
+        bind(selectedIndex)
+        surface.installFeaturedDockGestures(
+            apps = apps,
+            chapters = chapters,
+            currentIndex = { selectedIndex },
+            selectIndex = { bind(it) },
+        )
+        return surface
     }
 
-    private fun featuredDockSurface(app: AppEntry, target: DockNotificationTarget?, minimumHeight: Int): View {
-        return FrameLayout(activity).apply {
-            tag = CalmAnimationTags.CHROME
-            clipChildren = false
-            clipToPadding = false
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(22))
-            setPadding(activity.dp(12), activity.dp(8), activity.dp(14), activity.dp(8))
-            this.minimumHeight = minimumHeight
-            addView(
-                featuredDockContent(app, target),
-                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
-            )
-            addNotificationBadge(target)
-            setOnClickListener { openAppEntry(app) }
-            installNotificationLongPress(target)
-        }
+    private fun bindFeaturedDockSurface(surface: FrameLayout, app: AppEntry, target: DockNotificationTarget?, minimumHeight: Int) {
+        surface.removeAllViews()
+        surface.tag = CalmAnimationTags.CHROME
+        surface.clipChildren = false
+        surface.clipToPadding = false
+        surface.background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(22))
+        surface.setPadding(activity.dp(12), activity.dp(8), activity.dp(14), activity.dp(8))
+        surface.minimumHeight = minimumHeight
+        surface.contentDescription = dockDescription(app, target)
+        surface.tooltipText = app.label
+        surface.addView(
+            featuredDockContent(app, target),
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
+        )
+        surface.addNotificationBadge(target)
+        surface.setOnClickListener { openAppEntry(app) }
+        surface.installNotificationLongPress(target)
     }
 
     private fun featuredDockContent(app: AppEntry, target: DockNotificationTarget?): View {
@@ -151,8 +195,6 @@ class DockController(
                 },
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
             )
-            setOnClickListener { openAppEntry(app) }
-            installNotificationLongPress(target)
         }
     }
 
@@ -250,6 +292,100 @@ class DockController(
         return summary.latestText.ifBlank { summary.latestTitle }.takeIf { it.isNotBlank() }
     }
 
+    private fun targetFor(app: AppEntry, chapters: List<AppChapter>): DockNotificationTarget? {
+        return notificationResolver.targetFor(app, chapters)
+    }
+
+    private fun selectedFeaturedIndex(apps: List<AppEntry>): Int {
+        if (apps.isEmpty()) return 0
+        val remembered = featuredDockIdentityKey
+        val rememberedIndex = apps.indexOfFirst { app -> app.identityKey == remembered }
+        if (rememberedIndex >= 0) return rememberedIndex
+        return 0
+    }
+
+    private fun rememberFeaturedDockApp(app: AppEntry) {
+        featuredDockIdentityKey = app.identityKey
+    }
+
+    private fun normalizedIndex(index: Int, size: Int): Int {
+        if (size <= 0) return 0
+        return ((index % size) + size) % size
+    }
+
+    private fun View.installFeaturedDockGestures(
+        apps: List<AppEntry>,
+        chapters: List<AppChapter>,
+        currentIndex: () -> Int,
+        selectIndex: (Int) -> Unit,
+    ) {
+        if (apps.isEmpty()) return
+        val swipeThreshold = max(activity.dp(28), ViewConfiguration.get(activity).scaledTouchSlop * 2)
+        val detector = GestureDetector(activity, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(event: MotionEvent): Boolean = true
+
+            override fun onSingleTapUp(event: MotionEvent): Boolean {
+                this@installFeaturedDockGestures.performClick()
+                return true
+            }
+
+            override fun onLongPress(event: MotionEvent) {
+                apps.getOrNull(currentIndex())
+                    ?.let { app -> targetFor(app, chapters) }
+                    ?.let { target -> openNotificationPage(target.chapter) }
+            }
+
+            override fun onFling(
+                start: MotionEvent?,
+                end: MotionEvent,
+                velocityX: Float,
+                velocityY: Float,
+            ): Boolean {
+                val first = start ?: return false
+                val dx = end.x - first.x
+                val dy = end.y - first.y
+                if (max(abs(dx), abs(dy)) < swipeThreshold) return false
+                return if (abs(dy) > abs(dx)) {
+                    val direction = if (dy < 0) 1 else -1
+                    selectIndex(currentIndex() + direction)
+                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    true
+                } else {
+                    val direction = if (dx < 0) 1 else -1
+                    val navigated = navigateDockNotification(apps, chapters, currentIndex(), direction, selectIndex)
+                    if (navigated) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    navigated
+                }
+            }
+        })
+        setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> view.parent?.requestDisallowInterceptTouchEvent(true)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> view.parent?.requestDisallowInterceptTouchEvent(false)
+            }
+            detector.onTouchEvent(event)
+            true
+        }
+    }
+
+    private fun navigateDockNotification(
+        apps: List<AppEntry>,
+        chapters: List<AppChapter>,
+        startIndex: Int,
+        direction: Int,
+        selectIndex: (Int) -> Unit,
+    ): Boolean {
+        if (apps.isEmpty()) return false
+        for (offset in 1..apps.size) {
+            val index = normalizedIndex(startIndex + (direction * offset), apps.size)
+            val target = targetFor(apps[index], chapters) ?: continue
+            selectIndex(index)
+            openNotificationPage(target.chapter)
+            return true
+        }
+        return false
+    }
+
     private fun dockText(textValue: String, sp: Int, style: Int, color: Int, maxLineCount: Int): TextView {
         return TextView(activity).apply {
             text = textValue
@@ -264,7 +400,11 @@ class DockController(
     }
 
     private fun View.installNotificationLongPress(target: DockNotificationTarget?) {
-        if (target == null) return
+        if (target == null) {
+            setOnLongClickListener(null)
+            isLongClickable = false
+            return
+        }
         setOnLongClickListener {
             openNotificationPage(target.chapter)
             true

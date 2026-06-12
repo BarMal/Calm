@@ -41,6 +41,7 @@ class LauncherStateManager(
                     val appEntries = apps.get()
                     val pinnedKeys = settings.pinnedPackages()
                     val calendarState = calendar.get()
+                    if (gen != generation.get()) return@execute
                     val state = renderModelFactory.create(
                         preferences = settings.uiPreferences(),
                         notificationChapters = notifications.get(),
@@ -56,6 +57,7 @@ class LauncherStateManager(
                         rssFeedUrls = settings.rssFeedUrls(),
                         rssItems = rss.get(),
                     )
+                    if (gen != generation.get()) return@execute
                     appCardDisplayCache.preloadNow(state.appEntries, state.pinnedKeys)
                     mainHandler.post {
                         if (gen == generation.get()) {

@@ -94,6 +94,20 @@ class ChapterPagePlannerTest {
     }
 
     @Test
+    fun alarmsPageAppearsWhenEnabledAfterAgendaAndBeforeOverview() {
+        val pages = planner.buildPages(
+            preferences = preferences(agendaPageEnabled = true, alarmsPageEnabled = true),
+            notificationChapters = emptyList(),
+            appEntries = listOf(app("browser", "Browser")),
+            pinnedApps = emptyList(),
+        )
+
+        assertEquals(listOf("Apps", "Agenda", "Alarms", "Overview"), pages.map { it.title })
+        assertEquals(PageSlot.ALARMS, PageArranger.slotOf(pages[2]))
+        assertEquals(listOf("I", "II", "III", "IV"), pages.map { it.marker })
+    }
+
+    @Test
     fun legacyDisabledClassicPagesStillAppearWhenAdded() {
         val pages = planner.buildPages(
             preferences = preferences(),
@@ -111,6 +125,7 @@ class ChapterPagePlannerTest {
         placeWorkNotificationChaptersBeforeApps: Boolean = false,
         sortOrder: PageSortOrder = PageSortOrder.DEFAULT,
         agendaPageEnabled: Boolean = false,
+        alarmsPageEnabled: Boolean = false,
     ): LauncherUiPreferences {
         return LauncherUiPreferences(
             useTintedNotificationCards = true,
@@ -127,6 +142,7 @@ class ChapterPagePlannerTest {
             cardVibrancy = 50,
             pageSortOrder = sortOrder,
             agendaPageEnabled = agendaPageEnabled,
+            alarmsPageEnabled = alarmsPageEnabled,
         )
     }
 

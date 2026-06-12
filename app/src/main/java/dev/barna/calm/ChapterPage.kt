@@ -49,6 +49,11 @@ class ChapterPage private constructor(
         }
 
         @JvmStatic
+        fun alarms(alarmsKey: String, marker: String): ChapterPage {
+            return ChapterPage(alarmsKey, marker, "Alarms", null, null, null)
+        }
+
+        @JvmStatic
         fun workOverview(workOverviewKey: String, marker: String): ChapterPage {
             return ChapterPage(workOverviewKey, marker, "Work", null, null, null)
         }

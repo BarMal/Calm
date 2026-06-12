@@ -192,6 +192,12 @@ class CalmLauncherRunner(
         activePreferences = { activePreferences },
         barePagePanel = ::createBarePagePanel,
     )
+    private val alarmsPageBuilder = AlarmsPageBuilder(
+        activity = activity,
+        cardRenderer = cardRenderer,
+        activePreferences = { activePreferences },
+        barePagePanel = ::createBarePagePanel,
+    )
     private val stateExecutor = Executors.newFixedThreadPool(4)
     private val chapterPageBuilder = ChapterPageBuilder(
         activity = activity,
@@ -244,6 +250,7 @@ class CalmLauncherRunner(
         focusOverlay = focusOverlay,
         overviewPageBuilder = overviewPageBuilder,
         agendaPageBuilder = agendaPageBuilder,
+        alarmsPageBuilder = alarmsPageBuilder,
         chapterPageBuilder = chapterPageBuilder,
         appLibraryController = appLibraryController,
         appSearchController = appSearchController,
@@ -773,6 +780,7 @@ class CalmLauncherRunner(
         PageSlot.PINNED -> CalmTheme.PINNED_KEY
         PageSlot.CONTACTS -> CalmTheme.CONTACTS_KEY
         PageSlot.AGENDA -> CalmTheme.AGENDA_KEY
+        PageSlot.ALARMS -> CalmTheme.ALARMS_KEY
         PageSlot.APPS -> CalmTheme.APP_LIBRARY_KEY
         PageSlot.CLASSIC_PAGES -> settings.homeClassicPage()?.key ?: CalmTheme.OVERVIEW_KEY
         PageSlot.NOTIFICATIONS -> CalmTheme.OVERVIEW_KEY
@@ -1247,6 +1255,7 @@ class CalmLauncherRunner(
             ContextAction("Classic page", Runnable { addClassicPageFromOverview() }),
             ContextAction("People page", Runnable { addPeoplePageFromOverview(pages) }),
             ContextAction("Agenda page", Runnable { addAgendaPageFromOverview(pages) }),
+            ContextAction("Alarms page", Runnable { addAlarmsPageFromOverview(pages) }),
             ContextAction("Apps page", Runnable { addExistingOrLivePageFromOverview(PageSlot.APPS, pages, "Apps page") }),
             ContextAction("Pinned page", Runnable { addPinnedPageFromOverview(state, pages) }),
             ContextAction("Overview page", Runnable { addExistingOrLivePageFromOverview(PageSlot.OVERVIEW, pages, "Overview page") }),
@@ -1282,6 +1291,16 @@ class CalmLauncherRunner(
         settings.toggleAgendaPage()
         Toast.makeText(activity, "Added Agenda page", Toast.LENGTH_SHORT).show()
         renderAndReopenPageOverview(CalmTheme.AGENDA_KEY)
+    }
+
+    private fun addAlarmsPageFromOverview(pages: List<ChapterPage>) {
+        if (settings.alarmsPageEnabled()) {
+            addExistingOrLivePageFromOverview(PageSlot.ALARMS, pages, "Alarms page")
+            return
+        }
+        settings.toggleAlarmsPage()
+        Toast.makeText(activity, "Added Alarms page", Toast.LENGTH_SHORT).show()
+        renderAndReopenPageOverview(CalmTheme.ALARMS_KEY)
     }
 
     private fun addPinnedPageFromOverview(state: LauncherRenderModel, pages: List<ChapterPage>) {
@@ -1674,6 +1693,15 @@ class CalmLauncherRunner(
                 }
             }, ContextActionCloseBehavior.REMOVE_CARD)
         }
+        if (slot == PageSlot.ALARMS) {
+            return ContextAction("Remove", Runnable {
+                animatePageOverviewRemoval(source, entryIndex, index, pages) {
+                    if (settings.alarmsPageEnabled()) settings.toggleAlarmsPage()
+                    Toast.makeText(activity, "Removed Alarms page", Toast.LENGTH_SHORT).show()
+                    renderAndReopenPageOverview(nextFocusKey)
+                }
+            }, ContextActionCloseBehavior.REMOVE_CARD)
+        }
         if (slot != PageSlot.CONTACTS) return null
         return ContextAction("Remove", Runnable {
             animatePageOverviewRemoval(source, entryIndex, index, pages) {
@@ -1899,6 +1927,7 @@ class CalmLauncherRunner(
             slot == PageSlot.PINNED -> "Pinned"
             slot == PageSlot.CONTACTS -> "People"
             slot == PageSlot.AGENDA -> "Agenda"
+            slot == PageSlot.ALARMS -> "Alarms"
             else -> if (selected) "Current" else "${pages.indexOf(page) + 1} of ${pages.size}"
         }
         return LinearLayout(activity).apply {
@@ -1947,6 +1976,7 @@ class CalmLauncherRunner(
                 page.key == CalmTheme.PINNED_KEY -> addAppRows(this, state.pinnedApps.take(5).map { it.label }, CalmTheme.ACCENT)
                 page.key == CalmTheme.CONTACTS_KEY -> addGenericRows(this, listOf("Favourite people", "Recent contact", "Quick action"), CalmTheme.ACCENT)
                 page.key == CalmTheme.AGENDA_KEY -> addAgendaOverviewPreview(this, state)
+                page.key == CalmTheme.ALARMS_KEY -> addGenericRows(this, listOf("Next alarm", "Clock app", "Wake up"), CalmTheme.ACCENT)
                 page.key == CalmTheme.WORK_OVERVIEW_KEY -> addOverviewRows(this, state, work = true)
                 page.chapter != null -> addNotificationOverviewPreview(this, page.chapter)
                 else -> addOverviewRows(this, state, work = false)

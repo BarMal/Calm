@@ -84,10 +84,23 @@ class LauncherPageStateTest {
         assertEquals(listOf("Apps", "Agenda", "Overview"), state.pages.map { it.title })
     }
 
+    @Test
+    fun includesAlarmsPageWhenEnabled() {
+        val state = factory.create(
+            preferences = preferences(alarmsPageEnabled = true),
+            notificationChapters = emptyList(),
+            appEntries = listOf(app("browser.pkg", "Browser")),
+            pinnedKeys = emptySet(),
+        )
+
+        assertEquals(listOf("Apps", "Alarms", "Overview"), state.pages.map { it.title })
+    }
+
     private fun preferences(
         splitAppsByProfile: Boolean = false,
         placeWorkNotificationChaptersBeforeApps: Boolean = false,
         agendaPageEnabled: Boolean = false,
+        alarmsPageEnabled: Boolean = false,
     ): LauncherUiPreferences {
         return LauncherUiPreferences(
             useTintedNotificationCards = true,
@@ -103,6 +116,7 @@ class LauncherPageStateTest {
             showAdvancedStackControls = false,
             cardVibrancy = 50,
             agendaPageEnabled = agendaPageEnabled,
+            alarmsPageEnabled = alarmsPageEnabled,
         )
     }
 

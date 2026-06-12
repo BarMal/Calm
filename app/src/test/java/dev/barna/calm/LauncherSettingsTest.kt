@@ -1112,6 +1112,27 @@ class LauncherSettingsTest {
     }
 
     @Test
+    fun rssPageTogglePersistsInUiPreferences() {
+        assertFalse(settings.uiPreferences().rssPageEnabled)
+
+        assertTrue(settings.toggleRssPage())
+
+        assertTrue(settings.rssPageEnabled())
+        assertTrue(settings.uiPreferences().rssPageEnabled)
+    }
+
+    @Test
+    fun rssFeedUrlsAreDistinctAndEnablePageOnAdd() {
+        assertTrue(settings.rssFeedUrls().isEmpty())
+
+        assertTrue(settings.addRssFeedUrl(" https://example.com/feed.xml "))
+        assertFalse(settings.addRssFeedUrl("https://example.com/feed.xml"))
+
+        assertEquals(listOf("https://example.com/feed.xml"), settings.rssFeedUrls())
+        assertTrue(settings.rssPageEnabled())
+    }
+
+    @Test
     fun pinnedPageEnabledPersistsInUiPreferences() {
         assertFalse(settings.uiPreferences().pinnedPageEnabled)
 

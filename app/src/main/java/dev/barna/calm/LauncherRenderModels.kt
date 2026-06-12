@@ -16,6 +16,8 @@ class LauncherRenderModelFactory(
         dockKeys: List<String> = emptyList(),
         hasCalendarPermission: Boolean,
         calendarEvents: List<CalendarEvent>,
+        rssFeedUrls: List<String> = emptyList(),
+        rssItems: List<RssFeedItem> = emptyList(),
     ): LauncherRenderModel {
         val pageState = pageStateFactory.create(
             preferences = preferences,
@@ -45,6 +47,8 @@ class LauncherRenderModelFactory(
             dockApps = resolvedDockApps,
             hasCalendarPermission = hasCalendarPermission,
             calendarEvents = calendarEvents,
+            rssFeedUrls = rssFeedUrls,
+            rssItems = rssItems,
         )
     }
 }
@@ -64,4 +68,6 @@ data class LauncherRenderModel(
     val dockApps: List<AppEntry> = emptyList(),
     val hasCalendarPermission: Boolean,
     val calendarEvents: List<CalendarEvent>,
+    val rssFeedUrls: List<String> = emptyList(),
+    val rssItems: List<RssFeedItem> = emptyList(),
 )

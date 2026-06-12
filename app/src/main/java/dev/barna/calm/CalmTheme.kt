@@ -10,6 +10,7 @@ object CalmTheme {
     const val CONTACTS_KEY = "dev.barna.calm.CONTACTS"
     const val AGENDA_KEY = "dev.barna.calm.AGENDA"
     const val ALARMS_KEY = "dev.barna.calm.ALARMS"
+    const val RSS_KEY = "dev.barna.calm.RSS"
 
     val INK: Int = rgb(236, 232, 222)
     val MUTED_INK: Int = rgb(166, 161, 151)

@@ -53,6 +53,7 @@ class CalmLauncherRunner(
     private val settings = LauncherSettings(activity)
     private val notificationRepository = NotificationChapterRepository(activity, settings)
     private val calendarRepository = CalendarRepository(activity, requestCalendarPermission)
+    private val rssFeedRepository = RssFeedRepository()
     private val contactsRepository = ContactsRepository(activity, requestContactsPermission)
     private val drawables = CalmDrawables(activity)
     private val cardSpec = CalmCardSpec()
@@ -201,6 +202,14 @@ class CalmLauncherRunner(
         activePreferences = { activePreferences },
         barePagePanel = ::createBarePagePanel,
     )
+    private val rssPageBuilder = RssPageBuilder(
+        activity = activity,
+        cardRenderer = cardRenderer,
+        cardStackController = cardStackController,
+        activePreferences = { activePreferences },
+        barePagePanel = ::createBarePagePanel,
+        label = ::label,
+    )
     private val stateExecutor = Executors.newFixedThreadPool(4)
     private val chapterPageBuilder = ChapterPageBuilder(
         activity = activity,
@@ -255,6 +264,7 @@ class CalmLauncherRunner(
         overviewPageBuilder = overviewPageBuilder,
         agendaPageBuilder = agendaPageBuilder,
         alarmsPageBuilder = alarmsPageBuilder,
+        rssPageBuilder = rssPageBuilder,
         chapterPageBuilder = chapterPageBuilder,
         appLibraryController = appLibraryController,
         appSearchController = appSearchController,
@@ -298,6 +308,7 @@ class CalmLauncherRunner(
     private val stateManager = LauncherStateManager(
         notificationRepository = notificationRepository,
         calendarRepository = calendarRepository,
+        rssFeedRepository = rssFeedRepository,
         settings = settings,
         renderModelFactory = renderModelFactory,
         appCardDisplayCache = appCardDisplayCache,
@@ -785,6 +796,7 @@ class CalmLauncherRunner(
         PageSlot.CONTACTS -> CalmTheme.CONTACTS_KEY
         PageSlot.AGENDA -> CalmTheme.AGENDA_KEY
         PageSlot.ALARMS -> CalmTheme.ALARMS_KEY
+        PageSlot.RSS -> CalmTheme.RSS_KEY
         PageSlot.APPS -> CalmTheme.APP_LIBRARY_KEY
         PageSlot.CLASSIC_PAGES -> settings.homeClassicPage()?.key ?: CalmTheme.OVERVIEW_KEY
         PageSlot.NOTIFICATIONS -> CalmTheme.OVERVIEW_KEY
@@ -1260,6 +1272,7 @@ class CalmLauncherRunner(
             ContextAction("People page", Runnable { addPeoplePageFromOverview(pages) }),
             ContextAction("Agenda page", Runnable { addAgendaPageFromOverview(pages) }),
             ContextAction("Alarms page", Runnable { addAlarmsPageFromOverview(pages) }),
+            ContextAction("RSS page", Runnable { addRssPageFromOverview(pages) }),
             ContextAction("Apps page", Runnable { addExistingOrLivePageFromOverview(PageSlot.APPS, pages, "Apps page") }),
             ContextAction("Pinned page", Runnable { addPinnedPageFromOverview(state, pages) }),
             ContextAction("Overview page", Runnable { addExistingOrLivePageFromOverview(PageSlot.OVERVIEW, pages, "Overview page") }),
@@ -1305,6 +1318,16 @@ class CalmLauncherRunner(
         settings.toggleAlarmsPage()
         Toast.makeText(activity, "Added Alarms page", Toast.LENGTH_SHORT).show()
         renderAndReopenPageOverview(CalmTheme.ALARMS_KEY)
+    }
+
+    private fun addRssPageFromOverview(pages: List<ChapterPage>) {
+        if (settings.rssPageEnabled()) {
+            addExistingOrLivePageFromOverview(PageSlot.RSS, pages, "RSS page")
+            return
+        }
+        settings.setRssPageEnabled(true)
+        Toast.makeText(activity, "Added RSS page", Toast.LENGTH_SHORT).show()
+        renderAndReopenPageOverview(CalmTheme.RSS_KEY)
     }
 
     private fun addPinnedPageFromOverview(state: LauncherRenderModel, pages: List<ChapterPage>) {
@@ -1708,6 +1731,15 @@ class CalmLauncherRunner(
                 }
             }, ContextActionCloseBehavior.REMOVE_CARD)
         }
+        if (slot == PageSlot.RSS) {
+            return ContextAction("Remove", Runnable {
+                animatePageOverviewRemoval(source, entryIndex, index, pages) {
+                    settings.setRssPageEnabled(false)
+                    Toast.makeText(activity, "Removed RSS page", Toast.LENGTH_SHORT).show()
+                    renderAndReopenPageOverview(nextFocusKey)
+                }
+            }, ContextActionCloseBehavior.REMOVE_CARD)
+        }
         if (slot == PageSlot.PINNED && settings.pinnedPageEnabled()) {
             return ContextAction("Remove", Runnable {
                 animatePageOverviewRemoval(source, entryIndex, index, pages) {
@@ -1943,6 +1975,7 @@ class CalmLauncherRunner(
             slot == PageSlot.CONTACTS -> "People"
             slot == PageSlot.AGENDA -> "Agenda"
             slot == PageSlot.ALARMS -> "Alarms"
+            slot == PageSlot.RSS -> "RSS"
             else -> if (selected) "Current" else "${pages.indexOf(page) + 1} of ${pages.size}"
         }
         return LinearLayout(activity).apply {
@@ -1992,6 +2025,7 @@ class CalmLauncherRunner(
                 page.key == CalmTheme.CONTACTS_KEY -> addGenericRows(this, listOf("Favourite people", "Recent contact", "Quick action"), CalmTheme.ACCENT)
                 page.key == CalmTheme.AGENDA_KEY -> addAgendaOverviewPreview(this, state)
                 page.key == CalmTheme.ALARMS_KEY -> addGenericRows(this, listOf("Next alarm", "Clock app", "Wake up"), CalmTheme.ACCENT)
+                page.key == CalmTheme.RSS_KEY -> addRssOverviewPreview(this, state)
                 page.key == CalmTheme.WORK_OVERVIEW_KEY -> addOverviewRows(this, state, work = true)
                 page.chapter != null -> addNotificationOverviewPreview(this, page.chapter)
                 else -> addOverviewRows(this, state, work = false)
@@ -2029,6 +2063,15 @@ class CalmLauncherRunner(
             !state.hasCalendarPermission -> listOf("Calendar access", "Tap to allow")
             state.calendarEvents.isEmpty() -> listOf("No upcoming events")
             else -> state.calendarEvents.take(5).map { event -> event.title.ifBlank { "Untitled event" } }
+        }
+        addGenericRows(parent, rows, CalmTheme.ACCENT)
+    }
+
+    private fun addRssOverviewPreview(parent: LinearLayout, state: LauncherRenderModel) {
+        val rows = when {
+            state.rssFeedUrls.isEmpty() -> listOf("No feeds", "Add URLs in Settings")
+            state.rssItems.isEmpty() -> listOf("No recent items", "${state.rssFeedUrls.size} feeds")
+            else -> state.rssItems.take(5).map { item -> item.title.ifBlank { item.feedTitle } }
         }
         addGenericRows(parent, rows, CalmTheme.ACCENT)
     }

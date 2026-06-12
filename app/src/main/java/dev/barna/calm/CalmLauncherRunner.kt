@@ -38,6 +38,7 @@ import androidx.viewpager2.widget.CompositePageTransformer
 import androidx.viewpager2.widget.ViewPager2
 import java.util.Date
 import java.util.concurrent.Executors
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 class CalmLauncherRunner(
@@ -306,6 +307,7 @@ class CalmLauncherRunner(
     private var pageOverviewOverlay: View? = null
     private val pageOverviewHiddenViews = ArrayList<View>()
     private var reopenPageOverviewAfterRender = false
+    private var reopenPageOverviewFocusKey: String? = null
     private val currentUiState: LauncherRenderModel?
         get() = launcherStateViewModel.uiState.value.renderModel
     private var activePreferences: LauncherUiPreferences = settings.uiPreferences()
@@ -577,7 +579,9 @@ class CalmLauncherRunner(
         val pages = state.pages
         val initialPage = resolveInitialPage(pages)
         val reopenOverview = reopenPageOverviewAfterRender
+        val reopenOverviewFocusKey = reopenPageOverviewFocusKey
         reopenPageOverviewAfterRender = false
+        reopenPageOverviewFocusKey = null
 
         val screen = object : FrameLayout(activity) {
             private var overviewScale = 1f
@@ -733,7 +737,7 @@ class CalmLauncherRunner(
         }
         schedulePagePrewarm(pager, pagerAdapter, pages.size, initialPage)
         if (reopenOverview) {
-            screen.post { showPageOverview(screen, state, pages, pager.currentItem, haptic = false) }
+            screen.post { showPageOverview(screen, state, pages, pager.currentItem, haptic = false, focusPageKey = reopenOverviewFocusKey) }
         }
     }
 
@@ -891,6 +895,7 @@ class CalmLauncherRunner(
         pages: List<ChapterPage>,
         selectedIndex: Int,
         haptic: Boolean = true,
+        focusPageKey: String? = null,
     ) {
         if (pageOverviewOverlay != null || pages.isEmpty()) return
         focusOverlay.dismiss(false)
@@ -922,9 +927,27 @@ class CalmLauncherRunner(
         val cardHeight = (activity.resources.displayMetrics.heightPixels * 0.58f).toInt()
             .coerceIn(activity.dp(360), activity.dp(540))
         val snapshotAdapter = currentPagerAdapter
-        pages.forEachIndexed { index, page ->
-            val card = pageOverviewCard(page, state, index, pages, snapshotAdapter, cardWidth, cardHeight, index == selectedIndex)
-            installPageOverviewCardGestures(card, page, index, pages, state, cardWidth)
+        val entries = pageOverviewEntries(pages)
+        val selectedEntryIndex = pageOverviewSelectedEntryIndex(entries, selectedIndex)
+        val focusEntryIndex = focusPageKey
+            ?.let { key -> pages.indexOfFirst { page -> page.key == key } }
+            ?.takeIf { index -> index >= 0 }
+            ?.let { index -> pageOverviewSelectedEntryIndex(entries, index) }
+            ?.takeIf { index -> index >= 0 }
+            ?: selectedEntryIndex
+        entries.forEachIndexed { entryIndex, entry ->
+            val card = when (entry) {
+                is PageOverviewEntry.Page -> {
+                    pageOverviewCard(entry.page, state, entry.pageIndex, pages, snapshotAdapter, cardWidth, cardHeight, entry.pageIndex == selectedIndex).also {
+                        installPageOverviewCardGestures(it, entry.page, entry.pageIndex, entryIndex, entries, pages, state, cardWidth)
+                    }
+                }
+                is PageOverviewEntry.NotificationBundle -> {
+                    pageOverviewNotificationBundleCard(entry, cardWidth, cardHeight, entry.containsPageIndex(selectedIndex)).also {
+                        installPageOverviewNotificationBundleGestures(it, entry)
+                    }
+                }
+            }
             row.addView(
                 card,
                 LinearLayout.LayoutParams(cardWidth, cardHeight).apply {
@@ -949,7 +972,7 @@ class CalmLauncherRunner(
         pageOverviewOverlay = overlay
         overlay.animate().alpha(1f).setDuration(160L).start()
         scroller.post {
-            scrollPageOverviewToCard(scroller, selectedIndex, cardWidth, smooth = true)
+            scrollPageOverviewToCard(scroller, focusEntryIndex, cardWidth, smooth = false)
         }
     }
 
@@ -991,6 +1014,46 @@ class CalmLauncherRunner(
             gravity = Gravity.CENTER_VERTICAL
             setPadding(activity.dp(4), 0, 0, activity.dp(18))
             addView(label("Pages", 28, CalmTheme.INK, Typeface.NORMAL), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+    }
+
+    private fun pageOverviewEntries(pages: List<ChapterPage>): List<PageOverviewEntry> {
+        val dynamicEntries = pages.withIndex()
+            .filter { indexed -> indexed.value.isDynamicOverviewPage() }
+            .map { indexed -> PageOverviewEntry.Page(indexed.index, indexed.value) }
+        if (dynamicEntries.isEmpty()) {
+            return pages.mapIndexed { index, page -> PageOverviewEntry.Page(index, page) }
+        }
+        val result = ArrayList<PageOverviewEntry>()
+        val overviewIndex = pages.indexOfFirst { page -> PageArranger.slotOf(page) == PageSlot.OVERVIEW }
+        var bundleInserted = false
+        pages.forEachIndexed { index, page ->
+            if (page.isDynamicOverviewPage()) return@forEachIndexed
+            result += PageOverviewEntry.Page(index, page)
+            if (index == overviewIndex) {
+                result += PageOverviewEntry.NotificationBundle(dynamicEntries)
+                bundleInserted = true
+            }
+        }
+        if (!bundleInserted) {
+            val firstDynamicIndex = dynamicEntries.first().pageIndex
+            val insertIndex = result.indexOfFirst { entry -> entry.firstPageIndex > firstDynamicIndex }.takeIf { it != -1 }
+                ?: result.size
+            result.add(insertIndex, PageOverviewEntry.NotificationBundle(dynamicEntries))
+        }
+        return result
+    }
+
+    private fun pageOverviewSelectedEntryIndex(entries: List<PageOverviewEntry>, selectedPageIndex: Int): Int {
+        return entries.indexOfFirst { entry -> entry.containsPageIndex(selectedPageIndex) }
+            .takeIf { it != -1 }
+            ?: selectedPageIndex.coerceIn(0, entries.lastIndex.coerceAtLeast(0))
+    }
+
+    private fun ChapterPage.isDynamicOverviewPage(): Boolean {
+        return when (PageArranger.slotOf(this)) {
+            PageSlot.NOTIFICATIONS -> true
+            else -> false
         }
     }
 
@@ -1042,6 +1105,132 @@ class CalmLauncherRunner(
         }
     }
 
+    private fun pageOverviewNotificationBundleCard(
+        entry: PageOverviewEntry.NotificationBundle,
+        cardWidth: Int,
+        cardHeight: Int,
+        selected: Boolean,
+    ): View {
+        val colors = GoogleInteractionStyle.palette(activity)
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+            setPadding(activity.dp(12), activity.dp(12), activity.dp(12), activity.dp(12))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = activity.dp(26).toFloat()
+                setColor(if (selected) withAlpha(colors.primaryContainer, 86) else Color.TRANSPARENT)
+                setStroke(activity.dp(if (selected) 2 else 1), if (selected) colors.primary else colors.outlineVariant)
+            }
+            addView(
+                FrameLayout(activity).apply {
+                    addView(pageOverviewNotificationBundleSurface(entry, selected), matchParentParams())
+                    addView(pageOverviewNotificationBundleBadge(entry, selected), FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+            )
+            addView(label("Notifications", 15, if (selected) colors.onPrimaryContainer else colors.onSurface, Typeface.BOLD).apply {
+                gravity = Gravity.CENTER
+                maxLines = 1
+                setPadding(activity.dp(4), activity.dp(12), activity.dp(4), 0)
+            })
+            minimumWidth = cardWidth
+            minimumHeight = cardHeight
+        }
+    }
+
+    private fun pageOverviewNotificationBundleSurface(entry: PageOverviewEntry.NotificationBundle, selected: Boolean): View {
+        val colors = GoogleInteractionStyle.palette(activity)
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(activity.dp(18), activity.dp(54), activity.dp(18), activity.dp(18))
+            addView(label("Live notifications", 20, if (selected) colors.primary else colors.onSurface, Typeface.BOLD).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(0, 0, 0, activity.dp(18))
+            })
+            entry.pages.take(5).forEach { pageEntry ->
+                val chapter = pageEntry.page.chapter
+                addView(LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(activity.dp(12), activity.dp(8), activity.dp(12), activity.dp(8))
+                    background = GradientDrawable().apply {
+                        shape = GradientDrawable.RECTANGLE
+                        cornerRadius = activity.dp(16).toFloat()
+                        setColor(colors.surfaceContainer)
+                    }
+                    addView(View(activity).apply {
+                        background = GradientDrawable().apply {
+                            shape = GradientDrawable.OVAL
+                            setColor(chapter?.hueColor ?: colors.primary)
+                        }
+                    }, LinearLayout.LayoutParams(activity.dp(24), activity.dp(24)).apply {
+                        rightMargin = activity.dp(10)
+                    })
+                    addView(label(pageEntry.page.title, 13, colors.onSurface, Typeface.BOLD).apply {
+                        maxLines = 1
+                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    addView(label("${chapter?.notifications?.size ?: 0}", 12, colors.onSurfaceVariant, Typeface.NORMAL))
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    bottomMargin = activity.dp(8)
+                })
+            }
+            if (entry.pages.size > 5) {
+                addView(label("+${entry.pages.size - 5} more", 13, colors.onSurfaceVariant, Typeface.NORMAL).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    setPadding(0, activity.dp(6), 0, 0)
+                })
+            }
+        }
+    }
+
+    private fun pageOverviewNotificationBundleBadge(entry: PageOverviewEntry.NotificationBundle, selected: Boolean): View {
+        val notificationCount = entry.pages.sumOf { pageEntry -> pageEntry.page.chapter?.notifications?.size ?: 0 }
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(activity.dp(10), activity.dp(8), activity.dp(10), activity.dp(8))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                setColor(withAlpha(Color.BLACK, 114))
+                cornerRadii = floatArrayOf(
+                    activity.dp(18).toFloat(), activity.dp(18).toFloat(),
+                    activity.dp(18).toFloat(), activity.dp(18).toFloat(),
+                    0f, 0f,
+                    0f, 0f,
+                )
+            }
+            addView(label(if (selected) "Current" else "Live", 12, Color.WHITE, Typeface.BOLD), LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                rightMargin = activity.dp(8)
+            })
+            addView(label("${entry.pages.size} pages, $notificationCount notifications", 12, Color.WHITE, Typeface.NORMAL).apply { maxLines = 1 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+    }
+
+    private fun installPageOverviewNotificationBundleGestures(card: View, entry: PageOverviewEntry.NotificationBundle) {
+        card.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            showNotificationBundleMenu(it, entry)
+        }
+        card.setOnLongClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            showNotificationBundleMenu(it, entry)
+            true
+        }
+    }
+
+    private fun showNotificationBundleMenu(source: View, entry: PageOverviewEntry.NotificationBundle) {
+        val actions = entry.pages.map { pageEntry ->
+            val count = pageEntry.page.chapter?.notifications?.size ?: 0
+            ContextAction("${pageEntry.page.title} ($count)", Runnable {
+                hidePageOverview()
+                navigateToChapterPage(pageEntry.pageIndex)
+            })
+        }
+        GoogleInteractionStyle.popupMenu(activity, source, source.screenCenter(), actions)
+    }
+
     private fun showPageOverviewAddMenu(source: View, state: LauncherRenderModel, pages: List<ChapterPage>) {
         val actions = listOf(
             ContextAction("Classic page", Runnable { addClassicPageFromOverview() }),
@@ -1060,7 +1249,7 @@ class CalmLauncherRunner(
         editingClassicPageId = page.id
         selectPage(page.key)
         Toast.makeText(activity, "Added ${page.title}", Toast.LENGTH_SHORT).show()
-        renderAndReopenPageOverview()
+        renderAndReopenPageOverview(page.key)
     }
 
     private fun addPeoplePageFromOverview(pages: List<ChapterPage>) {
@@ -1111,11 +1300,12 @@ class CalmLauncherRunner(
         }
         Toast.makeText(activity, "$label is already added", Toast.LENGTH_SHORT).show()
         selectPage(pages[index].key)
-        renderAndReopenPageOverview()
+        renderAndReopenPageOverview(pages[index].key)
     }
 
-    private fun renderAndReopenPageOverview() {
+    private fun renderAndReopenPageOverview(focusPageKey: String? = null) {
         reopenPageOverviewAfterRender = true
+        reopenPageOverviewFocusKey = focusPageKey
         render()
     }
 
@@ -1123,6 +1313,8 @@ class CalmLauncherRunner(
         card: View,
         page: ChapterPage,
         index: Int,
+        entryIndex: Int,
+        entries: List<PageOverviewEntry>,
         pages: List<ChapterPage>,
         state: LauncherRenderModel,
         cardWidth: Int,
@@ -1130,19 +1322,29 @@ class CalmLauncherRunner(
         val touchSlop = ViewConfiguration.get(activity).scaledTouchSlop
         var downRawX = 0f
         var downRawY = 0f
+        var downScrollX = 0
         var dragArmed = false
         var dragging = false
+        var previewTargetEntryIndex = entryIndex
+        var dropPlaceholder: GradientDrawable? = null
         val longPress = Runnable {
             dragArmed = true
+            previewTargetEntryIndex = entryIndex
+            dropPlaceholder = pageOverviewDropPlaceholder().also { placeholder ->
+                pageOverviewRowFor(card)?.overlay?.add(placeholder)
+                updatePageOverviewDropPreview(card, entryIndex, previewTargetEntryIndex, cardWidth, placeholder)
+            }
             card.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             card.parent?.requestDisallowInterceptTouchEvent(true)
-            card.animate().scaleX(1.03f).scaleY(1.03f).setDuration(110L).start()
+            card.elevation = activity.dp(14).toFloat()
+            card.animate().alpha(0.92f).scaleX(1.03f).scaleY(1.03f).setDuration(110L).start()
         }
         card.setOnTouchListener { view, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downRawX = event.rawX
                     downRawY = event.rawY
+                    downScrollX = pageOverviewScrollerFor(view)?.scrollX ?: 0
                     dragArmed = false
                     dragging = false
                     view.animate().cancel()
@@ -1163,11 +1365,20 @@ class CalmLauncherRunner(
                         view.parent?.requestDisallowInterceptTouchEvent(true)
                     }
                     if (dragArmed) {
-                        view.translationX = dx
+                        autoScrollPageOverviewWhileDragging(view, event.rawX)
+                        val dragX = pageOverviewDragDistance(view, downScrollX, dx)
+                        view.translationX = dragX
                         view.translationY = dy.coerceIn(-activity.dp(18).toFloat(), activity.dp(18).toFloat())
                         view.scaleX = 1.03f
                         view.scaleY = 1.03f
-                        autoScrollPageOverviewWhileDragging(view, event.rawX)
+                        val targetEntryIndex = pageOverviewTargetEntryIndex(entryIndex, entries, cardWidth, dragX)
+                        if (targetEntryIndex != previewTargetEntryIndex) {
+                            previewTargetEntryIndex = targetEntryIndex
+                            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                            dropPlaceholder?.let { placeholder ->
+                                updatePageOverviewDropPreview(view, entryIndex, previewTargetEntryIndex, cardWidth, placeholder)
+                            }
+                        }
                     }
                     true
                 }
@@ -1176,22 +1387,30 @@ class CalmLauncherRunner(
                     view.parent?.requestDisallowInterceptTouchEvent(false)
                     val dx = event.rawX - downRawX
                     val dy = event.rawY - downRawY
-                    view.animate().translationX(0f).translationY(0f).scaleX(1f).scaleY(1f).setDuration(120L).start()
+                    val dragX = pageOverviewDragDistance(view, downScrollX, dx)
+                    var handledByReorder = false
                     if (dragArmed && dragging) {
-                        val targetIndex = (index + (dx / (cardWidth * 0.72f)).roundToInt()).coerceIn(0, pages.lastIndex)
-                        if (targetIndex != index) {
+                        val targetEntryIndex = previewTargetEntryIndex
+                        val targetIndex = entries[targetEntryIndex].firstPageIndex.coerceIn(0, pages.lastIndex)
+                        if (targetEntryIndex != entryIndex && targetIndex != index) {
                             view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                            reorderPageFromOverview(page, pages, targetIndex, state)
+                            handledByReorder = reorderPageFromOverview(page, pages, targetIndex, state)
                         } else {
                             magnetizePageOverviewToCard(view, index, cardWidth)
                         }
                     } else if (dragArmed) {
-                        showPageOverviewActions(view, page, index, pages, state)
+                        showPageOverviewActions(view, page, index, entryIndex, pages, state)
                     } else if (kotlin.math.hypot(dx.toDouble(), dy.toDouble()) <= touchSlop) {
                         view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                         hidePageOverview()
                         navigateToChapterPage(index)
                     }
+                    if (!handledByReorder) {
+                        clearPageOverviewDropPreview(view, dropPlaceholder)
+                        view.elevation = 0f
+                        view.animate().translationX(0f).translationY(0f).alpha(1f).scaleX(1f).scaleY(1f).setDuration(90L).start()
+                    }
+                    dropPlaceholder = null
                     true
                 }
                 else -> true
@@ -1199,13 +1418,117 @@ class CalmLauncherRunner(
         }
     }
 
+    private fun pageOverviewDragDistance(card: View, downScrollX: Int, fingerDeltaX: Float): Float {
+        val scroller = pageOverviewScrollerFor(card) ?: return fingerDeltaX
+        return fingerDeltaX + (scroller.scrollX - downScrollX)
+    }
+
+    private fun pageOverviewTargetEntryIndex(
+        entryIndex: Int,
+        entries: List<PageOverviewEntry>,
+        cardWidth: Int,
+        dragX: Float,
+    ): Int {
+        return (entryIndex + (dragX / (cardWidth * 0.72f)).roundToInt()).coerceIn(0, entries.lastIndex)
+    }
+
+    private fun pageOverviewScrollerFor(card: View): HorizontalScrollView? {
+        return card.parent?.parent as? HorizontalScrollView
+    }
+
+    private fun pageOverviewRowFor(card: View): ViewGroup? {
+        return card.parent as? ViewGroup
+    }
+
+    private fun pageOverviewDropPlaceholder(): GradientDrawable {
+        val colors = GoogleInteractionStyle.palette(activity)
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = activity.dp(26).toFloat()
+            setColor(withAlpha(colors.primaryContainer, 74))
+            setStroke(activity.dp(2), colors.primary)
+        }
+    }
+
+    private fun updatePageOverviewDropPreview(
+        card: View,
+        sourceEntryIndex: Int,
+        targetEntryIndex: Int,
+        cardWidth: Int,
+        placeholder: GradientDrawable,
+    ) {
+        val row = pageOverviewRowFor(card) ?: return
+        val stride = pageOverviewCardStride(cardWidth)
+        val targetChild = row.getChildAt(targetEntryIndex) ?: card
+        placeholder.setBounds(
+            targetChild.left,
+            card.top,
+            targetChild.left + cardWidth,
+            card.bottom,
+        )
+        for (childIndex in 0 until row.childCount) {
+            val child = row.getChildAt(childIndex)
+            if (child === card) continue
+            val translation = when {
+                sourceEntryIndex < targetEntryIndex && childIndex in (sourceEntryIndex + 1)..targetEntryIndex -> -stride.toFloat()
+                sourceEntryIndex > targetEntryIndex && childIndex in targetEntryIndex until sourceEntryIndex -> stride.toFloat()
+                else -> 0f
+            }
+            if (child.translationX != translation) {
+                child.animate().cancel()
+                child.animate().translationX(translation).setDuration(PAGE_OVERVIEW_REORDER_PREVIEW_MS).start()
+            }
+        }
+        row.invalidate()
+    }
+
+    private fun clearPageOverviewDropPreview(card: View, placeholder: GradientDrawable?) {
+        val row = pageOverviewRowFor(card) ?: return
+        placeholder?.let { row.overlay.remove(it) }
+        for (childIndex in 0 until row.childCount) {
+            val child = row.getChildAt(childIndex)
+            if (child !== card && child.translationX != 0f) {
+                child.animate().cancel()
+                child.animate().translationX(0f).setDuration(PAGE_OVERVIEW_REORDER_PREVIEW_MS).start()
+            }
+        }
+        row.invalidate()
+    }
+
     private fun installPageOverviewScrollMagnet(scroller: HorizontalScrollView, cardWidth: Int) {
         var snap: Runnable? = null
+        var touching = false
+        var snapAfterSettle = false
+        fun cancelSnap() {
+            snap?.let(scroller::removeCallbacks)
+            snap = null
+        }
+        fun scheduleSnap() {
+            cancelSnap()
+            snap = Runnable {
+                snap = null
+                if (touching) return@Runnable
+                snapAfterSettle = false
+                snapPageOverviewScroll(scroller, cardWidth)
+            }.also {
+                scroller.postDelayed(it, PAGE_OVERVIEW_MAGNET_DELAY_MS)
+            }
+        }
+        scroller.setOnScrollChangeListener { _, _, _, _, _ ->
+            if (snapAfterSettle && !touching) scheduleSnap()
+        }
         scroller.setOnTouchListener { view, event ->
-            snap?.let(view::removeCallbacks)
-            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
-                snap = Runnable { snapPageOverviewScroll(scroller, cardWidth) }.also {
-                    view.postDelayed(it, PAGE_OVERVIEW_MAGNET_DELAY_MS)
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    touching = true
+                    snapAfterSettle = false
+                    cancelSnap()
+                }
+                MotionEvent.ACTION_MOVE -> cancelSnap()
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    touching = false
+                    snapAfterSettle = true
+                    scheduleSnap()
                 }
             }
             false
@@ -1213,27 +1536,29 @@ class CalmLauncherRunner(
     }
 
     private fun autoScrollPageOverviewWhileDragging(card: View, rawX: Float) {
-        val scroller = card.parent?.parent as? HorizontalScrollView ?: return
+        val scroller = pageOverviewScrollerFor(card) ?: return
         val location = IntArray(2)
         scroller.getLocationOnScreen(location)
         val leftEdge = location[0] + activity.dp(44)
         val rightEdge = location[0] + scroller.width - activity.dp(44)
         val delta = when {
-            rawX < leftEdge -> -activity.dp(14)
-            rawX > rightEdge -> activity.dp(14)
+            rawX < leftEdge -> -activity.dp(10)
+            rawX > rightEdge -> activity.dp(10)
             else -> 0
         }
         if (delta != 0) scroller.scrollBy(delta, 0)
     }
 
     private fun magnetizePageOverviewToCard(card: View, index: Int, cardWidth: Int) {
-        val scroller = card.parent?.parent as? HorizontalScrollView ?: return
+        val scroller = pageOverviewScrollerFor(card) ?: return
         scroller.post { scrollPageOverviewToCard(scroller, index, cardWidth, smooth = true) }
     }
 
     private fun snapPageOverviewScroll(scroller: HorizontalScrollView, cardWidth: Int) {
         val stride = pageOverviewCardStride(cardWidth)
         val index = ((scroller.scrollX + activity.dp(24)) / stride.toFloat()).roundToInt().coerceAtLeast(0)
+        val target = (index * stride - activity.dp(24)).coerceAtLeast(0)
+        if (abs(scroller.scrollX - target) > (cardWidth * PAGE_OVERVIEW_MAGNET_THRESHOLD).roundToInt()) return
         scrollPageOverviewToCard(scroller, index, cardWidth, smooth = true)
     }
 
@@ -1253,6 +1578,7 @@ class CalmLauncherRunner(
         source: View,
         page: ChapterPage,
         index: Int,
+        entryIndex: Int,
         pages: List<ChapterPage>,
         state: LauncherRenderModel,
     ) {
@@ -1265,7 +1591,7 @@ class CalmLauncherRunner(
         actions += ContextAction("Customise", Runnable {
             customisePageFromOverview(page)
         })
-        deletePageAction(source, page, index, pages)?.let { actions += it }
+        deletePageAction(source, page, index, entryIndex, pages)?.let { actions += it }
         GoogleInteractionStyle.popupMenu(activity, source, source.screenCenter(), actions, destructiveLabels = setOf("Delete", "Remove"))
     }
 
@@ -1278,14 +1604,14 @@ class CalmLauncherRunner(
             if (!settings.setDefaultClassicPage(it.id)) return
             settings.setDefaultHomeSlot(PageSlot.CLASSIC_PAGES)
             Toast.makeText(activity, "${it.title} is now home", Toast.LENGTH_SHORT).show()
-            renderAndReopenPageOverview()
+            renderAndReopenPageOverview(page.key)
             return
         }
         val slot = PageArranger.slotOf(page)
         if (slot == PageSlot.NOTIFICATIONS) return
         settings.setDefaultHomeSlot(slot)
         Toast.makeText(activity, "${page.title} is now home", Toast.LENGTH_SHORT).show()
-        renderAndReopenPageOverview()
+        renderAndReopenPageOverview(page.key)
     }
 
     private fun customisePageFromOverview(page: ChapterPage) {
@@ -1300,36 +1626,37 @@ class CalmLauncherRunner(
         openSettingsActivity()
     }
 
-    private fun deletePageAction(source: View, page: ChapterPage, index: Int, pages: List<ChapterPage>): ContextAction? {
+    private fun deletePageAction(source: View, page: ChapterPage, index: Int, entryIndex: Int, pages: List<ChapterPage>): ContextAction? {
+        val nextFocusKey = pages.getOrNull(index + 1)?.key ?: pages.getOrNull(index - 1)?.key
         page.classicPage?.let { classicPage ->
             return ContextAction("Delete", Runnable {
-                animatePageOverviewRemoval(source, index, pages) {
-                    removeClassicPageFromOverview(classicPage)
+                animatePageOverviewRemoval(source, entryIndex, index, pages) {
+                    removeClassicPageFromOverview(classicPage, nextFocusKey)
                 }
             }, ContextActionCloseBehavior.REMOVE_CARD)
         }
         page.chapter?.let { chapter ->
             return ContextAction("Remove", Runnable {
-                animatePageOverviewRemoval(source, index, pages) {
-                    hideNotificationPageFromOverview(chapter)
+                animatePageOverviewRemoval(source, entryIndex, index, pages) {
+                    hideNotificationPageFromOverview(chapter, nextFocusKey)
                 }
             }, ContextActionCloseBehavior.REMOVE_CARD)
         }
         val slot = PageArranger.slotOf(page)
         if (slot != PageSlot.CONTACTS) return null
         return ContextAction("Remove", Runnable {
-            animatePageOverviewRemoval(source, index, pages) {
+            animatePageOverviewRemoval(source, entryIndex, index, pages) {
                 if (settings.contactsPageEnabled()) settings.toggleContactsPage()
                 Toast.makeText(activity, "Removed People page", Toast.LENGTH_SHORT).show()
-                renderAndReopenPageOverview()
+                renderAndReopenPageOverview(nextFocusKey)
             }
         }, ContextActionCloseBehavior.REMOVE_CARD)
     }
 
-    private fun animatePageOverviewRemoval(card: View, index: Int, pages: List<ChapterPage>, removeAction: () -> Unit) {
+    private fun animatePageOverviewRemoval(card: View, cardIndex: Int, pageIndex: Int, pages: List<ChapterPage>, removeAction: () -> Unit) {
         val row = card.parent as? ViewGroup
         val stride = card.width.takeIf { it > 0 }?.let(::pageOverviewCardStride) ?: pageOverviewCardStride(card.measuredWidth)
-        val nextFocus = pages.getOrNull(index + 1) ?: pages.getOrNull(index - 1)
+        val nextFocus = pages.getOrNull(pageIndex + 1) ?: pages.getOrNull(pageIndex - 1)
         if (nextFocus != null) {
             selectPage(nextFocus.key)
         }
@@ -1343,21 +1670,21 @@ class CalmLauncherRunner(
             .setDuration(PAGE_OVERVIEW_REMOVE_ANIMATION_MS)
             .start()
         if (row != null) {
-            for (childIndex in index + 1 until row.childCount) {
+            for (childIndex in cardIndex + 1 until row.childCount) {
                 row.getChildAt(childIndex)
                     .animate()
                     .translationX(-stride.toFloat())
                     .setDuration(PAGE_OVERVIEW_REMOVE_ANIMATION_MS)
                     .start()
             }
-            if (index > 0) {
-                row.getChildAt(index - 1)
+            if (cardIndex > 0) {
+                row.getChildAt(cardIndex - 1)
                     .animate()
                     .scaleX(1.015f)
                     .scaleY(1.015f)
                     .setDuration(PAGE_OVERVIEW_REMOVE_ANIMATION_MS / 2)
                     .withEndAction {
-                        row.getChildAt(index - 1)?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(90L)?.start()
+                        row.getChildAt(cardIndex - 1)?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(90L)?.start()
                     }
                     .start()
             }
@@ -1368,7 +1695,7 @@ class CalmLauncherRunner(
         }, PAGE_OVERVIEW_REMOVE_ANIMATION_MS)
     }
 
-    private fun removeClassicPageFromOverview(page: ClassicLauncherPageDefinition) {
+    private fun removeClassicPageFromOverview(page: ClassicLauncherPageDefinition, focusPageKey: String?) {
         val removed = settings.removeClassicPage(page.id) ?: return
         if (editingClassicPageId == removed.id) {
             editingClassicPageId = null
@@ -1378,13 +1705,13 @@ class CalmLauncherRunner(
             .filter { item -> item.type == ClassicGridItemType.WIDGET }
             .forEach(classicWidgetHostController::deleteWidget)
         Toast.makeText(activity, "Removed ${removed.title}", Toast.LENGTH_SHORT).show()
-        renderAndReopenPageOverview()
+        renderAndReopenPageOverview(focusPageKey)
     }
 
-    private fun hideNotificationPageFromOverview(chapter: AppChapter) {
+    private fun hideNotificationPageFromOverview(chapter: AppChapter, focusPageKey: String?) {
         settings.exclude(chapter)
         Toast.makeText(activity, "Removed ${chapter.label}", Toast.LENGTH_SHORT).show()
-        renderAndReopenPageOverview()
+        renderAndReopenPageOverview(focusPageKey)
     }
 
     private fun reorderPageFromOverview(
@@ -1392,32 +1719,33 @@ class CalmLauncherRunner(
         pages: List<ChapterPage>,
         targetPageIndex: Int,
         state: LauncherRenderModel,
-    ) {
-        val targetPage = pages.getOrNull(targetPageIndex) ?: return
+    ): Boolean {
+        val targetPage = pages.getOrNull(targetPageIndex) ?: return false
         val sourceSlot = PageArranger.slotOf(page)
         val targetSlot = PageArranger.slotOf(targetPage)
         if (sourceSlot == PageSlot.CLASSIC_PAGES && targetSlot == PageSlot.CLASSIC_PAGES) {
-            val classic = page.classicPage ?: return
-            val targetClassic = targetPage.classicPage ?: return
+            val classic = page.classicPage ?: return false
+            val targetClassic = targetPage.classicPage ?: return false
             val targetIndex = state.classicPages.indexOfFirst { it.id == targetClassic.id }
             if (targetIndex != -1) {
                 if (settings.moveClassicPage(classic.id, targetIndex)) {
-                    selectPage(classic.key)
                     Toast.makeText(activity, "Moved ${classic.title}", Toast.LENGTH_SHORT).show()
-                    renderAndReopenPageOverview()
+                    renderAndReopenPageOverview(classic.key)
+                    return true
                 }
             }
-            return
+            return false
         }
-        if (sourceSlot == targetSlot) return
+        if (sourceSlot == targetSlot) return false
         val layout = settings.pageLayout()
         val from = layout.order.indexOf(sourceSlot)
         val to = layout.order.indexOf(targetSlot)
-        if (from == -1 || to == -1 || from == to) return
+        if (from == -1 || to == -1 || from == to) return false
         val next = layout.order.toMutableList().apply { add(to, removeAt(from)) }
         settings.setPageLayoutOrder(next)
         Toast.makeText(activity, "Moved ${page.title}", Toast.LENGTH_SHORT).show()
-        renderAndReopenPageOverview()
+        renderAndReopenPageOverview(page.key)
+        return true
     }
 
     private fun pageOverviewCard(
@@ -1819,6 +2147,26 @@ class CalmLauncherRunner(
         val background: Drawable,
     )
 
+    private sealed class PageOverviewEntry {
+        abstract val firstPageIndex: Int
+        abstract fun containsPageIndex(index: Int): Boolean
+
+        data class Page(
+            val pageIndex: Int,
+            val page: ChapterPage,
+        ) : PageOverviewEntry() {
+            override val firstPageIndex: Int = pageIndex
+            override fun containsPageIndex(index: Int): Boolean = index == pageIndex
+        }
+
+        data class NotificationBundle(
+            val pages: List<Page>,
+        ) : PageOverviewEntry() {
+            override val firstPageIndex: Int = pages.firstOrNull()?.pageIndex ?: 0
+            override fun containsPageIndex(index: Int): Boolean = pages.any { page -> page.pageIndex == index }
+        }
+    }
+
     private fun registerPackageChangeReceiver() {
         if (packageChangeReceiverRegistered) return
         activity.registerReceiver(packageChangeReceiver, IntentFilter().apply {
@@ -1849,8 +2197,10 @@ class CalmLauncherRunner(
 
     private companion object {
         const val PAGE_OVERVIEW_PINCH_THRESHOLD = 0.82f
-        const val PAGE_OVERVIEW_MAGNET_DELAY_MS = 70L
+        const val PAGE_OVERVIEW_MAGNET_DELAY_MS = 120L
+        const val PAGE_OVERVIEW_MAGNET_THRESHOLD = 0.16f
         const val PAGE_OVERVIEW_REMOVE_ANIMATION_MS = 190L
+        const val PAGE_OVERVIEW_REORDER_PREVIEW_MS = 70L
         const val PAGE_PREWARM_INITIAL_DELAY_MS = 260L
         const val PAGE_PREWARM_STEP_DELAY_MS = 120L
         const val PAGE_PREWARM_MAX_PAGES = 3

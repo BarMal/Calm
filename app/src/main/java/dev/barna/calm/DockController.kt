@@ -7,7 +7,6 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
-import android.view.GestureDetector
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
@@ -31,6 +30,7 @@ class DockController(
     private val openAppEntry: (AppEntry) -> Unit,
     private val openNotification: (CalmNotificationListenerService.CalmNotification) -> Unit,
     private val openNotificationPage: (AppChapter) -> Unit,
+    private val showContextMenu: (View, AppEntry, DockNotificationTarget?, Pair<Int, Int>) -> Unit,
 ) {
     private val notificationResolver = DockNotificationResolver()
     private var featuredDockIdentityKey: String? = null
@@ -39,7 +39,7 @@ class DockController(
     fun buildDock(apps: List<AppEntry>, config: DockConfig, chapters: List<AppChapter>): View {
         return when (config.style) {
             DockStyle.CLASSIC -> dockShell(classicDockRow(apps, config, chapters), config)
-            DockStyle.CARD -> cardDock(apps, chapters)
+            DockStyle.CARD -> cardDock(apps, config, chapters)
             DockStyle.HYBRID -> hybridDock(apps, config, chapters)
         }
     }
@@ -65,7 +65,7 @@ class DockController(
         }
     }
 
-    private fun cardDock(apps: List<AppEntry>, chapters: List<AppChapter>): View {
+    private fun cardDock(apps: List<AppEntry>, config: DockConfig, chapters: List<AppChapter>): View {
         return if (apps.isEmpty()) {
             FrameLayout(activity).apply { tag = CalmAnimationTags.CHROME }
         } else {
@@ -74,7 +74,7 @@ class DockController(
             fun bind(index: Int, transition: DockTransition? = null) {
                 selectedIndex = normalizedIndex(index, apps.size)
                 rememberFeaturedDockApp(apps[selectedIndex])
-                val rebind = { bindFeaturedDockStack(surface, apps, chapters, selectedIndex, includeClassicRow = false) }
+                val rebind = { bindFeaturedDockStack(surface, apps, chapters, selectedIndex, includeClassicRow = false, config = config) }
                 if (transition == null) {
                     rebind()
                 } else {
@@ -86,6 +86,7 @@ class DockController(
                 apps = apps,
                 chapters = chapters,
                 currentIndex = { selectedIndex },
+                config = config,
                 selectAppIndex = { index, transition -> bind(index, transition) },
                 cycleNotification = { transition ->
                     if (cycleFeaturedNotification(apps, chapters, selectedIndex, transition.direction)) {
@@ -120,6 +121,7 @@ class DockController(
             apps = apps,
             chapters = chapters,
             currentIndex = { selectedIndex },
+            config = config,
             selectAppIndex = { index, transition -> bind(index, transition) },
             cycleNotification = { transition ->
                 if (cycleFeaturedNotification(apps, chapters, selectedIndex, transition.direction)) {
@@ -175,8 +177,7 @@ class DockController(
         )
         surface.contentDescription = dockDescription(selectedApp, selectedTarget)
         surface.tooltipText = selectedApp.label
-        surface.setOnClickListener { openFeaturedDockItem(selectedApp, selectedTarget) }
-        surface.installNotificationLongPress(selectedTarget)
+        config?.let { surface.installDockInteractions(selectedApp, selectedTarget, it) }
     }
 
     private fun tightDockStack(apps: List<AppEntry>, chapters: List<AppChapter>, selectedIndex: Int): FrameLayout {
@@ -272,13 +273,13 @@ class DockController(
 
     private fun dockItem(app: AppEntry, config: DockConfig, target: DockNotificationTarget?): View {
         return if (DockConfig.showsItemLabels(config.itemSpan)) {
-            dockCard(app, target)
+            dockCard(app, target, config)
         } else {
-            dockIcon(app, target)
+            dockIcon(app, target, config)
         }
     }
 
-    private fun dockIcon(app: AppEntry, target: DockNotificationTarget?): View {
+    private fun dockIcon(app: AppEntry, target: DockNotificationTarget?, config: DockConfig): View {
         val button = ImageButton(activity).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(18))
@@ -288,19 +289,18 @@ class DockController(
             resolveIcon(app)?.let { icon ->
                 setImageDrawable(RoundedBitmapDrawable(icon, activity.dp(14).toFloat()))
             }
-            setOnClickListener { openAppEntry(app) }
-            installNotificationLongPress(target)
+            installDockInteractions(app, target, config)
         }
         return FrameLayout(activity).apply {
             clipChildren = false
             clipToPadding = false
             addView(button, FrameLayout.LayoutParams(activity.dp(56), activity.dp(56)))
             addNotificationBadge(target)
-            installNotificationLongPress(target)
+            installDockInteractions(app, target, config)
         }
     }
 
-    private fun dockCard(app: AppEntry, target: DockNotificationTarget?): View {
+    private fun dockCard(app: AppEntry, target: DockNotificationTarget?, config: DockConfig): View {
         val card = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -331,15 +331,14 @@ class DockController(
                 },
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
             )
-            setOnClickListener { openAppEntry(app) }
-            installNotificationLongPress(target)
+            installDockInteractions(app, target, config)
         }
         return FrameLayout(activity).apply {
             clipChildren = false
             clipToPadding = false
             addView(card, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             addNotificationBadge(target)
-            installNotificationLongPress(target)
+            installDockInteractions(app, target, config)
         }
     }
 
@@ -367,13 +366,58 @@ class DockController(
             .ifBlank { activity.getString(R.string.dock_card_tap_to_open) }
     }
 
-    private fun openFeaturedDockItem(app: AppEntry, target: DockNotificationTarget?) {
+    private fun performDockAction(
+        source: View,
+        app: AppEntry,
+        target: DockNotificationTarget?,
+        action: DockInteractionAction,
+        anchor: Pair<Int, Int> = source.centerOnScreen(),
+    ) {
+        when (action) {
+            DockInteractionAction.OPEN_APP -> openAppEntry(app)
+            DockInteractionAction.OPEN_NOTIFICATION -> openBestDockNotification(app, target)
+            DockInteractionAction.OPEN_CONTEXT_MENU -> showContextMenu(source, app, target, anchor)
+            DockInteractionAction.EXPAND -> {
+                if (target != null) {
+                    openNotificationPage(target.chapter)
+                } else {
+                    openAppEntry(app)
+                }
+            }
+        }
+    }
+
+    private fun openBestDockNotification(app: AppEntry, target: DockNotificationTarget?) {
         val notification = selectedNotification(app, target)
         if (notification != null) {
             openNotification(notification)
         } else {
             openAppEntry(app)
         }
+    }
+
+    private fun View.installDockInteractions(app: AppEntry, target: DockNotificationTarget?, config: DockConfig) {
+        setOnClickListener {
+            performDockAction(this, app, target, config.tapAction)
+        }
+        setOnLongClickListener {
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            performDockAction(this, app, target, config.longPressAction)
+            true
+        }
+        isLongClickable = true
+    }
+
+    private fun View.anchorOnScreen(event: MotionEvent): Pair<Int, Int> {
+        val location = IntArray(2)
+        getLocationOnScreen(location)
+        return (location[0] + event.x.toInt()) to (location[1] + event.y.toInt())
+    }
+
+    private fun View.centerOnScreen(): Pair<Int, Int> {
+        val location = IntArray(2)
+        getLocationOnScreen(location)
+        return (location[0] + width / 2) to (location[1] + height / 2)
     }
 
     private fun notificationCountChip(count: Int): TextView {
@@ -418,55 +462,89 @@ class DockController(
         apps: List<AppEntry>,
         chapters: List<AppChapter>,
         currentIndex: () -> Int,
+        config: DockConfig,
         selectAppIndex: (Int, DockTransition) -> Unit,
         cycleNotification: (DockTransition) -> Boolean,
     ) {
         if (apps.isEmpty()) return
         val swipeThreshold = max(activity.dp(28), ViewConfiguration.get(activity).scaledTouchSlop * 2)
-        val detector = GestureDetector(activity, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDown(event: MotionEvent): Boolean = true
-
-            override fun onSingleTapUp(event: MotionEvent): Boolean {
-                this@installFeaturedDockGestures.performClick()
-                return true
-            }
-
-            override fun onLongPress(event: MotionEvent) {
-                apps.getOrNull(currentIndex())
-                    ?.let { app -> targetFor(app, chapters) }
-                    ?.let { target -> openNotificationPage(target.chapter) }
-            }
-
-            override fun onFling(
-                start: MotionEvent?,
-                end: MotionEvent,
-                velocityX: Float,
-                velocityY: Float,
-            ): Boolean {
-                val first = start ?: return false
-                val dx = end.x - first.x
-                val dy = end.y - first.y
-                if (max(abs(dx), abs(dy)) < swipeThreshold) return false
-                return if (abs(dy) > abs(dx)) {
-                    val direction = if (dy < 0) 1 else -1
-                    selectAppIndex(currentIndex() + direction, DockTransition.Vertical(direction))
-                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                    true
-                } else {
-                    val direction = if (dx < 0) 1 else -1
-                    val cycled = cycleNotification(DockTransition.Horizontal(direction))
-                    if (cycled) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                    cycled
-                }
-            }
-        })
+        val longPressTimeout = ViewConfiguration.getLongPressTimeout().toLong()
+        var downX = 0f
+        var downY = 0f
+        var downRawX = 0f
+        var downRawY = 0f
+        var gestureMoved = false
+        var longPressed = false
+        val longPressRunnable = Runnable {
+            val app = apps.getOrNull(currentIndex()) ?: return@Runnable
+            val target = targetFor(app, chapters)
+            longPressed = true
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            performDockAction(
+                this@installFeaturedDockGestures,
+                app,
+                target,
+                config.longPressAction,
+                downRawX.toInt() to downRawY.toInt(),
+            )
+        }
         setOnTouchListener { view, event ->
             when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> view.parent?.requestDisallowInterceptTouchEvent(true)
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> view.parent?.requestDisallowInterceptTouchEvent(false)
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.x
+                    downY = event.y
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    gestureMoved = false
+                    longPressed = false
+                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                    view.postDelayed(longPressRunnable, longPressTimeout)
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.x - downX
+                    val dy = event.y - downY
+                    if (max(abs(dx), abs(dy)) >= swipeThreshold) {
+                        gestureMoved = true
+                        view.removeCallbacks(longPressRunnable)
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    view.removeCallbacks(longPressRunnable)
+                    view.parent?.requestDisallowInterceptTouchEvent(false)
+                    if (longPressed) return@setOnTouchListener true
+                    val dx = event.x - downX
+                    val dy = event.y - downY
+                    if (max(abs(dx), abs(dy)) >= swipeThreshold) {
+                        if (abs(dy) > abs(dx)) {
+                            val direction = if (dy < 0) 1 else -1
+                            selectAppIndex(currentIndex() + direction, DockTransition.Vertical(direction))
+                            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        } else {
+                            val direction = if (dx < 0) 1 else -1
+                            val cycled = cycleNotification(DockTransition.Horizontal(direction))
+                            if (cycled) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        }
+                    } else if (!gestureMoved) {
+                        val app = apps.getOrNull(currentIndex()) ?: return@setOnTouchListener true
+                        performDockAction(
+                            view,
+                            app,
+                            targetFor(app, chapters),
+                            config.tapAction,
+                            view.anchorOnScreen(event),
+                        )
+                    }
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    view.removeCallbacks(longPressRunnable)
+                    view.parent?.requestDisallowInterceptTouchEvent(false)
+                    true
+                }
+                else -> true
             }
-            detector.onTouchEvent(event)
-            true
         }
     }
 
@@ -527,18 +605,6 @@ class DockController(
             maxLines = maxLineCount
             ellipsize = TextUtils.TruncateAt.END
             includeFontPadding = false
-        }
-    }
-
-    private fun View.installNotificationLongPress(target: DockNotificationTarget?) {
-        if (target == null) {
-            setOnLongClickListener(null)
-            isLongClickable = false
-            return
-        }
-        setOnLongClickListener {
-            openNotificationPage(target.chapter)
-            true
         }
     }
 

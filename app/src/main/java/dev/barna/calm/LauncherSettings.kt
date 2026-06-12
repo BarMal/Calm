@@ -386,6 +386,8 @@ class LauncherSettings(private val preferences: SharedPreferences) {
                 .coerceIn(DockConfig.MIN_VERTICAL_PADDING_DP, DockConfig.MAX_VERTICAL_PADDING_DP),
             horizontalPaddingDp = preferences.getInt(PREF_DOCK_HORIZONTAL_PADDING, DockConfig.DEFAULT_HORIZONTAL_PADDING_DP)
                 .coerceIn(DockConfig.MIN_HORIZONTAL_PADDING_DP, DockConfig.MAX_HORIZONTAL_PADDING_DP),
+            tapAction = enumPreference(PREF_DOCK_TAP_ACTION, DockConfig.DEFAULT_TAP_ACTION),
+            longPressAction = enumPreference(PREF_DOCK_LONG_PRESS_ACTION, DockConfig.DEFAULT_LONG_PRESS_ACTION),
         )
     }
 
@@ -419,6 +421,14 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         preferences.edit()
             .putInt(PREF_DOCK_HORIZONTAL_PADDING, dp.coerceIn(DockConfig.MIN_HORIZONTAL_PADDING_DP, DockConfig.MAX_HORIZONTAL_PADDING_DP))
             .apply()
+    }
+
+    fun setDockTapAction(action: DockInteractionAction) {
+        preferences.edit().putString(PREF_DOCK_TAP_ACTION, action.name).apply()
+    }
+
+    fun setDockLongPressAction(action: DockInteractionAction) {
+        preferences.edit().putString(PREF_DOCK_LONG_PRESS_ACTION, action.name).apply()
     }
 
     fun dockKeys(): List<String> {
@@ -1051,6 +1061,8 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_DOCK_ITEM_SPAN = "dock_item_span"
         private const val PREF_DOCK_VERTICAL_PADDING = "dock_vertical_padding"
         private const val PREF_DOCK_HORIZONTAL_PADDING = "dock_horizontal_padding"
+        private const val PREF_DOCK_TAP_ACTION = "dock_tap_action"
+        private const val PREF_DOCK_LONG_PRESS_ACTION = "dock_long_press_action"
         private const val PREF_DOCK_KEYS = "dock_keys"
     }
 }

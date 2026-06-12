@@ -6,6 +6,13 @@ enum class DockStyle {
     HYBRID,
 }
 
+enum class DockInteractionAction {
+    OPEN_APP,
+    OPEN_NOTIFICATION,
+    OPEN_CONTEXT_MENU,
+    EXPAND,
+}
+
 data class DockConfig(
     val enabled: Boolean = false,
     val style: DockStyle = DockStyle.CLASSIC,
@@ -13,6 +20,8 @@ data class DockConfig(
     val itemSpan: Int = DEFAULT_ITEM_SPAN,
     val verticalPaddingDp: Int = DEFAULT_VERTICAL_PADDING_DP,
     val horizontalPaddingDp: Int = DEFAULT_HORIZONTAL_PADDING_DP,
+    val tapAction: DockInteractionAction = DEFAULT_TAP_ACTION,
+    val longPressAction: DockInteractionAction = DEFAULT_LONG_PRESS_ACTION,
 ) {
     companion object {
         const val DEFAULT_ITEM_COUNT = 5
@@ -31,6 +40,8 @@ data class DockConfig(
         const val DEFAULT_HORIZONTAL_PADDING_DP = 20
         const val MIN_HORIZONTAL_PADDING_DP = 0
         const val MAX_HORIZONTAL_PADDING_DP = 48
+        val DEFAULT_TAP_ACTION = DockInteractionAction.OPEN_NOTIFICATION
+        val DEFAULT_LONG_PRESS_ACTION = DockInteractionAction.EXPAND
 
         fun itemWidthDp(span: Int): Int {
             return ITEM_CELL_WIDTH_DP * span.coerceIn(MIN_ITEM_SPAN, MAX_ITEM_SPAN)

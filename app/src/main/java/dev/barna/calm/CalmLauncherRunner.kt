@@ -246,6 +246,7 @@ class CalmLauncherRunner(
         drawables = drawables,
         resolveIcon = { notificationRepository.resolveAppIconBitmap(it) },
         openAppEntry = ::openAppEntry,
+        openNotification = { notification -> notificationActionController.openNotification(notification) },
         openNotificationPage = { chapter ->
             val pageIndex = currentUiState?.pages.orEmpty().indexOfFirst { page -> page.key == chapter.identityKey }
             if (pageIndex >= 0) {

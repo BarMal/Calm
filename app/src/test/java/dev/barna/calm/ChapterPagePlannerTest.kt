@@ -108,6 +108,20 @@ class ChapterPagePlannerTest {
     }
 
     @Test
+    fun pinnedPageAppearsWhenEnabledWithoutPinnedApps() {
+        val pages = planner.buildPages(
+            preferences = preferences(pinnedPageEnabled = true),
+            notificationChapters = emptyList(),
+            appEntries = listOf(app("browser", "Browser")),
+            pinnedApps = emptyList(),
+        )
+
+        assertEquals(listOf("Apps", "Pinned", "Overview"), pages.map { it.title })
+        assertEquals(PageSlot.PINNED, PageArranger.slotOf(pages[1]))
+        assertEquals(listOf("I", "II", "III"), pages.map { it.marker })
+    }
+
+    @Test
     fun legacyDisabledClassicPagesStillAppearWhenAdded() {
         val pages = planner.buildPages(
             preferences = preferences(),
@@ -124,6 +138,7 @@ class ChapterPagePlannerTest {
         splitAppsByProfile: Boolean = false,
         placeWorkNotificationChaptersBeforeApps: Boolean = false,
         sortOrder: PageSortOrder = PageSortOrder.DEFAULT,
+        pinnedPageEnabled: Boolean = false,
         agendaPageEnabled: Boolean = false,
         alarmsPageEnabled: Boolean = false,
     ): LauncherUiPreferences {
@@ -141,6 +156,7 @@ class ChapterPagePlannerTest {
             showAdvancedStackControls = false,
             cardVibrancy = 50,
             pageSortOrder = sortOrder,
+            pinnedPageEnabled = pinnedPageEnabled,
             agendaPageEnabled = agendaPageEnabled,
             alarmsPageEnabled = alarmsPageEnabled,
         )

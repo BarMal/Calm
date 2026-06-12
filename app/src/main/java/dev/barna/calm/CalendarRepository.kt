@@ -24,7 +24,7 @@ class CalendarRepository(
         requestCalendarPermission()
     }
 
-    fun loadUpcomingEvents(): List<CalendarEvent> {
+    fun loadUpcomingEvents(limit: Int = DEFAULT_EVENT_LIMIT): List<CalendarEvent> {
         val events = ArrayList<CalendarEvent>()
         val now = System.currentTimeMillis()
         val horizon = now + 7L * 24L * 60L * 60L * 1000L
@@ -48,7 +48,7 @@ class CalendarRepository(
                 null,
                 CalendarContract.Instances.BEGIN + " ASC",
             )?.use { cursor ->
-                while (cursor.moveToNext() && events.size < 5) {
+                while (cursor.moveToNext() && events.size < limit) {
                     events.add(
                         CalendarEvent(
                             cursor.getString(0),
@@ -64,6 +64,10 @@ class CalendarRepository(
             return events
         }
         return events
+    }
+
+    private companion object {
+        const val DEFAULT_EVENT_LIMIT = 20
     }
 
     fun isToday(timeMillis: Long): Boolean {

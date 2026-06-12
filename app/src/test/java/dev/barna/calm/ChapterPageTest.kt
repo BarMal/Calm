@@ -44,6 +44,18 @@ class ChapterPageTest {
     }
 
     @Test
+    fun agendaUsesProvidedKeyAndMarker() {
+        val page = ChapterPage.agenda("agenda-key", "III")
+
+        assertEquals("agenda-key", page.key)
+        assertEquals("III", page.marker)
+        assertEquals("Agenda", page.title)
+        assertNull(page.chapter)
+        assertNull(page.appScope)
+        assertNull(page.classicPage)
+    }
+
+    @Test
     fun classicPageUsesDefinitionKeyAndTitle() {
         val definition = ClassicLauncherPageDefinition(id = "classic-1", title = "Classic")
 

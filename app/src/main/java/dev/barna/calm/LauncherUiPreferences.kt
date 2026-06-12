@@ -16,6 +16,7 @@ data class LauncherUiPreferences(
     val pageSortOrder: PageSortOrder = PageSortOrder.DEFAULT,
     val expandedCardsEnabled: Boolean = true,
     val contactsPageEnabled: Boolean = false,
+    val agendaPageEnabled: Boolean = false,
     val cardAppearance: CardAppearance = CardAppearance.DEFAULT,
     val pageLayout: LauncherPageLayout = LauncherPageLayout.DEFAULT,
 )

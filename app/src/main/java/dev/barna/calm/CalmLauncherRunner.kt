@@ -183,6 +183,15 @@ class CalmLauncherRunner(
         openSettingsActivity = ::openSettingsActivity,
         openCalendarEvent = ::openCalendarEvent,
     )
+    private val agendaPageBuilder = AgendaPageBuilder(
+        activity = activity,
+        cardRenderer = cardRenderer,
+        calendarRepository = calendarRepository,
+        contextActionFactory = contextActionFactory,
+        focusOverlay = focusOverlay,
+        activePreferences = { activePreferences },
+        barePagePanel = ::createBarePagePanel,
+    )
     private val stateExecutor = Executors.newFixedThreadPool(4)
     private val chapterPageBuilder = ChapterPageBuilder(
         activity = activity,
@@ -234,6 +243,7 @@ class CalmLauncherRunner(
         drawables = drawables,
         focusOverlay = focusOverlay,
         overviewPageBuilder = overviewPageBuilder,
+        agendaPageBuilder = agendaPageBuilder,
         chapterPageBuilder = chapterPageBuilder,
         appLibraryController = appLibraryController,
         appSearchController = appSearchController,
@@ -762,6 +772,7 @@ class CalmLauncherRunner(
         PageSlot.WORK_OVERVIEW -> CalmTheme.WORK_OVERVIEW_KEY
         PageSlot.PINNED -> CalmTheme.PINNED_KEY
         PageSlot.CONTACTS -> CalmTheme.CONTACTS_KEY
+        PageSlot.AGENDA -> CalmTheme.AGENDA_KEY
         PageSlot.APPS -> CalmTheme.APP_LIBRARY_KEY
         PageSlot.CLASSIC_PAGES -> settings.homeClassicPage()?.key ?: CalmTheme.OVERVIEW_KEY
         PageSlot.NOTIFICATIONS -> CalmTheme.OVERVIEW_KEY
@@ -1235,6 +1246,7 @@ class CalmLauncherRunner(
         val actions = listOf(
             ContextAction("Classic page", Runnable { addClassicPageFromOverview() }),
             ContextAction("People page", Runnable { addPeoplePageFromOverview(pages) }),
+            ContextAction("Agenda page", Runnable { addAgendaPageFromOverview(pages) }),
             ContextAction("Apps page", Runnable { addExistingOrLivePageFromOverview(PageSlot.APPS, pages, "Apps page") }),
             ContextAction("Pinned page", Runnable { addPinnedPageFromOverview(state, pages) }),
             ContextAction("Overview page", Runnable { addExistingOrLivePageFromOverview(PageSlot.OVERVIEW, pages, "Overview page") }),
@@ -1260,6 +1272,16 @@ class CalmLauncherRunner(
         settings.toggleContactsPage()
         Toast.makeText(activity, "Added People page", Toast.LENGTH_SHORT).show()
         renderAndReopenPageOverview()
+    }
+
+    private fun addAgendaPageFromOverview(pages: List<ChapterPage>) {
+        if (settings.agendaPageEnabled()) {
+            addExistingOrLivePageFromOverview(PageSlot.AGENDA, pages, "Agenda page")
+            return
+        }
+        settings.toggleAgendaPage()
+        Toast.makeText(activity, "Added Agenda page", Toast.LENGTH_SHORT).show()
+        renderAndReopenPageOverview(CalmTheme.AGENDA_KEY)
     }
 
     private fun addPinnedPageFromOverview(state: LauncherRenderModel, pages: List<ChapterPage>) {
@@ -1643,6 +1665,15 @@ class CalmLauncherRunner(
             }, ContextActionCloseBehavior.REMOVE_CARD)
         }
         val slot = PageArranger.slotOf(page)
+        if (slot == PageSlot.AGENDA) {
+            return ContextAction("Remove", Runnable {
+                animatePageOverviewRemoval(source, entryIndex, index, pages) {
+                    if (settings.agendaPageEnabled()) settings.toggleAgendaPage()
+                    Toast.makeText(activity, "Removed Agenda page", Toast.LENGTH_SHORT).show()
+                    renderAndReopenPageOverview(nextFocusKey)
+                }
+            }, ContextActionCloseBehavior.REMOVE_CARD)
+        }
         if (slot != PageSlot.CONTACTS) return null
         return ContextAction("Remove", Runnable {
             animatePageOverviewRemoval(source, entryIndex, index, pages) {
@@ -1867,6 +1898,7 @@ class CalmLauncherRunner(
             page.appScope != null -> "App page"
             slot == PageSlot.PINNED -> "Pinned"
             slot == PageSlot.CONTACTS -> "People"
+            slot == PageSlot.AGENDA -> "Agenda"
             else -> if (selected) "Current" else "${pages.indexOf(page) + 1} of ${pages.size}"
         }
         return LinearLayout(activity).apply {
@@ -1914,6 +1946,7 @@ class CalmLauncherRunner(
                 page.appScope != null -> addAppsOverviewPreview(this, page, state)
                 page.key == CalmTheme.PINNED_KEY -> addAppRows(this, state.pinnedApps.take(5).map { it.label }, CalmTheme.ACCENT)
                 page.key == CalmTheme.CONTACTS_KEY -> addGenericRows(this, listOf("Favourite people", "Recent contact", "Quick action"), CalmTheme.ACCENT)
+                page.key == CalmTheme.AGENDA_KEY -> addAgendaOverviewPreview(this, state)
                 page.key == CalmTheme.WORK_OVERVIEW_KEY -> addOverviewRows(this, state, work = true)
                 page.chapter != null -> addNotificationOverviewPreview(this, page.chapter)
                 else -> addOverviewRows(this, state, work = false)
@@ -1944,6 +1977,15 @@ class CalmLauncherRunner(
         val rows = chapter.notifications.take(5).mapIndexed { index, _ -> "Notification ${index + 1}" }
             .ifEmpty { listOf("No notifications") }
         addGenericRows(parent, rows, chapter.hueColor)
+    }
+
+    private fun addAgendaOverviewPreview(parent: LinearLayout, state: LauncherRenderModel) {
+        val rows = when {
+            !state.hasCalendarPermission -> listOf("Calendar access", "Tap to allow")
+            state.calendarEvents.isEmpty() -> listOf("No upcoming events")
+            else -> state.calendarEvents.take(5).map { event -> event.title.ifBlank { "Untitled event" } }
+        }
+        addGenericRows(parent, rows, CalmTheme.ACCENT)
     }
 
     private fun addAppsOverviewPreview(parent: LinearLayout, page: ChapterPage, state: LauncherRenderModel) {

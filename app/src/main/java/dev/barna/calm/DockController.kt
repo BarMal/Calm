@@ -28,8 +28,8 @@ class DockController(
     fun buildDock(apps: List<AppEntry>, config: DockConfig, chapters: List<AppChapter>): View {
         return when (config.style) {
             DockStyle.CLASSIC -> dockShell(classicDockRow(apps, config, chapters), config)
-            DockStyle.CARD -> dockShell(cardDock(apps, chapters), config)
-            DockStyle.HYBRID -> dockShell(hybridDock(apps, config, chapters), config)
+            DockStyle.CARD -> cardDock(apps, chapters)
+            DockStyle.HYBRID -> hybridDock(apps, config, chapters)
         }
     }
 
@@ -55,40 +55,96 @@ class DockController(
     }
 
     private fun cardDock(apps: List<AppEntry>, chapters: List<AppChapter>): View {
-        return LinearLayout(activity).apply {
-            tag = CalmAnimationTags.CHROME
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            clipChildren = false
-            clipToPadding = false
-            apps.firstOrNull()?.let { app ->
-                addView(
-                    featuredDockCard(app, notificationResolver.targetFor(app, chapters)),
-                    LinearLayout.LayoutParams(activity.dp(260), activity.dp(72)),
-                )
-            }
+        val app = apps.firstOrNull()
+        return if (app == null) {
+            FrameLayout(activity).apply { tag = CalmAnimationTags.CHROME }
+        } else {
+            featuredDockSurface(app, notificationResolver.targetFor(app, chapters), activity.dp(72))
         }
     }
 
     private fun hybridDock(apps: List<AppEntry>, config: DockConfig, chapters: List<AppChapter>): View {
-        return LinearLayout(activity).apply {
+        val featuredApp = apps.firstOrNull()
+        val featuredTarget = featuredApp?.let { notificationResolver.targetFor(it, chapters) }
+        return FrameLayout(activity).apply {
             tag = CalmAnimationTags.CHROME
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
             clipChildren = false
             clipToPadding = false
-            apps.firstOrNull()?.let { app ->
+            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(22))
+            setPadding(activity.dp(12), activity.dp(8), activity.dp(12), activity.dp(10))
+            addView(
+                LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    clipChildren = false
+                    clipToPadding = false
+                    featuredApp?.let { app ->
+                        addView(
+                            featuredDockContent(app, featuredTarget),
+                            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(56)).apply {
+                                bottomMargin = activity.dp(8)
+                            },
+                        )
+                    }
+                    addView(
+                        classicDockRow(apps, config, chapters),
+                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+                    )
+                },
+                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
+            )
+            addNotificationBadge(featuredTarget)
+            installNotificationLongPress(featuredTarget)
+        }
+    }
+
+    private fun featuredDockSurface(app: AppEntry, target: DockNotificationTarget?, minimumHeight: Int): View {
+        return FrameLayout(activity).apply {
+            tag = CalmAnimationTags.CHROME
+            clipChildren = false
+            clipToPadding = false
+            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(22))
+            setPadding(activity.dp(12), activity.dp(8), activity.dp(14), activity.dp(8))
+            this.minimumHeight = minimumHeight
+            addView(
+                featuredDockContent(app, target),
+                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
+            )
+            addNotificationBadge(target)
+            setOnClickListener { openAppEntry(app) }
+            installNotificationLongPress(target)
+        }
+    }
+
+    private fun featuredDockContent(app: AppEntry, target: DockNotificationTarget?): View {
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            contentDescription = dockDescription(app, target)
+            tooltipText = app.label
+            resolveIcon(app)?.let { icon ->
                 addView(
-                    featuredDockCard(app, notificationResolver.targetFor(app, chapters)),
-                    LinearLayout.LayoutParams(activity.dp(260), activity.dp(64)).apply {
-                        bottomMargin = activity.dp(8)
+                    ImageView(activity).apply {
+                        scaleType = ImageView.ScaleType.CENTER_CROP
+                        setImageDrawable(RoundedBitmapDrawable(icon, activity.dp(14).toFloat()))
+                    },
+                    LinearLayout.LayoutParams(activity.dp(50), activity.dp(50)).apply {
+                        marginEnd = activity.dp(12)
                     },
                 )
             }
             addView(
-                classicDockRow(apps, config, chapters),
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+                LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(dockText(app.label, 15, Typeface.BOLD, CalmTheme.INK, 1))
+                    addView(dockText(notificationDetail(target) ?: "Tap to open", 12, Typeface.NORMAL, CalmTheme.MUTED_INK, 1).apply {
+                        setPadding(0, activity.dp(4), 0, 0)
+                    })
+                },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
             )
+            setOnClickListener { openAppEntry(app) }
+            installNotificationLongPress(target)
         }
     }
 
@@ -166,47 +222,6 @@ class DockController(
                             setPadding(0, activity.dp(2), 0, 0)
                         })
                     }
-                },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-            )
-            setOnClickListener { openAppEntry(app) }
-            installNotificationLongPress(target)
-        }
-        return FrameLayout(activity).apply {
-            clipChildren = false
-            clipToPadding = false
-            addView(card, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-            addNotificationBadge(target)
-            installNotificationLongPress(target)
-        }
-    }
-
-    private fun featuredDockCard(app: AppEntry, target: DockNotificationTarget?): View {
-        val card = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(22))
-            setPadding(activity.dp(12), activity.dp(8), activity.dp(14), activity.dp(8))
-            contentDescription = dockDescription(app, target)
-            tooltipText = app.label
-            resolveIcon(app)?.let { icon ->
-                addView(
-                    ImageView(activity).apply {
-                        scaleType = ImageView.ScaleType.CENTER_CROP
-                        setImageDrawable(RoundedBitmapDrawable(icon, activity.dp(14).toFloat()))
-                    },
-                    LinearLayout.LayoutParams(activity.dp(50), activity.dp(50)).apply {
-                        marginEnd = activity.dp(12)
-                    },
-                )
-            }
-            addView(
-                LinearLayout(activity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    addView(dockText(app.label, 15, Typeface.BOLD, CalmTheme.INK, 1))
-                    addView(dockText(notificationDetail(target) ?: "Tap to open", 12, Typeface.NORMAL, CalmTheme.MUTED_INK, 1).apply {
-                        setPadding(0, activity.dp(4), 0, 0)
-                    })
                 },
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
             )

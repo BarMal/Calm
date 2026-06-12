@@ -41,6 +41,12 @@
     <string name="settings_dock_item_size_title">Dock item size</string>
     <string name="settings_dock_height_title">Dock height</string>
     <string name="settings_dock_side_margin_title">Dock side margin</string>
+    <string name="settings_dock_tap_action_title">Tap action</string>
+    <string name="settings_dock_long_press_action_title">Long-press action</string>
+    <string name="settings_dock_action_open_app">Open app</string>
+    <string name="settings_dock_action_open_notification">Open notification</string>
+    <string name="settings_dock_action_context_menu">Context menu</string>
+    <string name="settings_dock_action_expand">Expand notifications</string>
     <string name="settings_dock_padding_value">%1$ddp padding</string>
     <string name="settings_dock_size_icon_with_name">2x1 icon + name</string>
     <string name="settings_dock_size_icon_only">1x1 icon</string>

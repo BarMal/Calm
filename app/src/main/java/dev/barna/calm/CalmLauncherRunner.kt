@@ -255,6 +255,32 @@ class CalmLauncherRunner(
                 selectPage(chapter.identityKey)
             }
         },
+        showContextMenu = { source, app, target, anchor ->
+            val actions = ArrayList<ContextAction>()
+            val latestNotification = target?.chapter?.notifications.orEmpty().maxByOrNull { notification -> notification.postTime }
+            latestNotification?.let { notification ->
+                actions.add(ContextAction("Open notification", Runnable { notificationActionController.openNotification(notification) }))
+            }
+            target?.chapter?.let { chapter ->
+                actions.add(ContextAction("Expand notifications", Runnable {
+                    val pageIndex = currentUiState?.pages.orEmpty().indexOfFirst { page -> page.key == chapter.identityKey }
+                    if (pageIndex >= 0) {
+                        navigateToChapterPage(pageIndex)
+                    } else {
+                        selectPage(chapter.identityKey)
+                    }
+                }))
+            }
+            val pinned = app.identityKey in settings.pinnedPackages() || app.packageName in settings.pinnedPackages()
+            actions.addAll(contextActionFactory.appActions(app, pinned))
+            GoogleInteractionStyle.popupMenu(
+                context = activity,
+                source = source,
+                anchor = anchor,
+                actions = actions,
+                destructiveLabels = setOf("Remove from dock", "Hide", "Dismiss", "Clear"),
+            )
+        },
     )
     private val classicWidgetHostController = ClassicWidgetHostController(
         activity = activity,

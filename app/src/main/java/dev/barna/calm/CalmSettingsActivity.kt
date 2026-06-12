@@ -422,6 +422,16 @@ class CalmSettingsActivity : ComponentActivity() {
             options = DockStyle.entries.map { style -> dockStyleLabel(style) to style },
             selected = dock.style,
         ) { settings.setDockStyle(it); requestRender() })
+        content.addView(choiceRow(
+            title = getString(R.string.settings_dock_tap_action_title),
+            options = DockInteractionAction.entries.map { action -> dockInteractionLabel(action) to action },
+            selected = dock.tapAction,
+        ) { settings.setDockTapAction(it); requestRender() })
+        content.addView(choiceRow(
+            title = getString(R.string.settings_dock_long_press_action_title),
+            options = DockInteractionAction.entries.map { action -> dockInteractionLabel(action) to action },
+            selected = dock.longPressAction,
+        ) { settings.setDockLongPressAction(it); requestRender() })
         content.addView(sliderRow(
             title = getString(R.string.settings_dock_app_count_title),
             progress = dock.itemCount - DockConfig.MIN_ITEM_COUNT,
@@ -1504,6 +1514,15 @@ class CalmSettingsActivity : ComponentActivity() {
             DockStyle.CLASSIC -> getString(R.string.settings_dock_style_classic)
             DockStyle.CARD -> getString(R.string.settings_dock_style_card)
             DockStyle.HYBRID -> getString(R.string.settings_dock_style_hybrid)
+        }
+    }
+
+    private fun dockInteractionLabel(action: DockInteractionAction): String {
+        return when (action) {
+            DockInteractionAction.OPEN_APP -> getString(R.string.settings_dock_action_open_app)
+            DockInteractionAction.OPEN_NOTIFICATION -> getString(R.string.settings_dock_action_open_notification)
+            DockInteractionAction.OPEN_CONTEXT_MENU -> getString(R.string.settings_dock_action_context_menu)
+            DockInteractionAction.EXPAND -> getString(R.string.settings_dock_action_expand)
         }
     }
 

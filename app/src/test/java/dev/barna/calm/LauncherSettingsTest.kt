@@ -816,6 +816,19 @@ class LauncherSettingsTest {
     }
 
     @Test
+    fun unpinByWorkProfileIdentityKeyLeavesBaseProfilePinIntact() {
+        val baseKey = "com.example.app"
+        val workKey = "com.example.app:999"
+        settings.pinPackage(baseKey)
+        settings.pinPackage(workKey)
+
+        settings.unpinPackage(workKey)
+
+        assertTrue("base profile pin must survive work profile unpin", baseKey in settings.pinnedPackages())
+        assertFalse(workKey in settings.pinnedPackages())
+    }
+
+    @Test
     fun hideAppAppearsInHiddenKeys() {
         settings.hideApp("key.a", "App A")
         assertTrue("key.a" in settings.hiddenAppKeys())

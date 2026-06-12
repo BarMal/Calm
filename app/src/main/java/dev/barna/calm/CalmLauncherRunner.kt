@@ -186,11 +186,14 @@ class CalmLauncherRunner(
     private val agendaPageBuilder = AgendaPageBuilder(
         activity = activity,
         cardRenderer = cardRenderer,
+        cardStackController = cardStackController,
         calendarRepository = calendarRepository,
         contextActionFactory = contextActionFactory,
         focusOverlay = focusOverlay,
         activePreferences = { activePreferences },
         barePagePanel = ::createBarePagePanel,
+        render = ::render,
+        openSectionCardSettings = ::openSectionCardSettingsActivity,
     )
     private val alarmsPageBuilder = AlarmsPageBuilder(
         activity = activity,
@@ -2160,6 +2163,14 @@ class CalmLauncherRunner(
 
     private fun openSettingsActivity() {
         activity.startActivity(Intent(activity, CalmSettingsActivity::class.java))
+    }
+
+    private fun openSectionCardSettingsActivity() {
+        activity.startActivity(
+            Intent(activity, CalmSettingsActivity::class.java).apply {
+                putExtra(CalmSettingsActivity.EXTRA_PAGE, CalmSettingsActivity.PAGE_SECTION_CARDS)
+            },
+        )
     }
 
     private fun openAppEntry(app: AppEntry) {

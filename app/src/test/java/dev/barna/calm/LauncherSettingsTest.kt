@@ -104,6 +104,8 @@ class LauncherSettingsTest {
         assertFalse(prefs.showAdvancedStackControls)
         assertEquals(50, prefs.cardVibrancy)
         assertEquals(PageSortOrder.APP_NAME_ASC, prefs.pageSortOrder)
+        assertEquals(CardStackSectionMode.TITLE_CARDS, prefs.agendaSectionMode)
+        assertEquals(SectionTitleCardStyle(), prefs.agendaSectionTitleStyle)
     }
 
     // ---- round-trip correctness ----
@@ -649,6 +651,30 @@ class LauncherSettingsTest {
         assertEquals(-50, settings.cardStackTuning().horizontalCurve)
     }
 
+    @Test
+    fun agendaSectionModeRoundTrips() {
+        settings.setAgendaSectionMode(CardStackSectionMode.FOLDERS)
+
+        assertEquals(CardStackSectionMode.FOLDERS, settings.agendaSectionMode())
+        assertEquals(CardStackSectionMode.FOLDERS, settings.uiPreferences().agendaSectionMode)
+    }
+
+    @Test
+    fun agendaSectionTitleStyleRoundTrips() {
+        val style = SectionTitleCardStyle(
+            transparentBackground = false,
+            bold = false,
+            italic = true,
+            height = SectionTitleHeight.TALL,
+            underline = SectionTitleUnderline.TITLE,
+        )
+
+        settings.setAgendaSectionTitleStyle(style)
+
+        assertEquals(style, settings.agendaSectionTitleStyle())
+        assertEquals(style, settings.uiPreferences().agendaSectionTitleStyle)
+    }
+
     // ---- boundary / coerceIn clamping ----
 
     @Test
@@ -935,6 +961,14 @@ class LauncherSettingsTest {
     fun changeTokenAltersAfterDockKeysMutation() {
         val before = settings.launcherChangeToken()
         settings.setDockKeys(listOf("com.example.one", "com.example.two"))
+        val after = settings.launcherChangeToken()
+        assertNotEquals(before, after)
+    }
+
+    @Test
+    fun changeTokenAltersAfterAgendaSectionStyleMutation() {
+        val before = settings.launcherChangeToken()
+        settings.setAgendaSectionTitleStyle(SectionTitleCardStyle(italic = true))
         val after = settings.launcherChangeToken()
         assertNotEquals(before, after)
     }

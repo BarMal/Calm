@@ -417,6 +417,11 @@ class CalmSettingsActivity : ComponentActivity() {
             checked = dock.enabled,
         ) { settings.setDockEnabled(!settings.dockConfig().enabled); requestRender() })
         content.addView(actionRow("Dock apps", dockAppsSummary()) { showDockAppsDialog() })
+        content.addView(choiceRow(
+            title = "Dock style",
+            options = DockStyle.entries.map { style -> dockStyleLabel(style) to style },
+            selected = dock.style,
+        ) { settings.setDockStyle(it); requestRender() })
         content.addView(sliderRow(
             title = "Dock app count",
             progress = dock.itemCount - DockConfig.MIN_ITEM_COUNT,
@@ -1485,6 +1490,14 @@ class CalmSettingsActivity : ComponentActivity() {
 
     private fun dockItemSizeLabel(span: Int): String {
         return if (DockConfig.showsItemLabels(span)) "2x1 icon + name" else "1x1 icon"
+    }
+
+    private fun dockStyleLabel(style: DockStyle): String {
+        return when (style) {
+            DockStyle.CLASSIC -> "Classic"
+            DockStyle.CARD -> "Card"
+            DockStyle.HYBRID -> "Hybrid"
+        }
     }
 
     private fun showDockAppsDialog() {

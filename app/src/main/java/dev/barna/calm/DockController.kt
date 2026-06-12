@@ -9,13 +9,13 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.HorizontalScrollView
 import android.widget.TextView
 
-/** Renders the persistent dock — a row of favourite apps shown beneath every page. */
+/** Renders the persistent dock: a cross-page surface for favourite app entries. */
 class DockController(
     private val activity: MainActivity,
     private val drawables: CalmDrawables,
@@ -26,7 +26,15 @@ class DockController(
     private val notificationResolver = DockNotificationResolver()
 
     fun buildDock(apps: List<AppEntry>, config: DockConfig, chapters: List<AppChapter>): View {
-        val row = LinearLayout(activity).apply {
+        return when (config.style) {
+            DockStyle.CLASSIC -> dockShell(classicDockRow(apps, config, chapters), config)
+            DockStyle.CARD -> dockShell(cardDock(apps, chapters), config)
+            DockStyle.HYBRID -> dockShell(hybridDock(apps, config, chapters), config)
+        }
+    }
+
+    private fun classicDockRow(apps: List<AppEntry>, config: DockConfig, chapters: List<AppChapter>): View {
+        return LinearLayout(activity).apply {
             tag = CalmAnimationTags.CHROME
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -44,6 +52,47 @@ class DockController(
                 )
             }
         }
+    }
+
+    private fun cardDock(apps: List<AppEntry>, chapters: List<AppChapter>): View {
+        return LinearLayout(activity).apply {
+            tag = CalmAnimationTags.CHROME
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            clipChildren = false
+            clipToPadding = false
+            apps.firstOrNull()?.let { app ->
+                addView(
+                    featuredDockCard(app, notificationResolver.targetFor(app, chapters)),
+                    LinearLayout.LayoutParams(activity.dp(260), activity.dp(72)),
+                )
+            }
+        }
+    }
+
+    private fun hybridDock(apps: List<AppEntry>, config: DockConfig, chapters: List<AppChapter>): View {
+        return LinearLayout(activity).apply {
+            tag = CalmAnimationTags.CHROME
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            clipChildren = false
+            clipToPadding = false
+            apps.firstOrNull()?.let { app ->
+                addView(
+                    featuredDockCard(app, notificationResolver.targetFor(app, chapters)),
+                    LinearLayout.LayoutParams(activity.dp(260), activity.dp(64)).apply {
+                        bottomMargin = activity.dp(8)
+                    },
+                )
+            }
+            addView(
+                classicDockRow(apps, config, chapters),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+            )
+        }
+    }
+
+    private fun dockShell(content: View, config: DockConfig): View {
         return HorizontalScrollView(activity).apply {
             tag = CalmAnimationTags.CHROME
             isHorizontalScrollBarEnabled = false
@@ -55,7 +104,7 @@ class DockController(
             val horizontal = activity.dp(config.horizontalPaddingDp)
             val vertical = activity.dp(config.verticalPaddingDp)
             setPadding(horizontal, vertical, horizontal, vertical)
-            addView(row, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(content, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
     }
 
@@ -112,10 +161,7 @@ class DockController(
                 LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
                     addView(dockText(app.label, 13, Typeface.BOLD, CalmTheme.INK, 1))
-                    val detail = target?.summary?.let { summary ->
-                        summary.latestText.ifBlank { summary.latestTitle }
-                    }
-                    if (!detail.isNullOrBlank()) {
+                    notificationDetail(target)?.let { detail ->
                         addView(dockText(detail, 11, Typeface.NORMAL, CalmTheme.MUTED_INK, 1).apply {
                             setPadding(0, activity.dp(2), 0, 0)
                         })
@@ -133,6 +179,52 @@ class DockController(
             addNotificationBadge(target)
             installNotificationLongPress(target)
         }
+    }
+
+    private fun featuredDockCard(app: AppEntry, target: DockNotificationTarget?): View {
+        val card = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(22))
+            setPadding(activity.dp(12), activity.dp(8), activity.dp(14), activity.dp(8))
+            contentDescription = dockDescription(app, target)
+            tooltipText = app.label
+            resolveIcon(app)?.let { icon ->
+                addView(
+                    ImageView(activity).apply {
+                        scaleType = ImageView.ScaleType.CENTER_CROP
+                        setImageDrawable(RoundedBitmapDrawable(icon, activity.dp(14).toFloat()))
+                    },
+                    LinearLayout.LayoutParams(activity.dp(50), activity.dp(50)).apply {
+                        marginEnd = activity.dp(12)
+                    },
+                )
+            }
+            addView(
+                LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(dockText(app.label, 15, Typeface.BOLD, CalmTheme.INK, 1))
+                    addView(dockText(notificationDetail(target) ?: "Tap to open", 12, Typeface.NORMAL, CalmTheme.MUTED_INK, 1).apply {
+                        setPadding(0, activity.dp(4), 0, 0)
+                    })
+                },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            setOnClickListener { openAppEntry(app) }
+            installNotificationLongPress(target)
+        }
+        return FrameLayout(activity).apply {
+            clipChildren = false
+            clipToPadding = false
+            addView(card, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            addNotificationBadge(target)
+            installNotificationLongPress(target)
+        }
+    }
+
+    private fun notificationDetail(target: DockNotificationTarget?): String? {
+        val summary = target?.summary ?: return null
+        return summary.latestText.ifBlank { summary.latestTitle }.takeIf { it.isNotBlank() }
     }
 
     private fun dockText(textValue: String, sp: Int, style: Int, color: Int, maxLineCount: Int): TextView {

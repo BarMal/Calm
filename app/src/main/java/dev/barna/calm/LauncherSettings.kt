@@ -377,6 +377,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     fun dockConfig(): DockConfig {
         return DockConfig(
             enabled = preferences.getBoolean(PREF_DOCK_ENABLED, false),
+            style = enumPreference(PREF_DOCK_STYLE, DockStyle.CLASSIC),
             itemCount = preferences.getInt(PREF_DOCK_ITEM_COUNT, DockConfig.DEFAULT_ITEM_COUNT)
                 .coerceIn(DockConfig.MIN_ITEM_COUNT, DockConfig.MAX_ITEM_COUNT),
             itemSpan = preferences.getInt(PREF_DOCK_ITEM_SPAN, DockConfig.DEFAULT_ITEM_SPAN)
@@ -390,6 +391,10 @@ class LauncherSettings(private val preferences: SharedPreferences) {
 
     fun setDockEnabled(enabled: Boolean) {
         preferences.edit().putBoolean(PREF_DOCK_ENABLED, enabled).apply()
+    }
+
+    fun setDockStyle(style: DockStyle) {
+        preferences.edit().putString(PREF_DOCK_STYLE, style.name).apply()
     }
 
     fun setDockItemCount(count: Int) {
@@ -1041,6 +1046,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_CLASSIC_GRID_ROWS = "classic_grid_rows"
         private const val PREF_LAST_PAGE_KEY = "last_page_key"
         private const val PREF_DOCK_ENABLED = "dock_enabled"
+        private const val PREF_DOCK_STYLE = "dock_style"
         private const val PREF_DOCK_ITEM_COUNT = "dock_item_count"
         private const val PREF_DOCK_ITEM_SPAN = "dock_item_span"
         private const val PREF_DOCK_VERTICAL_PADDING = "dock_vertical_padding"

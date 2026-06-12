@@ -12,6 +12,11 @@ class DockConfigTest {
     }
 
     @Test
+    fun defaultStyleIsClassic() {
+        assertEquals(DockStyle.CLASSIC, DockConfig().style)
+    }
+
+    @Test
     fun defaultItemCountIsFive() {
         assertEquals(5, DockConfig().itemCount)
     }
@@ -67,8 +72,9 @@ class DockConfigTest {
 
     @Test
     fun enabledConfigCanBeConstructed() {
-        val config = DockConfig(enabled = true, itemCount = 4, itemSpan = 2, verticalPaddingDp = 8, horizontalPaddingDp = 16)
+        val config = DockConfig(enabled = true, style = DockStyle.HYBRID, itemCount = 4, itemSpan = 2, verticalPaddingDp = 8, horizontalPaddingDp = 16)
         assertTrue(config.enabled)
+        assertEquals(DockStyle.HYBRID, config.style)
         assertEquals(4, config.itemCount)
         assertEquals(2, config.itemSpan)
         assertEquals(8, config.verticalPaddingDp)

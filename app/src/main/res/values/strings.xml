@@ -45,9 +45,12 @@
     <string name="settings_dock_size_icon_with_name">2x1 icon + name</string>
     <string name="settings_dock_size_icon_only">1x1 icon</string>
     <string name="dialog_dock_apps_title">Dock apps (up to %1$d)</string>
+    <string name="dialog_hidden_apps_title">Hidden apps</string>
     <string name="dock_card_tap_to_open">Tap to open</string>
+    <string name="toast_app_list_loading">App list is loading, try again shortly</string>
     <string name="toast_dock_app_list_loading">App list is loading, try again shortly</string>
     <string name="toast_dock_no_apps_available">No apps are available for the dock</string>
+    <string name="toast_hidden_no_apps_available">No apps are available to hide</string>
     <plurals name="settings_dock_app_count_value">
         <item quantity="one">%1$d app</item>
         <item quantity="other">%1$d apps</item>

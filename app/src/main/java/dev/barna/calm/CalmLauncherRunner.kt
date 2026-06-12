@@ -451,6 +451,7 @@ class CalmLauncherRunner(
     fun onDestroy() {
         try {
             mainHandler.removeCallbacksAndMessages(null)
+            classicWidgetHostController.shutdown()
             stateExecutor.shutdown()
         } finally {
             unregisterPackageChangeReceiver()

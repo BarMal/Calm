@@ -1,6 +1,7 @@
 package dev.barna.calm
 
 import android.os.Handler
+import android.util.Log
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicInteger
@@ -66,13 +67,19 @@ class LauncherStateManager(
                     }
                 } catch (interrupted: InterruptedException) {
                     Thread.currentThread().interrupt()
-                } catch (_: Exception) {
+                } catch (e: Exception) {
                     // A later refresh will replace the loading state; avoid crashing the executor thread.
+                    Log.e(TAG, "Refresh gen $gen failed unexpectedly", e)
                 }
             }
-        } catch (_: RejectedExecutionException) {
+        } catch (e: RejectedExecutionException) {
             // The runner is shutting down; stale work can be ignored.
+            Log.d(TAG, "Refresh gen $gen rejected (executor shut down)", e)
         }
+    }
+
+    private companion object {
+        private const val TAG = "LauncherStateManager"
     }
 
     fun buildCachedShell(): LauncherRenderModel {

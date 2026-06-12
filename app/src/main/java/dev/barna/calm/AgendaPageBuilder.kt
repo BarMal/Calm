@@ -18,13 +18,13 @@ class AgendaPageBuilder(
     private val activity: MainActivity,
     private val cardRenderer: CardRenderer,
     private val cardStackController: CardStackController,
-    private val settings: LauncherSettings,
     private val calendarRepository: CalendarRepository,
     private val contextActionFactory: LauncherContextActionFactory,
     private val focusOverlay: FocusOverlayController,
     private val activePreferences: () -> LauncherUiPreferences,
     private val barePagePanel: (Int) -> LinearLayout,
     private val render: () -> Unit,
+    private val openSectionCardSettings: () -> Unit,
 ) {
     private val dayFormat by lazy { DateFormat.getMediumDateFormat(activity) }
     private val timeFormat by lazy { DateFormat.getTimeFormat(activity) }
@@ -187,7 +187,7 @@ class AgendaPageBuilder(
                 }
             }
             setOnLongClickListener {
-                showSectionStyleMenu(this)
+                openSectionCardSettings()
                 true
             }
         }
@@ -200,62 +200,6 @@ class AgendaPageBuilder(
             .map { (day, dayEvents) ->
                 AgendaEventGroup(day, dayTitle(day), dayEvents.sortedBy { it.begin })
             }
-    }
-
-    private fun showSectionStyleMenu(source: View) {
-        val prefs = activePreferences()
-        val style = prefs.agendaSectionTitleStyle
-        val actions = listOf(
-            ContextAction(
-                if (prefs.agendaSectionMode == CardStackSectionMode.FOLDERS) "Use title cards" else "Use folders",
-                Runnable {
-                    settings.setAgendaSectionMode(
-                        if (prefs.agendaSectionMode == CardStackSectionMode.FOLDERS) {
-                            CardStackSectionMode.TITLE_CARDS
-                        } else {
-                            CardStackSectionMode.FOLDERS
-                        },
-                    )
-                    render()
-                },
-            ),
-            ContextAction(
-                "Height: ${style.height.next().label}",
-                Runnable {
-                    settings.setAgendaSectionTitleStyle(style.copy(height = style.height.next()))
-                    render()
-                },
-            ),
-            ContextAction(
-                if (style.transparentBackground) "Add card background" else "Make transparent",
-                Runnable {
-                    settings.setAgendaSectionTitleStyle(style.copy(transparentBackground = !style.transparentBackground))
-                    render()
-                },
-            ),
-            ContextAction(
-                if (style.bold) "Turn bold off" else "Turn bold on",
-                Runnable {
-                    settings.setAgendaSectionTitleStyle(style.copy(bold = !style.bold))
-                    render()
-                },
-            ),
-            ContextAction(
-                if (style.italic) "Turn italics off" else "Turn italics on",
-                Runnable {
-                    settings.setAgendaSectionTitleStyle(style.copy(italic = !style.italic))
-                    render()
-                },
-            ),
-            ContextAction(
-                "Underline: ${style.underline.next().label}",
-                Runnable {
-                    settings.setAgendaSectionTitleStyle(style.copy(underline = style.underline.next()))
-                    render()
-                },
-            ),
-        )
-        GoogleInteractionStyle.popupMenu(activity, source, source.screenCenter(), actions)
     }
 
     private fun sectionTitleText(title: String, summary: String, underline: SectionTitleUnderline): String {
@@ -289,36 +233,6 @@ class AgendaPageBuilder(
             else -> Typeface.NORMAL
         }
     }
-
-    private fun SectionTitleHeight.next(): SectionTitleHeight {
-        return when (this) {
-            SectionTitleHeight.COMPACT -> SectionTitleHeight.NORMAL
-            SectionTitleHeight.NORMAL -> SectionTitleHeight.TALL
-            SectionTitleHeight.TALL -> SectionTitleHeight.COMPACT
-        }
-    }
-
-    private fun SectionTitleUnderline.next(): SectionTitleUnderline {
-        return when (this) {
-            SectionTitleUnderline.OFF -> SectionTitleUnderline.TITLE
-            SectionTitleUnderline.TITLE -> SectionTitleUnderline.FULL
-            SectionTitleUnderline.FULL -> SectionTitleUnderline.OFF
-        }
-    }
-
-    private val SectionTitleHeight.label: String
-        get() = when (this) {
-            SectionTitleHeight.COMPACT -> "compact"
-            SectionTitleHeight.NORMAL -> "normal"
-            SectionTitleHeight.TALL -> "tall"
-        }
-
-    private val SectionTitleUnderline.label: String
-        get() = when (this) {
-            SectionTitleUnderline.OFF -> "off"
-            SectionTitleUnderline.TITLE -> "title"
-            SectionTitleUnderline.FULL -> "full width"
-        }
 
     private fun dayTitle(dayStart: Long): String {
         return when {
@@ -365,12 +279,6 @@ class AgendaPageBuilder(
             setTypeface(typeface, style)
             includeFontPadding = true
         }
-    }
-
-    private fun View.screenCenter(): Pair<Int, Int> {
-        val location = IntArray(2)
-        getLocationOnScreen(location)
-        return (location[0] + width / 2) to (location[1] + height / 2)
     }
 
     private data class AgendaEventGroup(

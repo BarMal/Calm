@@ -13,6 +13,9 @@ class CalendarRepository(
     private val activity: Activity,
     private val requestCalendarPermission: () -> Unit,
 ) {
+    private val dateFormat by lazy { DateFormat.getDateFormat(activity) }
+    private val timeFormat by lazy { DateFormat.getTimeFormat(activity) }
+
     fun hasCalendarPermission(): Boolean {
         return activity.checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
     }
@@ -72,11 +75,11 @@ class CalendarRepository(
 
     fun formatEventTime(event: CalendarEvent): String {
         if (event.allDay) {
-            return DateFormat.getDateFormat(activity).format(Date(event.begin))
+            return dateFormat.format(Date(event.begin))
         }
-        val startDate = DateFormat.getDateFormat(activity).format(Date(event.begin))
-        val startTime = DateFormat.getTimeFormat(activity).format(Date(event.begin))
-        val endTime = DateFormat.getTimeFormat(activity).format(Date(event.end))
+        val startDate = dateFormat.format(Date(event.begin))
+        val startTime = timeFormat.format(Date(event.begin))
+        val endTime = timeFormat.format(Date(event.end))
         return "$startDate / $startTime - $endTime"
     }
 }

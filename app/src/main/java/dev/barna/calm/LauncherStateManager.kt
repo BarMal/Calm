@@ -2,6 +2,7 @@ package dev.barna.calm
 
 import android.os.Handler
 import java.util.concurrent.ExecutorService
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicInteger
 
 class LauncherStateManager(
@@ -22,38 +23,66 @@ class LauncherStateManager(
     fun refreshAsync() {
         markLoading()
         val gen = generation.incrementAndGet()
-        val notifications = executor.submit<List<AppChapter>> {
-            notificationRepository.buildNotificationChapters()
-        }
-        val apps = executor.submit<List<AppEntry>> { loadAppEntries() }
-        val calendar = executor.submit<Pair<Boolean, List<CalendarEvent>>> {
-            val hasPermission = calendarRepository.hasCalendarPermission()
-            hasPermission to if (hasPermission) calendarRepository.loadUpcomingEvents() else emptyList()
-        }
-        executor.execute {
-            val appEntries = apps.get()
-            val pinnedKeys = settings.pinnedPackages()
-            val calendarState = calendar.get()
-            val state = renderModelFactory.create(
-                preferences = settings.uiPreferences(),
-                notificationChapters = notifications.get(),
-                appEntries = appEntries,
-                pinnedKeys = pinnedKeys,
-                pinnedChapterPackages = settings.pinnedChapterPackages(),
-                classicPages = settings.classicPages(),
-                classicGridConfig = settings.classicGridConfig(),
-                dockConfig = settings.dockConfig(),
-                dockKeys = settings.dockKeys(),
-                hasCalendarPermission = calendarState.first,
-                calendarEvents = calendarState.second,
-            )
-            appCardDisplayCache.preloadNow(state.appEntries, state.pinnedKeys)
-            mainHandler.post {
-                if (gen == generation.get()) {
-                    onStateReady(state)
+        try {
+            val notifications = executor.submit<List<AppChapter>> {
+                notificationRepository.buildNotificationChapters()
+            }
+            val apps = executor.submit<List<AppEntry>> { loadAppEntries() }
+            val calendar = executor.submit<Pair<Boolean, List<CalendarEvent>>> {
+                val hasPermission = calendarRepository.hasCalendarPermission()
+                hasPermission to if (hasPermission) calendarRepository.loadUpcomingEvents() else emptyList()
+            }
+            executor.execute {
+                try {
+                    val appEntries = apps.get()
+                    val pinnedKeys = settings.pinnedPackages()
+                    val calendarState = calendar.get()
+                    val state = renderModelFactory.create(
+                        preferences = settings.uiPreferences(),
+                        notificationChapters = notifications.get(),
+                        appEntries = appEntries,
+                        pinnedKeys = pinnedKeys,
+                        pinnedChapterPackages = settings.pinnedChapterPackages(),
+                        classicPages = settings.classicPages(),
+                        classicGridConfig = settings.classicGridConfig(),
+                        dockConfig = settings.dockConfig(),
+                        dockKeys = settings.dockKeys(),
+                        hasCalendarPermission = calendarState.first,
+                        calendarEvents = calendarState.second,
+                    )
+                    appCardDisplayCache.preloadNow(state.appEntries, state.pinnedKeys)
+                    mainHandler.post {
+                        if (gen == generation.get()) {
+                            onStateReady(state)
+                        }
+                    }
+                } catch (interrupted: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                } catch (_: Exception) {
+                    // A later refresh will replace the loading state; avoid crashing the executor thread.
                 }
             }
+        } catch (_: RejectedExecutionException) {
+            // The runner is shutting down; stale work can be ignored.
         }
+    }
+
+    fun buildCachedShell(): LauncherRenderModel {
+        val appEntries = loadCachedAppEntries()
+        val pinnedKeys = settings.pinnedPackages()
+        return renderModelFactory.create(
+            preferences = settings.uiPreferences(),
+            notificationChapters = emptyList(),
+            appEntries = appEntries,
+            pinnedKeys = pinnedKeys,
+            pinnedChapterPackages = settings.pinnedChapterPackages(),
+            classicPages = settings.classicPages(),
+            classicGridConfig = settings.classicGridConfig(),
+            dockConfig = settings.dockConfig(),
+            dockKeys = settings.dockKeys(),
+            hasCalendarPermission = calendarRepository.hasCalendarPermission(),
+            calendarEvents = emptyList(),
+        )
     }
 
     fun buildSync(): LauncherRenderModel {

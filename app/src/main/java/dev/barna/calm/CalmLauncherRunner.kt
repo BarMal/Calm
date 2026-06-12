@@ -332,7 +332,8 @@ class CalmLauncherRunner(
             render(existingState, animate = false)
             stateManager.refreshAsync()
         } else {
-            render(stateManager.buildSync(), animate = true)
+            render(stateManager.buildCachedShell(), animate = true)
+            stateManager.refreshAsync()
         }
         appLibraryDataManager.refreshInBackground()
     }
@@ -358,7 +359,8 @@ class CalmLauncherRunner(
                 stateManager.refreshAsync()
                 return
             }
-            render(stateManager.buildSync(), animate = true)
+            render(stateManager.buildCachedShell(), animate = true)
+            stateManager.refreshAsync()
         }
     }
 
@@ -370,7 +372,7 @@ class CalmLauncherRunner(
     fun onDestroy() {
         try {
             mainHandler.removeCallbacksAndMessages(null)
-            stateExecutor.shutdownNow()
+            stateExecutor.shutdown()
         } finally {
             unregisterPackageChangeReceiver()
         }

@@ -117,13 +117,35 @@ class CardStackController(
                 stack.invalidate()
             }
         }
-        scroller.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
-            val nextHeight = bottom - top
-            val oldHeight = oldBottom - oldTop
-            if (nextHeight > 0 && nextHeight != oldHeight && nextHeight != lastAppliedViewportHeight) {
-                applyLayout()
+        val viewportLayoutListener = object : android.view.View.OnLayoutChangeListener {
+            override fun onLayoutChange(
+                v: android.view.View,
+                left: Int,
+                top: Int,
+                right: Int,
+                bottom: Int,
+                oldLeft: Int,
+                oldTop: Int,
+                oldRight: Int,
+                oldBottom: Int,
+            ) {
+                val nextHeight = bottom - top
+                val oldHeight = oldBottom - oldTop
+                if (nextHeight > 0 && nextHeight != oldHeight && nextHeight != lastAppliedViewportHeight) {
+                    applyLayout()
+                    v.removeOnLayoutChangeListener(this)
+                }
             }
         }
+        scroller.addOnLayoutChangeListener(viewportLayoutListener)
+        scroller.addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: android.view.View) = Unit
+
+            override fun onViewDetachedFromWindow(v: android.view.View) {
+                v.removeOnLayoutChangeListener(viewportLayoutListener)
+                v.removeOnAttachStateChangeListener(this)
+            }
+        })
         scroller.post {
             if (scroller.height > 0) {
                 applyLayout()

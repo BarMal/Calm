@@ -43,7 +43,7 @@ class CalmNotificationListenerService : NotificationListenerService() {
         synchronized(lock) {
             currentService = this
         }
-        refreshSnapshot()
+        scheduleSnapshotRefresh()
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {

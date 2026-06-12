@@ -667,7 +667,7 @@ class CalmLauncherRunner(
             adapter = pagerAdapter
             clipToPadding = false
             clipChildren = false
-            offscreenPageLimit = 1
+            offscreenPageLimit = minOf(2, (pages.size - 1).coerceAtLeast(1))
             setPageTransformer(CompositePageTransformer().apply {
                 addTransformer { page, position ->
                     val distance = minOf(1f, kotlin.math.abs(position))

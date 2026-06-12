@@ -184,6 +184,7 @@ class CalmSettingsActivity : ComponentActivity() {
 
     private fun renderAppearanceSettings(content: LinearLayout) {
         content.addView(section("Cards"))
+        content.addView(cardAppearancePreview())
         content.addView(switchRow(
             title = "Tint notification cards",
             summary = "Move app colour from chapter panels onto cards.",
@@ -242,6 +243,104 @@ class CalmSettingsActivity : ComponentActivity() {
             max = 4,
             valueText = { "Very light / ${it + 1} of 5" },
         ) { settings.setCardHapticStrength(it + 1) })
+    }
+
+    private fun cardAppearancePreview(): View {
+        val colors = GoogleInteractionStyle.palette(this)
+        val appearance = settings.cardAppearance()
+        val tuning = settings.cardStackTuning()
+        val drawables = CalmDrawables(this)
+        return FrameLayout(this).apply {
+            clipChildren = false
+            clipToPadding = false
+            setPadding(dp(18), dp(18), dp(18), dp(18))
+            background = roundedDrawable(colors.surfaceContainer, dp(28)).apply {
+                setStroke(dp(1), colors.outlineVariant)
+            }
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(306)).apply {
+                bottomMargin = dp(10)
+            }
+            addAppearancePreviewCard(
+                card = appearancePreviewCard(
+                    title = "Background card",
+                    detail = "Dimmed by stack fade",
+                    hue = Color.rgb(112, 156, 188),
+                    drawables = drawables,
+                    appearance = appearance,
+                    alphaMultiplier = tuning.nonTopCardOpacityFactor,
+                ),
+                topMargin = 142,
+                scale = 0.9f,
+                rotationValue = -2f,
+            )
+            addAppearancePreviewCard(
+                card = appearancePreviewCard(
+                    title = "Top card",
+                    detail = cardAppearanceSummary(appearance),
+                    hue = CalmTheme.ACCENT,
+                    drawables = drawables,
+                    appearance = appearance,
+                    alphaMultiplier = 1f,
+                ),
+                topMargin = 48,
+                scale = 1f,
+                rotationValue = 0f,
+            )
+        }
+    }
+
+    private fun FrameLayout.addAppearancePreviewCard(
+        card: View,
+        topMargin: Int,
+        scale: Float,
+        rotationValue: Float,
+    ) {
+        addView(
+            card.apply {
+                scaleX = scale
+                scaleY = scale
+                rotation = rotationValue
+                translationZ = dp((scale * 10).roundToInt()).toFloat()
+                pivotY = 0f
+            },
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(112)).apply {
+                leftMargin = dp(8)
+                rightMargin = dp(8)
+                this.topMargin = dp(topMargin)
+            },
+        )
+    }
+
+    private fun appearancePreviewCard(
+        title: String,
+        detail: String,
+        hue: Int,
+        drawables: CalmDrawables,
+        appearance: CardAppearance,
+        alphaMultiplier: Float,
+    ): View {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(22), 0, dp(22), 0)
+            background = drawables.notificationCard(
+                radius = dp(settings.cardCornerRadiusDp()),
+                hueColor = hue,
+                tintCards = settings.useTintedNotificationCards(),
+                appearance = appearance,
+            )
+            alpha = (0.46f + 0.54f * alphaMultiplier).coerceIn(0.18f, 1f)
+            elevation = dp(2).toFloat()
+            addView(label(title, 20, CalmTheme.INK, Typeface.BOLD))
+            addView(label(detail, 13, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
+                setPadding(0, dp(6), 0, 0)
+            })
+        }
+    }
+
+    private fun cardAppearanceSummary(appearance: CardAppearance): String {
+        val effect = cardEffectLabel(appearance.effect).lowercase(Locale.getDefault())
+        return "$effect · ${appearance.effectStrength}% effect · ${appearance.tintStrength}% tint"
     }
 
     private fun renderPageSettings(content: LinearLayout) {

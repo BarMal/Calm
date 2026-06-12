@@ -246,6 +246,7 @@ class CalmLauncherRunner(
         drawables = drawables,
         resolveIcon = { notificationRepository.resolveAppIconBitmap(it) },
         openAppEntry = ::openAppEntry,
+        openNotificationPage = { chapter -> selectPage(chapter.identityKey) },
     )
     private val classicWidgetHostController = ClassicWidgetHostController(
         activity = activity,
@@ -754,7 +755,7 @@ class CalmLauncherRunner(
         )
         if (state.dockConfig.enabled && state.dockApps.isNotEmpty()) {
             root.addView(
-                dockController.buildDock(state.dockApps, state.dockConfig),
+                dockController.buildDock(state.dockApps, state.dockConfig, state.notificationChapters),
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                     leftMargin = activity.dp(16)
                     rightMargin = activity.dp(16)

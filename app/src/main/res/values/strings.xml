@@ -1,4 +1,30 @@
 <resources>
     <string name="app_name">Calm</string>
     <string name="notification_listener_name">Calm notification index</string>
+    <string name="toast_app_pinned">Pinned %1$s</string>
+    <string name="toast_app_unpinned">Unpinned %1$s</string>
+    <string name="toast_app_hidden">Hidden %1$s</string>
+    <string name="toast_dock_already_contains">%1$s is already in the dock</string>
+    <string name="toast_dock_added">Added %1$s to dock</string>
+    <string name="toast_dock_full">Dock is full</string>
+    <string name="toast_dock_missing">%1$s is not in the dock</string>
+    <string name="toast_dock_removed">Removed %1$s from dock</string>
+    <string name="toast_classic_already_contains">%1$s is already on a Classic page</string>
+    <string name="toast_classic_added">Added %1$s to Classic</string>
+    <string name="toast_classic_full">Classic page is full</string>
+    <string name="toast_classic_added_drag">Added %1$s; drag to place</string>
+    <string name="toast_page_full">%1$s is full</string>
+    <string name="toast_notification_cards_tinted">Notification cards are tinted</string>
+    <string name="toast_chapter_panels_tinted">Chapter panels are tinted</string>
+    <string name="toast_apps_split_by_profile">Apps split by profile</string>
+    <string name="toast_apps_combined">Apps combined</string>
+    <string name="toast_work_notifications_left">Work notification chapters moved left</string>
+    <string name="toast_work_notifications_right">Work notification chapters moved right</string>
+    <string name="toast_notifications_grouped">Notifications grouped</string>
+    <string name="toast_notifications_split">Notifications split</string>
+    <string name="toast_card_haptics_on">Card haptics on</string>
+    <string name="toast_card_haptics_off">Card haptics off</string>
+    <string name="toast_timescape_preset_applied">Timescape stack preset applied</string>
+    <string name="toast_advanced_stack_controls_shown">Advanced stack controls shown</string>
+    <string name="toast_advanced_stack_controls_hidden">Advanced stack controls hidden</string>
 </resources>

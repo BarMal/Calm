@@ -13,7 +13,7 @@ class LauncherSettingsToggleHandler(
 ) {
     fun toggleNotificationSurface() {
         val nextValue = settings.toggleNotificationSurface()
-        Toast.makeText(activity, if (nextValue) "Notification cards are tinted" else "Chapter panels are tinted", Toast.LENGTH_SHORT).show()
+        toast(if (nextValue) R.string.toast_notification_cards_tinted else R.string.toast_chapter_panels_tinted)
         render()
     }
 
@@ -26,38 +26,42 @@ class LauncherSettingsToggleHandler(
         ) {
             selectPage(if (nextValue) CalmTheme.PERSONAL_APP_LIBRARY_KEY else CalmTheme.APP_LIBRARY_KEY)
         }
-        Toast.makeText(activity, if (nextValue) "Apps split by profile" else "Apps combined", Toast.LENGTH_SHORT).show()
+        toast(if (nextValue) R.string.toast_apps_split_by_profile else R.string.toast_apps_combined)
         render()
     }
 
     fun toggleWorkNotificationChapterPlacement() {
         val nextValue = settings.toggleWorkNotificationChaptersBeforeApps()
-        Toast.makeText(activity, if (nextValue) "Work notification chapters moved left" else "Work notification chapters moved right", Toast.LENGTH_SHORT).show()
+        toast(if (nextValue) R.string.toast_work_notifications_left else R.string.toast_work_notifications_right)
         render()
     }
 
     fun toggleNotificationGrouping(chapter: AppChapter) {
         val nextGrouped = settings.toggleNotificationGrouping(chapter.identityKey)
-        Toast.makeText(activity, if (nextGrouped) "Notifications grouped" else "Notifications split", Toast.LENGTH_SHORT).show()
+        toast(if (nextGrouped) R.string.toast_notifications_grouped else R.string.toast_notifications_split)
         render()
     }
 
     fun toggleCardHaptics() {
         val nextValue = settings.toggleCardHaptics()
         if (nextValue) performCardScrollHaptic(activity.window.decorView)
-        Toast.makeText(activity, if (nextValue) "Card haptics on" else "Card haptics off", Toast.LENGTH_SHORT).show()
+        toast(if (nextValue) R.string.toast_card_haptics_on else R.string.toast_card_haptics_off)
         render()
     }
 
     fun applyTimescapeStackPreset() {
         settings.applyTimescapeStackPreset()
-        Toast.makeText(activity, "Timescape stack preset applied", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_timescape_preset_applied)
         render()
     }
 
     fun toggleAdvancedStackControls() {
         val nextValue = settings.toggleAdvancedStackControls()
-        Toast.makeText(activity, if (nextValue) "Advanced stack controls shown" else "Advanced stack controls hidden", Toast.LENGTH_SHORT).show()
+        toast(if (nextValue) R.string.toast_advanced_stack_controls_shown else R.string.toast_advanced_stack_controls_hidden)
         render()
+    }
+
+    private fun toast(resId: Int) {
+        Toast.makeText(activity, activity.getString(resId), Toast.LENGTH_SHORT).show()
     }
 }

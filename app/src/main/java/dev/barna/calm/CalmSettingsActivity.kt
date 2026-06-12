@@ -399,7 +399,7 @@ class CalmSettingsActivity : ComponentActivity() {
         content.addView(actionRow("App shortcuts", "Long-press an app card to launch its available shortcuts.") {
             Toast.makeText(this, "Long-press an app card to see shortcuts", Toast.LENGTH_SHORT).show()
         })
-        content.addView(actionRow("Dock apps", dockAppsSummary()) { showDockAppsDialog() })
+        content.addView(actionRow(getString(R.string.settings_dock_apps_title), dockAppsSummary()) { showDockAppsDialog() })
         content.addView(actionRow(
             "Hidden apps",
             hiddenAppsSummary(),
@@ -409,42 +409,45 @@ class CalmSettingsActivity : ComponentActivity() {
     }
 
     private fun renderDockSettings(content: LinearLayout) {
-        content.addView(section("Dock"))
+        content.addView(section(getString(R.string.settings_section_dock)))
         val dock = settings.dockConfig()
         content.addView(switchRow(
-            title = "Show dock",
-            summary = "A row of favourite apps shown on every page.",
+            title = getString(R.string.settings_show_dock_title),
+            summary = getString(R.string.settings_show_dock_summary),
             checked = dock.enabled,
         ) { settings.setDockEnabled(!settings.dockConfig().enabled); requestRender() })
-        content.addView(actionRow("Dock apps", dockAppsSummary()) { showDockAppsDialog() })
+        content.addView(actionRow(getString(R.string.settings_dock_apps_title), dockAppsSummary()) { showDockAppsDialog() })
         content.addView(choiceRow(
-            title = "Dock style",
+            title = getString(R.string.settings_dock_style_title),
             options = DockStyle.entries.map { style -> dockStyleLabel(style) to style },
             selected = dock.style,
         ) { settings.setDockStyle(it); requestRender() })
         content.addView(sliderRow(
-            title = "Dock app count",
+            title = getString(R.string.settings_dock_app_count_title),
             progress = dock.itemCount - DockConfig.MIN_ITEM_COUNT,
             max = DockConfig.MAX_ITEM_COUNT - DockConfig.MIN_ITEM_COUNT,
-            valueText = { "${it + DockConfig.MIN_ITEM_COUNT} apps" },
+            valueText = {
+                val count = it + DockConfig.MIN_ITEM_COUNT
+                resources.getQuantityString(R.plurals.settings_dock_app_count_value, count, count)
+            },
         ) { settings.setDockItemCount(it + DockConfig.MIN_ITEM_COUNT); requestRender() })
         content.addView(sliderRow(
-            title = "Dock item size",
+            title = getString(R.string.settings_dock_item_size_title),
             progress = dock.itemSpan - DockConfig.MIN_ITEM_SPAN,
             max = DockConfig.MAX_ITEM_SPAN - DockConfig.MIN_ITEM_SPAN,
             valueText = { dockItemSizeLabel(it + DockConfig.MIN_ITEM_SPAN) },
         ) { settings.setDockItemSpan(it + DockConfig.MIN_ITEM_SPAN); requestRender() })
         content.addView(sliderRow(
-            title = "Dock height",
+            title = getString(R.string.settings_dock_height_title),
             progress = dock.verticalPaddingDp,
             max = DockConfig.MAX_VERTICAL_PADDING_DP,
-            valueText = { "${it}dp padding" },
+            valueText = { getString(R.string.settings_dock_padding_value, it) },
         ) { settings.setDockVerticalPadding(it); requestRender() })
         content.addView(sliderRow(
-            title = "Dock side margin",
+            title = getString(R.string.settings_dock_side_margin_title),
             progress = dock.horizontalPaddingDp,
             max = DockConfig.MAX_HORIZONTAL_PADDING_DP,
-            valueText = { "${it}dp padding" },
+            valueText = { getString(R.string.settings_dock_padding_value, it) },
         ) { settings.setDockHorizontalPadding(it); requestRender() })
     }
 
@@ -1489,24 +1492,28 @@ class CalmSettingsActivity : ComponentActivity() {
     }
 
     private fun dockItemSizeLabel(span: Int): String {
-        return if (DockConfig.showsItemLabels(span)) "2x1 icon + name" else "1x1 icon"
+        return if (DockConfig.showsItemLabels(span)) {
+            getString(R.string.settings_dock_size_icon_with_name)
+        } else {
+            getString(R.string.settings_dock_size_icon_only)
+        }
     }
 
     private fun dockStyleLabel(style: DockStyle): String {
         return when (style) {
-            DockStyle.CLASSIC -> "Classic"
-            DockStyle.CARD -> "Card"
-            DockStyle.HYBRID -> "Hybrid"
+            DockStyle.CLASSIC -> getString(R.string.settings_dock_style_classic)
+            DockStyle.CARD -> getString(R.string.settings_dock_style_card)
+            DockStyle.HYBRID -> getString(R.string.settings_dock_style_hybrid)
         }
     }
 
     private fun showDockAppsDialog() {
         val apps = cachedAppEntries ?: run {
-            Toast.makeText(this, "App list is loading, try again shortly", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.toast_dock_app_list_loading, Toast.LENGTH_SHORT).show()
             return
         }
         if (apps.isEmpty()) {
-            Toast.makeText(this, "No apps are available for the dock", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.toast_dock_no_apps_available, Toast.LENGTH_SHORT).show()
             return
         }
         val dockKeys = settings.dockKeys()
@@ -1514,12 +1521,12 @@ class CalmSettingsActivity : ComponentActivity() {
         val labels = apps.map(::hiddenAppLabel).toTypedArray()
         val maxItems = settings.dockConfig().itemCount
         GoogleInteractionStyle.dialogBuilder(this)
-            .setTitle("Dock apps (up to $maxItems)")
+            .setTitle(getString(R.string.dialog_dock_apps_title, maxItems))
             .setMultiChoiceItems(labels, selected) { _, which, isChecked ->
                 selected[which] = isChecked
             }
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Done") { _, _ ->
+            .setNegativeButton(R.string.action_cancel, null)
+            .setPositiveButton(R.string.action_done) { _, _ ->
                 val chosen = apps.filterIndexed { index, _ -> selected[index] }
                     .map { it.identityKey }
                     .take(maxItems)

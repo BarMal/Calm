@@ -1481,11 +1481,38 @@ class CalmLauncherRunner(
 
     private fun installPageOverviewScrollMagnet(scroller: HorizontalScrollView, cardWidth: Int) {
         var snap: Runnable? = null
+        var touching = false
+        var snapAfterSettle = false
+        fun cancelSnap() {
+            snap?.let(scroller::removeCallbacks)
+            snap = null
+        }
+        fun scheduleSnap() {
+            cancelSnap()
+            snap = Runnable {
+                snap = null
+                if (touching) return@Runnable
+                snapAfterSettle = false
+                snapPageOverviewScroll(scroller, cardWidth)
+            }.also {
+                scroller.postDelayed(it, PAGE_OVERVIEW_MAGNET_DELAY_MS)
+            }
+        }
+        scroller.setOnScrollChangeListener { _, _, _, _, _ ->
+            if (snapAfterSettle && !touching) scheduleSnap()
+        }
         scroller.setOnTouchListener { view, event ->
-            snap?.let(view::removeCallbacks)
-            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
-                snap = Runnable { snapPageOverviewScroll(scroller, cardWidth) }.also {
-                    view.postDelayed(it, PAGE_OVERVIEW_MAGNET_DELAY_MS)
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    touching = true
+                    snapAfterSettle = false
+                    cancelSnap()
+                }
+                MotionEvent.ACTION_MOVE -> cancelSnap()
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    touching = false
+                    snapAfterSettle = true
+                    scheduleSnap()
                 }
             }
             false

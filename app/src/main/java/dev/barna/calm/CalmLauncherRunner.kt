@@ -1527,7 +1527,7 @@ class CalmLauncherRunner(
                     }
                     true
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                MotionEvent.ACTION_UP -> {
                     view.removeCallbacks(longPress)
                     view.parent?.requestDisallowInterceptTouchEvent(false)
                     val dx = event.rawX - downRawX
@@ -1555,6 +1555,15 @@ class CalmLauncherRunner(
                         view.elevation = 0f
                         view.animate().translationX(0f).translationY(0f).alpha(1f).scaleX(1f).scaleY(1f).setDuration(90L).start()
                     }
+                    dropPlaceholder = null
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    view.removeCallbacks(longPress)
+                    view.parent?.requestDisallowInterceptTouchEvent(false)
+                    clearPageOverviewDropPreview(view, dropPlaceholder)
+                    view.elevation = 0f
+                    view.animate().translationX(0f).translationY(0f).alpha(1f).scaleX(1f).scaleY(1f).setDuration(90L).start()
                     dropPlaceholder = null
                     true
                 }

@@ -9,6 +9,7 @@ enum class PageSlot {
     PINNED,
     CONTACTS,
     AGENDA,
+    ALARMS,
     OVERVIEW,
     WORK_OVERVIEW,
     CLASSIC_PAGES,
@@ -36,6 +37,7 @@ data class LauncherPageLayout(
             PageSlot.PINNED,
             PageSlot.CONTACTS,
             PageSlot.AGENDA,
+            PageSlot.ALARMS,
             PageSlot.OVERVIEW,
             PageSlot.WORK_OVERVIEW,
             PageSlot.CLASSIC_PAGES,
@@ -52,6 +54,7 @@ object PageArranger {
         page.key == CalmTheme.PINNED_KEY -> PageSlot.PINNED
         page.key == CalmTheme.CONTACTS_KEY -> PageSlot.CONTACTS
         page.key == CalmTheme.AGENDA_KEY -> PageSlot.AGENDA
+        page.key == CalmTheme.ALARMS_KEY -> PageSlot.ALARMS
         page.key == CalmTheme.WORK_OVERVIEW_KEY -> PageSlot.WORK_OVERVIEW
         page.key == CalmTheme.OVERVIEW_KEY -> PageSlot.OVERVIEW
         page.classicPage != null -> PageSlot.CLASSIC_PAGES

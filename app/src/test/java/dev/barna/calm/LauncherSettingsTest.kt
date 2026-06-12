@@ -1066,4 +1066,24 @@ class LauncherSettingsTest {
         assertTrue(settings.agendaPageEnabled())
         assertTrue(settings.uiPreferences().agendaPageEnabled)
     }
+
+    @Test
+    fun alarmsPageTogglePersistsInUiPreferences() {
+        assertFalse(settings.uiPreferences().alarmsPageEnabled)
+
+        assertTrue(settings.toggleAlarmsPage())
+
+        assertTrue(settings.alarmsPageEnabled())
+        assertTrue(settings.uiPreferences().alarmsPageEnabled)
+    }
+
+    @Test
+    fun pinnedPageEnabledPersistsInUiPreferences() {
+        assertFalse(settings.uiPreferences().pinnedPageEnabled)
+
+        settings.setPinnedPageEnabled(true)
+
+        assertTrue(settings.pinnedPageEnabled())
+        assertTrue(settings.uiPreferences().pinnedPageEnabled)
+    }
 }

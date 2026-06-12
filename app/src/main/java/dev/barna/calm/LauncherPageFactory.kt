@@ -32,8 +32,10 @@ class LauncherPageFactory(
     private val activity: MainActivity,
     private val drawables: CalmDrawables,
     private val focusOverlay: FocusOverlayController,
+    private val cardRenderer: CardRenderer,
     private val overviewPageBuilder: OverviewPageBuilder,
     private val agendaPageBuilder: AgendaPageBuilder,
+    private val alarmsPageBuilder: AlarmsPageBuilder,
     private val chapterPageBuilder: ChapterPageBuilder,
     private val appLibraryController: LauncherAppLibraryController,
     private val appSearchController: AppSearchController,
@@ -72,6 +74,7 @@ class LauncherPageFactory(
             page.key == CalmTheme.PINNED_KEY -> createPinnedPage(state.pinnedApps)
             page.key == CalmTheme.CONTACTS_KEY -> contactsPageController.buildPage()
             page.key == CalmTheme.AGENDA_KEY -> agendaPageBuilder.buildPage(state)
+            page.key == CalmTheme.ALARMS_KEY -> alarmsPageBuilder.buildPage()
             page.key == CalmTheme.WORK_OVERVIEW_KEY -> overviewPageBuilder.buildPage(state, workProfile = true)
             page.classicPage != null -> createClassicPage(page.classicPage, state)
             page.chapter == null -> overviewPageBuilder.buildPage(state)
@@ -1100,10 +1103,27 @@ class LauncherPageFactory(
             addView(animatedChrome(label("Pinned", 30, CalmTheme.INK, Typeface.NORMAL).apply {
                 setPadding(0, activity.dp(8), 0, activity.dp(24))
             }))
-            addView(
-                appLibraryController.appStack(pinnedApps, stackKey = CardStackStateKey.appEntries("pinned", pinnedApps)),
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
-            )
+            if (pinnedApps.isEmpty()) {
+                addView(
+                    LinearLayout(activity).apply {
+                        gravity = Gravity.CENTER
+                        addView(
+                            cardRenderer.stackCard(
+                                "Pinned\nNo pinned apps yet.\nLong-press an app and choose Pin.",
+                                CalmTheme.ACCENT,
+                                true,
+                            ),
+                            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, cardRenderer.cardHeight()),
+                        )
+                    },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+                )
+            } else {
+                addView(
+                    appLibraryController.appStack(pinnedApps, stackKey = CardStackStateKey.appEntries("pinned", pinnedApps)),
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+                )
+            }
         }
     }
 

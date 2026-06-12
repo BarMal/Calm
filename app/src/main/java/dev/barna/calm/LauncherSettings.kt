@@ -552,8 +552,10 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             cardVibrancy = cardVibrancy(),
             pageSortOrder = pageSortOrder(),
             expandedCardsEnabled = expandedCardsEnabled(),
+            pinnedPageEnabled = pinnedPageEnabled(),
             contactsPageEnabled = contactsPageEnabled(),
             agendaPageEnabled = agendaPageEnabled(),
+            alarmsPageEnabled = alarmsPageEnabled(),
             cardAppearance = cardAppearance(),
             pageLayout = pageLayout(),
         )
@@ -632,6 +634,14 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         preferences.edit().putString(PREF_LAST_PAGE_KEY, pageKey).apply()
     }
 
+    fun pinnedPageEnabled(): Boolean {
+        return preferences.getBoolean(PREF_PINNED_PAGE, false)
+    }
+
+    fun setPinnedPageEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean(PREF_PINNED_PAGE, enabled).apply()
+    }
+
     fun contactsPageEnabled(): Boolean {
         return preferences.getBoolean(PREF_CONTACTS_PAGE, false)
     }
@@ -652,6 +662,16 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         return nextValue
     }
 
+    fun alarmsPageEnabled(): Boolean {
+        return preferences.getBoolean(PREF_ALARMS_PAGE, false)
+    }
+
+    fun toggleAlarmsPage(): Boolean {
+        val nextValue = !alarmsPageEnabled()
+        preferences.edit().putBoolean(PREF_ALARMS_PAGE, nextValue).apply()
+        return nextValue
+    }
+
     fun launcherChangeToken(): Int {
         return listOf(
             uiPreferences(),
@@ -664,7 +684,9 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             classicGridConfig(),
             dockConfig(),
             dockKeys(),
+            pinnedPageEnabled(),
             agendaPageEnabled(),
+            alarmsPageEnabled(),
         ).hashCode()
     }
 
@@ -919,8 +941,10 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_CARD_VIBRANCY = "card_vibrancy"
         private const val PREF_PAGE_SORT_ORDER = "page_sort_order"
         private const val PREF_EXPANDED_CARDS = "expanded_cards"
+        private const val PREF_PINNED_PAGE = "pinned_page"
         private const val PREF_CONTACTS_PAGE = "contacts_page"
         private const val PREF_AGENDA_PAGE = "agenda_page"
+        private const val PREF_ALARMS_PAGE = "alarms_page"
         private const val PREF_CLASSIC_PAGES = "classic_pages"
         private const val PREF_CLASSIC_HOME_PAGE_ID = "classic_home_page_id"
         private const val PREF_CLASSIC_GRID_COLUMNS = "classic_grid_columns"

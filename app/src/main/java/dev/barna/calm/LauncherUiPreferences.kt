@@ -15,8 +15,10 @@ data class LauncherUiPreferences(
     val cardVibrancy: Int,
     val pageSortOrder: PageSortOrder = PageSortOrder.DEFAULT,
     val expandedCardsEnabled: Boolean = true,
+    val pinnedPageEnabled: Boolean = false,
     val contactsPageEnabled: Boolean = false,
     val agendaPageEnabled: Boolean = false,
+    val alarmsPageEnabled: Boolean = false,
     val cardAppearance: CardAppearance = CardAppearance.DEFAULT,
     val pageLayout: LauncherPageLayout = LauncherPageLayout.DEFAULT,
 )

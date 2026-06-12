@@ -60,12 +60,35 @@ jobs:
           fi
 
           echo "${CALM_RELEASE_KEYSTORE_BASE64}" | base64 --decode > app/calm-release.keystore
+          git show c2bf7b1:app/ci-debug.keystore.base64 | base64 --decode > app/calm-legacy-ci.keystore
           {
-            echo "ORG_GRADLE_PROJECT_calmSigningKeystoreFile=app/calm-release.keystore"
-            echo "ORG_GRADLE_PROJECT_calmSigningStorePassword=${CALM_RELEASE_STORE_PASSWORD}"
-            echo "ORG_GRADLE_PROJECT_calmSigningKeyAlias=${CALM_RELEASE_KEY_ALIAS}"
-            echo "ORG_GRADLE_PROJECT_calmSigningKeyPassword=${CALM_RELEASE_KEY_PASSWORD}"
+            echo "CALM_RELEASE_KEYSTORE_FILE=app/calm-release.keystore"
+            echo "CALM_RELEASE_STORE_PASSWORD=${CALM_RELEASE_STORE_PASSWORD}"
+            echo "CALM_RELEASE_KEY_ALIAS=${CALM_RELEASE_KEY_ALIAS}"
+            echo "CALM_RELEASE_KEY_PASSWORD=${CALM_RELEASE_KEY_PASSWORD}"
+            echo "CALM_LEGACY_KEYSTORE_FILE=app/calm-legacy-ci.keystore"
+            echo "CALM_SIGNING_LINEAGE_FILE=app/calm-signing-lineage"
           } >> "$GITHUB_ENV"
+
+      - name: Prepare signing certificate lineage
+        run: |
+          set -euo pipefail
+          APKSIGNER="${ANDROID_HOME}/build-tools/36.0.0/apksigner"
+          "${APKSIGNER}" rotate \
+            --out "${CALM_SIGNING_LINEAGE_FILE}" \
+            --old-signer \
+            --ks "${CALM_LEGACY_KEYSTORE_FILE}" \
+            --ks-key-alias calm-debug \
+            --ks-pass pass:calmdebug \
+            --key-pass pass:calmdebug \
+            --set-installed-data true \
+            --set-permission true \
+            --set-rollback false \
+            --new-signer \
+            --ks "${CALM_RELEASE_KEYSTORE_FILE}" \
+            --ks-key-alias "${CALM_RELEASE_KEY_ALIAS}" \
+            --ks-pass env:CALM_RELEASE_STORE_PASSWORD \
+            --key-pass env:CALM_RELEASE_KEY_PASSWORD
 
       - name: Compute APK version
         run: |
@@ -86,23 +109,42 @@ jobs:
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
 
-      - name: Build signed release APK
+      - name: Build unsigned release APK
         run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Prepare release assets
         run: |
           set -euo pipefail
+          APKSIGNER="${ANDROID_HOME}/build-tools/36.0.0/apksigner"
+          ZIPALIGN="${ANDROID_HOME}/build-tools/36.0.0/zipalign"
           mkdir -p dist release-assets release-metadata
           DEBUG_APK_PATH="$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
-          RELEASE_APK_PATH="$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)"
+          UNSIGNED_RELEASE_APK_PATH="$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)"
+          ALIGNED_RELEASE_APK_PATH="release-metadata/Calm-alpha-${VERSION_NAME}-${VERSION_CODE}-aligned-unsigned.apk"
+          VERSIONED_RELEASE_APK="release-assets/Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk"
+
+          "${ZIPALIGN}" -f -p 4 "${UNSIGNED_RELEASE_APK_PATH}" "${ALIGNED_RELEASE_APK_PATH}"
+          "${APKSIGNER}" sign \
+            --rotation-min-sdk-version 28 \
+            --out "${VERSIONED_RELEASE_APK}" \
+            --lineage "${CALM_SIGNING_LINEAGE_FILE}" \
+            --ks "${CALM_LEGACY_KEYSTORE_FILE}" \
+            --ks-key-alias calm-debug \
+            --ks-pass pass:calmdebug \
+            --key-pass pass:calmdebug \
+            --next-signer \
+            --ks "${CALM_RELEASE_KEYSTORE_FILE}" \
+            --ks-key-alias "${CALM_RELEASE_KEY_ALIAS}" \
+            --ks-pass env:CALM_RELEASE_STORE_PASSWORD \
+            --key-pass env:CALM_RELEASE_KEY_PASSWORD \
+            "${ALIGNED_RELEASE_APK_PATH}"
 
           cp "$DEBUG_APK_PATH" "dist/Calm-alpha-debug-side-by-side-${VERSION_NAME}-${VERSION_CODE}.apk"
           cp "$DEBUG_APK_PATH" "release-assets/Calm-alpha-debug-side-by-side-${VERSION_NAME}-${VERSION_CODE}.apk"
           cp "$DEBUG_APK_PATH" release-assets/Calm-alpha-debug-side-by-side-latest.apk
 
-          cp "$RELEASE_APK_PATH" "dist/Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk"
-          cp "$RELEASE_APK_PATH" "release-assets/Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk"
-          cp "$RELEASE_APK_PATH" release-assets/Calm-alpha-latest.apk
+          cp "${VERSIONED_RELEASE_APK}" "dist/Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk"
+          cp "${VERSIONED_RELEASE_APK}" release-assets/Calm-alpha-latest.apk
 
       - name: Verify release APK metadata
         run: |
@@ -112,8 +154,8 @@ jobs:
           {
             echo "### APK verification"
             echo
-            echo "| APK | Package | Version | SHA-256 | Signing certificate |"
-            echo "| --- | --- | --- | --- | --- |"
+            echo "| APK | Package | Version | SHA-256 | Signing certificate | Rotation lineage |"
+            echo "| --- | --- | --- | --- | --- | --- |"
           } > release-metadata/apk-verification.md
 
           for apk in release-assets/*.apk; do
@@ -123,8 +165,9 @@ jobs:
             version_name="$(sed -n "s/^package: .*versionName='\([^']*\)'.*/\1/p" "${apk}.badging.txt" | head -n 1)"
             version_code="$(sed -n "s/^package: .*versionCode='\([^']*\)'.*/\1/p" "${apk}.badging.txt" | head -n 1)"
             cert_digest="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "${apk}.apksigner.txt" | head -n 1)"
+            rotated="$(grep -Eq 'Verified using v3 scheme .*true|Verified using v3.1 scheme .*true' "${apk}.apksigner.txt" && echo 'yes' || echo 'no')"
             sha256="$(sha256sum "$apk" | cut -d' ' -f1)"
-            echo "| $(basename "$apk") | \`${package}\` | \`${version_name}\` / \`${version_code}\` | \`${sha256}\` | \`${cert_digest}\` |" >> release-metadata/apk-verification.md
+            echo "| $(basename "$apk") | \`${package}\` | \`${version_name}\` / \`${version_code}\` | \`${sha256}\` | \`${cert_digest}\` | \`${rotated}\` |" >> release-metadata/apk-verification.md
           done
 
           cat release-metadata/apk-verification.md >> "$GITHUB_STEP_SUMMARY"
@@ -207,6 +250,8 @@ jobs:
             echo "### Which APK should I install?"
             echo "- **Calm-alpha-latest.apk** updates the existing Calm install using package \`dev.barna.calm\`. Use this for normal alpha testing."
             echo "- **Calm-alpha-debug-side-by-side-latest.apk** installs separately using package \`dev.barna.calm.debug\`. Use this only when you intentionally want a second test copy."
+            echo "- The normal alpha APK includes Android signing-certificate rotation from the old CI alpha key to the current release key, so existing alpha installs can update on Android 9 and newer."
+            echo "- If Android still reports **App not installed**, uninstall the existing \`dev.barna.calm\` app once, then install \`Calm-alpha-latest.apk\`; this is expected only for devices that cannot use signing-certificate rotation or have a differently signed local build installed."
             echo "- This release is pruned on every publish, so only the current versioned APKs and latest aliases are attached."
             echo
             metadata_file="$(find release-metadata -name apk-verification.md | head -n 1)"

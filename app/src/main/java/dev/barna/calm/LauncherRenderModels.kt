@@ -1,10 +1,10 @@
 package dev.barna.calm
 
-class LauncherRenderModelFactory(
+open class LauncherRenderModelFactory(
     private val pageStateFactory: LauncherPageStateFactory = LauncherPageStateFactory(),
     private val dockResolver: DockResolver = DockResolver(),
 ) {
-    fun create(
+    open fun create(
         preferences: LauncherUiPreferences,
         notificationChapters: List<AppChapter>,
         appEntries: List<AppEntry>,

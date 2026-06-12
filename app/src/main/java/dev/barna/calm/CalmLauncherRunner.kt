@@ -248,6 +248,7 @@ class CalmLauncherRunner(
         activity = activity,
         drawables = drawables,
         focusOverlay = focusOverlay,
+        cardRenderer = cardRenderer,
         overviewPageBuilder = overviewPageBuilder,
         agendaPageBuilder = agendaPageBuilder,
         alarmsPageBuilder = alarmsPageBuilder,
@@ -1304,11 +1305,13 @@ class CalmLauncherRunner(
     }
 
     private fun addPinnedPageFromOverview(state: LauncherRenderModel, pages: List<ChapterPage>) {
-        if (state.pinnedApps.isEmpty()) {
-            Toast.makeText(activity, "Pin an app to add a Pinned page", Toast.LENGTH_SHORT).show()
+        if (pages.any { page -> PageArranger.slotOf(page) == PageSlot.PINNED }) {
+            addExistingOrLivePageFromOverview(PageSlot.PINNED, pages, "Pinned page")
             return
         }
-        addExistingOrLivePageFromOverview(PageSlot.PINNED, pages, "Pinned page")
+        settings.setPinnedPageEnabled(true)
+        Toast.makeText(activity, "Added Pinned page", Toast.LENGTH_SHORT).show()
+        renderAndReopenPageOverview(CalmTheme.PINNED_KEY)
     }
 
     private fun addWorkOverviewFromOverview(state: LauncherRenderModel, pages: List<ChapterPage>) {
@@ -1702,6 +1705,15 @@ class CalmLauncherRunner(
                 }
             }, ContextActionCloseBehavior.REMOVE_CARD)
         }
+        if (slot == PageSlot.PINNED && settings.pinnedPageEnabled()) {
+            return ContextAction("Remove", Runnable {
+                animatePageOverviewRemoval(source, entryIndex, index, pages) {
+                    settings.setPinnedPageEnabled(false)
+                    Toast.makeText(activity, "Removed Pinned page", Toast.LENGTH_SHORT).show()
+                    renderAndReopenPageOverview(nextFocusKey)
+                }
+            }, ContextActionCloseBehavior.REMOVE_CARD)
+        }
         if (slot != PageSlot.CONTACTS) return null
         return ContextAction("Remove", Runnable {
             animatePageOverviewRemoval(source, entryIndex, index, pages) {
@@ -1973,7 +1985,7 @@ class CalmLauncherRunner(
             when {
                 page.classicPage != null -> addClassicOverviewPreview(this, page.classicPage, state.classicGridConfig)
                 page.appScope != null -> addAppsOverviewPreview(this, page, state)
-                page.key == CalmTheme.PINNED_KEY -> addAppRows(this, state.pinnedApps.take(5).map { it.label }, CalmTheme.ACCENT)
+                page.key == CalmTheme.PINNED_KEY -> addAppRows(this, state.pinnedApps.take(5).map { it.label }.ifEmpty { listOf("No pinned apps", "Long-press apps", "Choose Pin") }, CalmTheme.ACCENT)
                 page.key == CalmTheme.CONTACTS_KEY -> addGenericRows(this, listOf("Favourite people", "Recent contact", "Quick action"), CalmTheme.ACCENT)
                 page.key == CalmTheme.AGENDA_KEY -> addAgendaOverviewPreview(this, state)
                 page.key == CalmTheme.ALARMS_KEY -> addGenericRows(this, listOf("Next alarm", "Clock app", "Wake up"), CalmTheme.ACCENT)

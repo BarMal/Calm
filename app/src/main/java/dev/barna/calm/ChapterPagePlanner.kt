@@ -54,7 +54,7 @@ class ChapterPagePlanner {
             chapterNumber++
         }
 
-        if (pinnedApps.isNotEmpty()) {
+        if (pinnedApps.isNotEmpty() || preferences.pinnedPageEnabled) {
             pages.add(ChapterPage.pinned(CalmTheme.PINNED_KEY, roman(chapterNumber)))
             chapterNumber++
         }

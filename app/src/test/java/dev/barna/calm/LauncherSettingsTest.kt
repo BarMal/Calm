@@ -1076,4 +1076,14 @@ class LauncherSettingsTest {
         assertTrue(settings.alarmsPageEnabled())
         assertTrue(settings.uiPreferences().alarmsPageEnabled)
     }
+
+    @Test
+    fun pinnedPageEnabledPersistsInUiPreferences() {
+        assertFalse(settings.uiPreferences().pinnedPageEnabled)
+
+        settings.setPinnedPageEnabled(true)
+
+        assertTrue(settings.pinnedPageEnabled())
+        assertTrue(settings.uiPreferences().pinnedPageEnabled)
+    }
 }

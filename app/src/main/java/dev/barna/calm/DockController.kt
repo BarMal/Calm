@@ -137,9 +137,17 @@ class DockController(
                 LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
                     addView(dockText(app.label, 15, Typeface.BOLD, CalmTheme.INK, 1))
-                    addView(dockText(notificationDetail(target) ?: "Tap to open", 12, Typeface.NORMAL, CalmTheme.MUTED_INK, 1).apply {
-                        setPadding(0, activity.dp(4), 0, 0)
-                    })
+                    addView(
+                        dockText(
+                            notificationDetail(target) ?: activity.getString(R.string.dock_card_tap_to_open),
+                            12,
+                            Typeface.NORMAL,
+                            CalmTheme.MUTED_INK,
+                            1,
+                        ).apply {
+                            setPadding(0, activity.dp(4), 0, 0)
+                        },
+                    )
                 },
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
             )
@@ -289,6 +297,11 @@ class DockController(
 
     private fun dockDescription(app: AppEntry, target: DockNotificationTarget?): String {
         val count = target?.summary?.count ?: return app.label
-        return "${app.label}, $count ${if (count == 1) "notification" else "notifications"}"
+        return activity.resources.getQuantityString(
+            R.plurals.dock_notification_count_description,
+            count,
+            app.label,
+            count,
+        )
     }
 }

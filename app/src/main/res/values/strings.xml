@@ -27,4 +27,33 @@
     <string name="toast_timescape_preset_applied">Timescape stack preset applied</string>
     <string name="toast_advanced_stack_controls_shown">Advanced stack controls shown</string>
     <string name="toast_advanced_stack_controls_hidden">Advanced stack controls hidden</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_done">Done</string>
+    <string name="settings_section_dock">Dock</string>
+    <string name="settings_show_dock_title">Show dock</string>
+    <string name="settings_show_dock_summary">A row of favourite apps shown on every page.</string>
+    <string name="settings_dock_apps_title">Dock apps</string>
+    <string name="settings_dock_style_title">Dock style</string>
+    <string name="settings_dock_style_classic">Classic</string>
+    <string name="settings_dock_style_card">Card</string>
+    <string name="settings_dock_style_hybrid">Hybrid</string>
+    <string name="settings_dock_app_count_title">Dock app count</string>
+    <string name="settings_dock_item_size_title">Dock item size</string>
+    <string name="settings_dock_height_title">Dock height</string>
+    <string name="settings_dock_side_margin_title">Dock side margin</string>
+    <string name="settings_dock_padding_value">%1$ddp padding</string>
+    <string name="settings_dock_size_icon_with_name">2x1 icon + name</string>
+    <string name="settings_dock_size_icon_only">1x1 icon</string>
+    <string name="dialog_dock_apps_title">Dock apps (up to %1$d)</string>
+    <string name="dock_card_tap_to_open">Tap to open</string>
+    <string name="toast_dock_app_list_loading">App list is loading, try again shortly</string>
+    <string name="toast_dock_no_apps_available">No apps are available for the dock</string>
+    <plurals name="settings_dock_app_count_value">
+        <item quantity="one">%1$d app</item>
+        <item quantity="other">%1$d apps</item>
+    </plurals>
+    <plurals name="dock_notification_count_description">
+        <item quantity="one">%1$s, %2$d notification</item>
+        <item quantity="other">%1$s, %2$d notifications</item>
+    </plurals>
 </resources>

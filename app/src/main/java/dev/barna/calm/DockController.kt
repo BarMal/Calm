@@ -524,7 +524,10 @@ class DockController(
                         } else {
                             val direction = if (dx < 0) 1 else -1
                             val cycled = cycleNotification(DockTransition.Horizontal(direction))
-                            if (cycled) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                            if (!cycled) {
+                                selectAppIndex(currentIndex() + direction, DockTransition.Horizontal(direction))
+                            }
+                            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                         }
                     } else if (!gestureMoved) {
                         val app = apps.getOrNull(currentIndex()) ?: return@setOnTouchListener true

@@ -18,8 +18,12 @@ class ChapterCarouselController(
     private var carousel: HorizontalScrollView? = null
     private var carouselRow: LinearLayout? = null
     private var selectedPosition = -1
+    private var paddedCarouselWidth = -1
+    private var lastScrollTarget = Int.MIN_VALUE
 
     fun create(pages: List<ChapterPage>, selectedPosition: Int): View {
+        paddedCarouselWidth = -1
+        lastScrollTarget = Int.MIN_VALUE
         val spine = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             clipToPadding = false
@@ -76,13 +80,14 @@ class ChapterCarouselController(
         }
         val interpolatedCenter = currentCenter + ((nextCenter - currentCenter) * offset.coerceIn(0f, 1f))
         val target = (interpolatedCenter - (c.width / 2f)).toInt().coerceAtLeast(0)
-        c.scrollTo(target, 0)
+        scrollCarouselTo(c, target, smooth = false)
     }
 
     private fun renderItems(pages: List<ChapterPage>, selectedPosition: Int) {
         val row = carouselRow ?: return
         row.removeAllViews()
         this.selectedPosition = selectedPosition
+        lastScrollTarget = Int.MIN_VALUE
         pages.forEachIndexed { index, page ->
             val selected = index == selectedPosition
             val item = carouselItem(page, index, selected)
@@ -155,20 +160,32 @@ class ChapterCarouselController(
         val child = row.getChildAt(position)
         val viewportCenter = c.width / 2
         val childCenter = c.paddingLeft + child.left + (child.width / 2)
-        val target = childCenter - viewportCenter
+        val target = maxOf(0, childCenter - viewportCenter)
+        scrollCarouselTo(c, target, smooth)
+    }
+
+    private fun scrollCarouselTo(c: HorizontalScrollView, target: Int, smooth: Boolean) {
+        if (target == lastScrollTarget) return
+        lastScrollTarget = target
         if (smooth) {
-            c.smoothScrollTo(maxOf(0, target), 0)
+            c.smoothScrollTo(target, 0)
         } else {
-            c.scrollTo(maxOf(0, target), 0)
+            c.scrollTo(target, 0)
         }
     }
 
     private fun updateCenterPadding() {
         val c = carousel ?: return
         if (c.width <= 0) return
+        if (paddedCarouselWidth == c.width) return
         val sidePadding = c.width / 2
-        if (c.paddingLeft == sidePadding && c.paddingRight == sidePadding) return
+        if (c.paddingLeft == sidePadding && c.paddingRight == sidePadding) {
+            paddedCarouselWidth = c.width
+            return
+        }
         c.setPadding(sidePadding, c.paddingTop, sidePadding, c.paddingBottom)
+        paddedCarouselWidth = c.width
+        lastScrollTarget = Int.MIN_VALUE
     }
 
     private fun spineLine(): View {

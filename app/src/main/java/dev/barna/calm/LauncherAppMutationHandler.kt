@@ -20,7 +20,7 @@ class LauncherAppMutationHandler(
     fun unpinApp(app: AppEntry) {
         settings.unpinPackage(app.identityKey)
         settings.unpinPackage(app.packageName)
-        if (loadPinnedApps().isEmpty()) {
+        if (loadPinnedApps().isEmpty() && !settings.pinnedPageEnabled()) {
             selectPage(CalmTheme.APP_LIBRARY_KEY)
         }
         Toast.makeText(activity, "Unpinned ${app.label}", Toast.LENGTH_SHORT).show()

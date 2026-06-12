@@ -4,6 +4,8 @@ import android.appwidget.AppWidgetHost
 import android.Manifest
 import android.content.ComponentName
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
@@ -21,6 +23,7 @@ import android.graphics.drawable.GradientDrawable
 import android.content.res.ColorStateList
 import android.widget.HorizontalScrollView
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
@@ -53,6 +56,7 @@ class CalmSettingsActivity : ComponentActivity() {
             calendarPermissionLauncher.launch(Manifest.permission.READ_CALENDAR)
         }
         appRepository = NotificationChapterRepository(this, settings)
+        currentSettingsPage = initialSettingsPage(intent)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (currentSettingsPage != SettingsPage.ROOT) {
@@ -123,6 +127,7 @@ class CalmSettingsActivity : ComponentActivity() {
             SettingsPage.APPS -> renderAppSettings(content)
             SettingsPage.DOCK -> renderDockSettings(content)
             SettingsPage.CARD_STACK -> renderCardStackSettings(content)
+            SettingsPage.SECTION_CARDS -> renderSectionCardSettings(content)
             SettingsPage.ACCESS -> renderAccessSettings(content)
         }
     }
@@ -162,6 +167,11 @@ class CalmSettingsActivity : ComponentActivity() {
             SettingsPage.CARD_STACK,
             "Card stack",
             "Path, spacing, fade, snap, tilt, and visible-card controls.",
+        ))
+        content.addView(settingsGroupRow(
+            SettingsPage.SECTION_CARDS,
+            "Section cards",
+            "Build the title and folder cards used inside dynamic stacks.",
         ))
 
         content.addView(section("System"))
@@ -397,6 +407,13 @@ class CalmSettingsActivity : ComponentActivity() {
         render()
     }
 
+    private fun initialSettingsPage(intent: Intent): SettingsPage {
+        return when (intent.getStringExtra(EXTRA_PAGE)) {
+            PAGE_SECTION_CARDS -> SettingsPage.SECTION_CARDS
+            else -> SettingsPage.ROOT
+        }
+    }
+
     private fun switchRow(
         title: String,
         summary: String,
@@ -451,6 +468,50 @@ class CalmSettingsActivity : ComponentActivity() {
                 setPadding(0, dp(4), 0, 0)
             })
             setOnClickListener { action() }
+        }
+    }
+
+    private fun <T> choiceRow(
+        title: String,
+        options: List<Pair<String, T>>,
+        selected: T,
+        onSelected: (T) -> Unit,
+    ): View {
+        return rowBase().apply {
+            orientation = LinearLayout.VERTICAL
+            addView(label(title, 16, CalmTheme.INK, Typeface.BOLD))
+            addView(HorizontalScrollView(this@CalmSettingsActivity).apply {
+                isHorizontalScrollBarEnabled = false
+                overScrollMode = View.OVER_SCROLL_NEVER
+                clipToPadding = false
+                addView(LinearLayout(this@CalmSettingsActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(0, dp(10), 0, 0)
+                    options.forEach { option ->
+                        addView(optionChip(option.first, option.second == selected) {
+                            onSelected(option.second)
+                        })
+                    }
+                })
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+    }
+
+    private fun optionChip(text: String, selected: Boolean, onClick: () -> Unit): TextView {
+        return label(
+            text,
+            14,
+            if (selected) GoogleInteractionStyle.palette(this).onPrimaryContainer else CalmTheme.INK,
+            Typeface.BOLD,
+        ).apply {
+            gravity = Gravity.CENTER
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            background = GoogleInteractionStyle.chipBackground(this@CalmSettingsActivity, selected = selected)
+            isClickable = true
+            setOnClickListener { onClick() }
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginEnd = dp(8)
+            }
         }
     }
 
@@ -609,6 +670,7 @@ class CalmSettingsActivity : ComponentActivity() {
                 PageSlot.PINNED -> addPinnedPreviewRows(this, accent)
                 PageSlot.CONTACTS -> addContactPreviewRows(this, accent)
                 PageSlot.AGENDA -> addAgendaPreviewRows(this, accent)
+                PageSlot.ALARMS -> addAlarmsPreviewRows(this, accent)
                 PageSlot.WORK_OVERVIEW -> addOverviewPreviewRows(this, accent, dense = true)
                 PageSlot.OVERVIEW -> addOverviewPreviewRows(this, accent, dense = false)
             }
@@ -693,6 +755,204 @@ class CalmSettingsActivity : ComponentActivity() {
         }
     }
 
+    private fun renderSectionCardSettings(content: LinearLayout) {
+        val mode = settings.agendaSectionMode()
+        val style = settings.agendaSectionTitleStyle()
+        content.addView(section("Builder"))
+        content.addView(sectionCardStackPreview(mode, style))
+        content.addView(choiceRow(
+            title = "Stack structure",
+            options = listOf(
+                "Title cards" to CardStackSectionMode.TITLE_CARDS,
+                "Folders" to CardStackSectionMode.FOLDERS,
+            ),
+            selected = mode,
+        ) {
+            settings.setAgendaSectionMode(it)
+            requestRender()
+        })
+        content.addView(choiceRow(
+            title = "Header background",
+            options = listOf(
+                "Transparent" to true,
+                "Card" to false,
+            ),
+            selected = style.transparentBackground,
+        ) {
+            settings.setAgendaSectionTitleStyle(style.copy(transparentBackground = it))
+            requestRender()
+        })
+        content.addView(choiceRow(
+            title = "Header height",
+            options = listOf(
+                "Compact" to SectionTitleHeight.COMPACT,
+                "Normal" to SectionTitleHeight.NORMAL,
+                "Tall" to SectionTitleHeight.TALL,
+            ),
+            selected = style.height,
+        ) {
+            settings.setAgendaSectionTitleStyle(style.copy(height = it))
+            requestRender()
+        })
+        content.addView(choiceRow(
+            title = "Underline",
+            options = listOf(
+                "Off" to SectionTitleUnderline.OFF,
+                "Title" to SectionTitleUnderline.TITLE,
+                "Full width" to SectionTitleUnderline.FULL,
+            ),
+            selected = style.underline,
+        ) {
+            settings.setAgendaSectionTitleStyle(style.copy(underline = it))
+            requestRender()
+        })
+        content.addView(switchRow(
+            title = "Bold title",
+            summary = "Use stronger section headings for date or category breaks.",
+            checked = style.bold,
+        ) {
+            settings.setAgendaSectionTitleStyle(settings.agendaSectionTitleStyle().copy(bold = !settings.agendaSectionTitleStyle().bold))
+            requestRender()
+        })
+        content.addView(switchRow(
+            title = "Italic title",
+            summary = "Use an editorial title style for section headings.",
+            checked = style.italic,
+        ) {
+            settings.setAgendaSectionTitleStyle(settings.agendaSectionTitleStyle().copy(italic = !settings.agendaSectionTitleStyle().italic))
+            requestRender()
+        })
+        content.addView(actionRow("Reset section cards", "Restore transparent, bold, full-width title cards.") {
+            settings.setAgendaSectionMode(CardStackSectionMode.TITLE_CARDS)
+            settings.setAgendaSectionTitleStyle(SectionTitleCardStyle())
+            requestRender()
+        })
+    }
+
+    private fun sectionCardStackPreview(
+        mode: CardStackSectionMode,
+        style: SectionTitleCardStyle,
+    ): View {
+        val colors = GoogleInteractionStyle.palette(this)
+        return FrameLayout(this).apply {
+            clipChildren = false
+            clipToPadding = false
+            setPadding(dp(18), dp(18), dp(18), dp(18))
+            background = roundedDrawable(colors.surfaceContainer, dp(28)).apply {
+                setStroke(dp(1), colors.outlineVariant)
+            }
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(338)).apply {
+                bottomMargin = dp(10)
+            }
+            addPreviewCard(
+                card = sectionPreviewEventCard("13:30 - 14:00", "Design review", "Studio"),
+                topMargin = 204,
+                scale = 0.88f,
+                alphaValue = 0.58f,
+                rotationValue = -2.5f,
+            )
+            addPreviewCard(
+                card = sectionPreviewEventCard("10:00 - 11:00", "Planning", "Meet"),
+                topMargin = 134,
+                scale = 0.94f,
+                alphaValue = 0.78f,
+                rotationValue = 1.5f,
+            )
+            addPreviewCard(
+                card = sectionPreviewHeader(mode, style),
+                topMargin = 36,
+                scale = 1f,
+                alphaValue = 1f,
+                rotationValue = 0f,
+            )
+        }
+    }
+
+    private fun FrameLayout.addPreviewCard(
+        card: View,
+        topMargin: Int,
+        scale: Float,
+        alphaValue: Float,
+        rotationValue: Float,
+    ) {
+        addView(
+            card.apply {
+                alpha = alphaValue
+                scaleX = scale
+                scaleY = scale
+                rotation = rotationValue
+                translationZ = dp((scale * 10).roundToInt()).toFloat()
+                pivotY = 0f
+            },
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(112)).apply {
+                leftMargin = dp(8)
+                rightMargin = dp(8)
+                this.topMargin = dp(topMargin)
+            },
+        )
+    }
+
+    private fun sectionPreviewHeader(
+        mode: CardStackSectionMode,
+        style: SectionTitleCardStyle,
+    ): View {
+        val colors = GoogleInteractionStyle.palette(this)
+        val count = if (mode == CardStackSectionMode.FOLDERS) "3 events - tap to expand" else "3 events"
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(22), dp(sectionPreviewVerticalPadding(style.height)), dp(22), dp(sectionPreviewVerticalPadding(style.height)))
+            if (style.transparentBackground) {
+                setBackgroundColor(Color.TRANSPARENT)
+            } else {
+                background = roundedDrawable(GoogleInteractionStyle.surface(this@CalmSettingsActivity), dp(settings.cardCornerRadiusDp())).apply {
+                    setStroke(dp(1), colors.outlineVariant)
+                }
+                elevation = dp(2).toFloat()
+            }
+            addView(label("Today", sectionPreviewTitleSp(style.height), CalmTheme.INK, sectionTitleTypeface(style)).apply {
+                paintFlags = if (style.underline == SectionTitleUnderline.TITLE) {
+                    paintFlags or Paint.UNDERLINE_TEXT_FLAG
+                } else {
+                    paintFlags and Paint.UNDERLINE_TEXT_FLAG.inv()
+                }
+            })
+            addView(label(count, 13, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
+                setPadding(0, dp(4), 0, 0)
+            })
+            if (style.underline == SectionTitleUnderline.FULL) {
+                addView(View(this@CalmSettingsActivity).apply {
+                    setBackgroundColor(GoogleInteractionStyle.primary(this@CalmSettingsActivity))
+                    alpha = 0.7f
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)).apply {
+                    topMargin = dp(10)
+                })
+            }
+        }
+    }
+
+    private fun sectionPreviewEventCard(
+        time: String,
+        title: String,
+        location: String,
+    ): View {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(22), 0, dp(22), 0)
+            background = roundedDrawable(GoogleInteractionStyle.surface(this@CalmSettingsActivity), dp(settings.cardCornerRadiusDp())).apply {
+                setStroke(dp(1), GoogleInteractionStyle.outlineVariant(this@CalmSettingsActivity))
+            }
+            addView(label(time, 13, CalmTheme.MUTED_INK, Typeface.NORMAL))
+            addView(label(title, 20, CalmTheme.INK, Typeface.BOLD).apply {
+                setPadding(0, dp(4), 0, 0)
+            })
+            addView(label(location, 13, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
+                setPadding(0, dp(4), 0, 0)
+            })
+        }
+    }
+
     private fun addAgendaPreviewRows(parent: LinearLayout, color: Int) {
         repeat(3) {
             parent.addView(LinearLayout(this).apply {
@@ -713,6 +973,21 @@ class CalmSettingsActivity : ComponentActivity() {
         }
     }
 
+    private fun addAlarmsPreviewRows(parent: LinearLayout, color: Int) {
+        addPreviewBlock(parent, dp(22), dp(22), color, bottomMargin = dp(10))
+        addPreviewBlock(parent, dp(88), dp(12), color, bottomMargin = dp(8))
+        addPreviewBlock(parent, dp(64), dp(8), color, bottomMargin = dp(8))
+    }
+
+    private fun addPreviewBlock(parent: LinearLayout, width: Int, height: Int, color: Int, bottomMargin: Int) {
+        parent.addView(View(this).apply {
+            background = roundedBlock(color, 999)
+        }, LinearLayout.LayoutParams(width, height).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            this.bottomMargin = bottomMargin
+        })
+    }
+
     private fun addOverviewPreviewRows(parent: LinearLayout, color: Int, dense: Boolean) {
         val rows = if (dense) listOf(84, 64, 74, 52) else listOf(68, 88, 58)
         rows.forEach { width ->
@@ -730,6 +1005,39 @@ class CalmSettingsActivity : ComponentActivity() {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = dp(radiusDp).toFloat()
             setColor(color)
+        }
+    }
+
+    private fun roundedDrawable(color: Int, radiusPx: Int): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = radiusPx.toFloat()
+            setColor(color)
+        }
+    }
+
+    private fun sectionPreviewTitleSp(height: SectionTitleHeight): Int {
+        return when (height) {
+            SectionTitleHeight.COMPACT -> 18
+            SectionTitleHeight.NORMAL -> 21
+            SectionTitleHeight.TALL -> 25
+        }
+    }
+
+    private fun sectionPreviewVerticalPadding(height: SectionTitleHeight): Int {
+        return when (height) {
+            SectionTitleHeight.COMPACT -> 12
+            SectionTitleHeight.NORMAL -> 18
+            SectionTitleHeight.TALL -> 24
+        }
+    }
+
+    private fun sectionTitleTypeface(style: SectionTitleCardStyle): Int {
+        return when {
+            style.bold && style.italic -> Typeface.BOLD_ITALIC
+            style.bold -> Typeface.BOLD
+            style.italic -> Typeface.ITALIC
+            else -> Typeface.NORMAL
         }
     }
 
@@ -1203,10 +1511,6 @@ class CalmSettingsActivity : ComponentActivity() {
             enabledListeners.lowercase(Locale.ROOT).contains(componentName.flattenToString().lowercase(Locale.ROOT))
     }
 
-    private companion object {
-        const val SETTINGS_RENDER_DELAY_MS = 80L
-    }
-
     private enum class SettingsPage(val title: String) {
         ROOT("Settings"),
         APPEARANCE("Appearance"),
@@ -1214,6 +1518,13 @@ class CalmSettingsActivity : ComponentActivity() {
         APPS("Apps and icons"),
         DOCK("Dock"),
         CARD_STACK("Card stack"),
+        SECTION_CARDS("Section cards"),
         ACCESS("Access"),
+    }
+
+    companion object {
+        const val EXTRA_PAGE = "dev.barna.calm.extra.SETTINGS_PAGE"
+        const val PAGE_SECTION_CARDS = "section_cards"
+        private const val SETTINGS_RENDER_DELAY_MS = 80L
     }
 }

@@ -54,7 +54,7 @@ class ChapterPagePlanner {
             chapterNumber++
         }
 
-        if (pinnedApps.isNotEmpty()) {
+        if (pinnedApps.isNotEmpty() || preferences.pinnedPageEnabled) {
             pages.add(ChapterPage.pinned(CalmTheme.PINNED_KEY, roman(chapterNumber)))
             chapterNumber++
         }
@@ -64,6 +64,10 @@ class ChapterPagePlanner {
         }
         if (preferences.agendaPageEnabled) {
             pages.add(ChapterPage.agenda(CalmTheme.AGENDA_KEY, roman(chapterNumber)))
+            chapterNumber++
+        }
+        if (preferences.alarmsPageEnabled) {
+            pages.add(ChapterPage.alarms(CalmTheme.ALARMS_KEY, roman(chapterNumber)))
             chapterNumber++
         }
         pages.add(ChapterPage.overview(CalmTheme.OVERVIEW_KEY).withMarker(roman(chapterNumber)))

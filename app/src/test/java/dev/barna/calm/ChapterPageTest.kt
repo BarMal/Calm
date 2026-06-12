@@ -56,6 +56,18 @@ class ChapterPageTest {
     }
 
     @Test
+    fun alarmsUsesProvidedKeyAndMarker() {
+        val page = ChapterPage.alarms("alarms-key", "IV")
+
+        assertEquals("alarms-key", page.key)
+        assertEquals("IV", page.marker)
+        assertEquals("Alarms", page.title)
+        assertNull(page.chapter)
+        assertNull(page.appScope)
+        assertNull(page.classicPage)
+    }
+
+    @Test
     fun classicPageUsesDefinitionKeyAndTitle() {
         val definition = ClassicLauncherPageDefinition(id = "classic-1", title = "Classic")
 

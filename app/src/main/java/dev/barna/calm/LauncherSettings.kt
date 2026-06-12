@@ -552,8 +552,12 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             cardVibrancy = cardVibrancy(),
             pageSortOrder = pageSortOrder(),
             expandedCardsEnabled = expandedCardsEnabled(),
+            pinnedPageEnabled = pinnedPageEnabled(),
             contactsPageEnabled = contactsPageEnabled(),
             agendaPageEnabled = agendaPageEnabled(),
+            alarmsPageEnabled = alarmsPageEnabled(),
+            agendaSectionMode = agendaSectionMode(),
+            agendaSectionTitleStyle = agendaSectionTitleStyle(),
             cardAppearance = cardAppearance(),
             pageLayout = pageLayout(),
         )
@@ -632,6 +636,14 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         preferences.edit().putString(PREF_LAST_PAGE_KEY, pageKey).apply()
     }
 
+    fun pinnedPageEnabled(): Boolean {
+        return preferences.getBoolean(PREF_PINNED_PAGE, false)
+    }
+
+    fun setPinnedPageEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean(PREF_PINNED_PAGE, enabled).apply()
+    }
+
     fun contactsPageEnabled(): Boolean {
         return preferences.getBoolean(PREF_CONTACTS_PAGE, false)
     }
@@ -652,6 +664,44 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         return nextValue
     }
 
+    fun alarmsPageEnabled(): Boolean {
+        return preferences.getBoolean(PREF_ALARMS_PAGE, false)
+    }
+
+    fun toggleAlarmsPage(): Boolean {
+        val nextValue = !alarmsPageEnabled()
+        preferences.edit().putBoolean(PREF_ALARMS_PAGE, nextValue).apply()
+        return nextValue
+    }
+
+    fun agendaSectionMode(): CardStackSectionMode {
+        return enumPreference(PREF_AGENDA_SECTION_MODE, CardStackSectionMode.TITLE_CARDS)
+    }
+
+    fun setAgendaSectionMode(mode: CardStackSectionMode) {
+        preferences.edit().putString(PREF_AGENDA_SECTION_MODE, mode.name).apply()
+    }
+
+    fun agendaSectionTitleStyle(): SectionTitleCardStyle {
+        return SectionTitleCardStyle(
+            transparentBackground = preferences.getBoolean(PREF_AGENDA_SECTION_TRANSPARENT, true),
+            bold = preferences.getBoolean(PREF_AGENDA_SECTION_BOLD, true),
+            italic = preferences.getBoolean(PREF_AGENDA_SECTION_ITALIC, false),
+            height = enumPreference(PREF_AGENDA_SECTION_HEIGHT, SectionTitleHeight.NORMAL),
+            underline = enumPreference(PREF_AGENDA_SECTION_UNDERLINE, SectionTitleUnderline.FULL),
+        )
+    }
+
+    fun setAgendaSectionTitleStyle(style: SectionTitleCardStyle) {
+        preferences.edit()
+            .putBoolean(PREF_AGENDA_SECTION_TRANSPARENT, style.transparentBackground)
+            .putBoolean(PREF_AGENDA_SECTION_BOLD, style.bold)
+            .putBoolean(PREF_AGENDA_SECTION_ITALIC, style.italic)
+            .putString(PREF_AGENDA_SECTION_HEIGHT, style.height.name)
+            .putString(PREF_AGENDA_SECTION_UNDERLINE, style.underline.name)
+            .apply()
+    }
+
     fun launcherChangeToken(): Int {
         return listOf(
             uiPreferences(),
@@ -664,7 +714,11 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             classicGridConfig(),
             dockConfig(),
             dockKeys(),
+            pinnedPageEnabled(),
             agendaPageEnabled(),
+            alarmsPageEnabled(),
+            agendaSectionMode(),
+            agendaSectionTitleStyle(),
         ).hashCode()
     }
 
@@ -876,6 +930,12 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         return index
     }
 
+    private inline fun <reified T : Enum<T>> enumPreference(key: String, defaultValue: T): T {
+        return runCatching {
+            enumValueOf<T>(preferences.getString(key, defaultValue.name) ?: defaultValue.name)
+        }.getOrDefault(defaultValue)
+    }
+
     companion object {
         private const val PREFS_NAME = "calm_preferences"
         private const val PREF_EXCLUDED_PACKAGES = "excluded_notification_packages"
@@ -919,8 +979,16 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_CARD_VIBRANCY = "card_vibrancy"
         private const val PREF_PAGE_SORT_ORDER = "page_sort_order"
         private const val PREF_EXPANDED_CARDS = "expanded_cards"
+        private const val PREF_PINNED_PAGE = "pinned_page"
         private const val PREF_CONTACTS_PAGE = "contacts_page"
         private const val PREF_AGENDA_PAGE = "agenda_page"
+        private const val PREF_ALARMS_PAGE = "alarms_page"
+        private const val PREF_AGENDA_SECTION_MODE = "agenda_section_mode"
+        private const val PREF_AGENDA_SECTION_TRANSPARENT = "agenda_section_transparent"
+        private const val PREF_AGENDA_SECTION_BOLD = "agenda_section_bold"
+        private const val PREF_AGENDA_SECTION_ITALIC = "agenda_section_italic"
+        private const val PREF_AGENDA_SECTION_HEIGHT = "agenda_section_height"
+        private const val PREF_AGENDA_SECTION_UNDERLINE = "agenda_section_underline"
         private const val PREF_CLASSIC_PAGES = "classic_pages"
         private const val PREF_CLASSIC_HOME_PAGE_ID = "classic_home_page_id"
         private const val PREF_CLASSIC_GRID_COLUMNS = "classic_grid_columns"

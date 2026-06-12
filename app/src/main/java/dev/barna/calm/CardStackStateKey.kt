@@ -1,6 +1,7 @@
 package dev.barna.calm
 
 object CardStackStateKey {
+    const val AGENDA = "agenda"
     const val OVERVIEW_CALENDAR = "overview:calendar"
     const val OVERVIEW_NOTIFICATIONS = "overview:notifications"
 

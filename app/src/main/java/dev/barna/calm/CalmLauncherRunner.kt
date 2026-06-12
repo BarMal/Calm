@@ -186,9 +186,18 @@ class CalmLauncherRunner(
     private val agendaPageBuilder = AgendaPageBuilder(
         activity = activity,
         cardRenderer = cardRenderer,
+        cardStackController = cardStackController,
         calendarRepository = calendarRepository,
         contextActionFactory = contextActionFactory,
         focusOverlay = focusOverlay,
+        activePreferences = { activePreferences },
+        barePagePanel = ::createBarePagePanel,
+        render = ::render,
+        openSectionCardSettings = ::openSectionCardSettingsActivity,
+    )
+    private val alarmsPageBuilder = AlarmsPageBuilder(
+        activity = activity,
+        cardRenderer = cardRenderer,
         activePreferences = { activePreferences },
         barePagePanel = ::createBarePagePanel,
     )
@@ -242,8 +251,10 @@ class CalmLauncherRunner(
         activity = activity,
         drawables = drawables,
         focusOverlay = focusOverlay,
+        cardRenderer = cardRenderer,
         overviewPageBuilder = overviewPageBuilder,
         agendaPageBuilder = agendaPageBuilder,
+        alarmsPageBuilder = alarmsPageBuilder,
         chapterPageBuilder = chapterPageBuilder,
         appLibraryController = appLibraryController,
         appSearchController = appSearchController,
@@ -773,6 +784,7 @@ class CalmLauncherRunner(
         PageSlot.PINNED -> CalmTheme.PINNED_KEY
         PageSlot.CONTACTS -> CalmTheme.CONTACTS_KEY
         PageSlot.AGENDA -> CalmTheme.AGENDA_KEY
+        PageSlot.ALARMS -> CalmTheme.ALARMS_KEY
         PageSlot.APPS -> CalmTheme.APP_LIBRARY_KEY
         PageSlot.CLASSIC_PAGES -> settings.homeClassicPage()?.key ?: CalmTheme.OVERVIEW_KEY
         PageSlot.NOTIFICATIONS -> CalmTheme.OVERVIEW_KEY
@@ -1247,6 +1259,7 @@ class CalmLauncherRunner(
             ContextAction("Classic page", Runnable { addClassicPageFromOverview() }),
             ContextAction("People page", Runnable { addPeoplePageFromOverview(pages) }),
             ContextAction("Agenda page", Runnable { addAgendaPageFromOverview(pages) }),
+            ContextAction("Alarms page", Runnable { addAlarmsPageFromOverview(pages) }),
             ContextAction("Apps page", Runnable { addExistingOrLivePageFromOverview(PageSlot.APPS, pages, "Apps page") }),
             ContextAction("Pinned page", Runnable { addPinnedPageFromOverview(state, pages) }),
             ContextAction("Overview page", Runnable { addExistingOrLivePageFromOverview(PageSlot.OVERVIEW, pages, "Overview page") }),
@@ -1284,12 +1297,24 @@ class CalmLauncherRunner(
         renderAndReopenPageOverview(CalmTheme.AGENDA_KEY)
     }
 
-    private fun addPinnedPageFromOverview(state: LauncherRenderModel, pages: List<ChapterPage>) {
-        if (state.pinnedApps.isEmpty()) {
-            Toast.makeText(activity, "Pin an app to add a Pinned page", Toast.LENGTH_SHORT).show()
+    private fun addAlarmsPageFromOverview(pages: List<ChapterPage>) {
+        if (settings.alarmsPageEnabled()) {
+            addExistingOrLivePageFromOverview(PageSlot.ALARMS, pages, "Alarms page")
             return
         }
-        addExistingOrLivePageFromOverview(PageSlot.PINNED, pages, "Pinned page")
+        settings.toggleAlarmsPage()
+        Toast.makeText(activity, "Added Alarms page", Toast.LENGTH_SHORT).show()
+        renderAndReopenPageOverview(CalmTheme.ALARMS_KEY)
+    }
+
+    private fun addPinnedPageFromOverview(state: LauncherRenderModel, pages: List<ChapterPage>) {
+        if (pages.any { page -> PageArranger.slotOf(page) == PageSlot.PINNED }) {
+            addExistingOrLivePageFromOverview(PageSlot.PINNED, pages, "Pinned page")
+            return
+        }
+        settings.setPinnedPageEnabled(true)
+        Toast.makeText(activity, "Added Pinned page", Toast.LENGTH_SHORT).show()
+        renderAndReopenPageOverview(CalmTheme.PINNED_KEY)
     }
 
     private fun addWorkOverviewFromOverview(state: LauncherRenderModel, pages: List<ChapterPage>) {
@@ -1674,6 +1699,24 @@ class CalmLauncherRunner(
                 }
             }, ContextActionCloseBehavior.REMOVE_CARD)
         }
+        if (slot == PageSlot.ALARMS) {
+            return ContextAction("Remove", Runnable {
+                animatePageOverviewRemoval(source, entryIndex, index, pages) {
+                    if (settings.alarmsPageEnabled()) settings.toggleAlarmsPage()
+                    Toast.makeText(activity, "Removed Alarms page", Toast.LENGTH_SHORT).show()
+                    renderAndReopenPageOverview(nextFocusKey)
+                }
+            }, ContextActionCloseBehavior.REMOVE_CARD)
+        }
+        if (slot == PageSlot.PINNED && settings.pinnedPageEnabled()) {
+            return ContextAction("Remove", Runnable {
+                animatePageOverviewRemoval(source, entryIndex, index, pages) {
+                    settings.setPinnedPageEnabled(false)
+                    Toast.makeText(activity, "Removed Pinned page", Toast.LENGTH_SHORT).show()
+                    renderAndReopenPageOverview(nextFocusKey)
+                }
+            }, ContextActionCloseBehavior.REMOVE_CARD)
+        }
         if (slot != PageSlot.CONTACTS) return null
         return ContextAction("Remove", Runnable {
             animatePageOverviewRemoval(source, entryIndex, index, pages) {
@@ -1899,6 +1942,7 @@ class CalmLauncherRunner(
             slot == PageSlot.PINNED -> "Pinned"
             slot == PageSlot.CONTACTS -> "People"
             slot == PageSlot.AGENDA -> "Agenda"
+            slot == PageSlot.ALARMS -> "Alarms"
             else -> if (selected) "Current" else "${pages.indexOf(page) + 1} of ${pages.size}"
         }
         return LinearLayout(activity).apply {
@@ -1944,9 +1988,10 @@ class CalmLauncherRunner(
             when {
                 page.classicPage != null -> addClassicOverviewPreview(this, page.classicPage, state.classicGridConfig)
                 page.appScope != null -> addAppsOverviewPreview(this, page, state)
-                page.key == CalmTheme.PINNED_KEY -> addAppRows(this, state.pinnedApps.take(5).map { it.label }, CalmTheme.ACCENT)
+                page.key == CalmTheme.PINNED_KEY -> addAppRows(this, state.pinnedApps.take(5).map { it.label }.ifEmpty { listOf("No pinned apps", "Long-press apps", "Choose Pin") }, CalmTheme.ACCENT)
                 page.key == CalmTheme.CONTACTS_KEY -> addGenericRows(this, listOf("Favourite people", "Recent contact", "Quick action"), CalmTheme.ACCENT)
                 page.key == CalmTheme.AGENDA_KEY -> addAgendaOverviewPreview(this, state)
+                page.key == CalmTheme.ALARMS_KEY -> addGenericRows(this, listOf("Next alarm", "Clock app", "Wake up"), CalmTheme.ACCENT)
                 page.key == CalmTheme.WORK_OVERVIEW_KEY -> addOverviewRows(this, state, work = true)
                 page.chapter != null -> addNotificationOverviewPreview(this, page.chapter)
                 else -> addOverviewRows(this, state, work = false)
@@ -2118,6 +2163,14 @@ class CalmLauncherRunner(
 
     private fun openSettingsActivity() {
         activity.startActivity(Intent(activity, CalmSettingsActivity::class.java))
+    }
+
+    private fun openSectionCardSettingsActivity() {
+        activity.startActivity(
+            Intent(activity, CalmSettingsActivity::class.java).apply {
+                putExtra(CalmSettingsActivity.EXTRA_PAGE, CalmSettingsActivity.PAGE_SECTION_CARDS)
+            },
+        )
     }
 
     private fun openAppEntry(app: AppEntry) {

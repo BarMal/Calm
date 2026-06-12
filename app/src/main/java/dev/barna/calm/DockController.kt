@@ -1,5 +1,7 @@
 package dev.barna.calm
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
@@ -27,10 +29,12 @@ class DockController(
     private val drawables: CalmDrawables,
     private val resolveIcon: (AppEntry) -> Bitmap?,
     private val openAppEntry: (AppEntry) -> Unit,
+    private val openNotification: (CalmNotificationListenerService.CalmNotification) -> Unit,
     private val openNotificationPage: (AppChapter) -> Unit,
 ) {
     private val notificationResolver = DockNotificationResolver()
     private var featuredDockIdentityKey: String? = null
+    private val featuredNotificationIndexes = HashMap<String, Int>()
 
     fun buildDock(apps: List<AppEntry>, config: DockConfig, chapters: List<AppChapter>): View {
         return when (config.style) {
@@ -67,17 +71,30 @@ class DockController(
         } else {
             val surface = FrameLayout(activity)
             var selectedIndex = selectedFeaturedIndex(apps)
-            fun bind(index: Int) {
+            fun bind(index: Int, transition: DockTransition? = null) {
                 selectedIndex = normalizedIndex(index, apps.size)
                 rememberFeaturedDockApp(apps[selectedIndex])
-                bindFeaturedDockSurface(surface, apps[selectedIndex], targetFor(apps[selectedIndex], chapters), activity.dp(72))
+                val rebind = { bindFeaturedDockStack(surface, apps, chapters, selectedIndex, includeClassicRow = false) }
+                if (transition == null) {
+                    rebind()
+                } else {
+                    animateDockStack(surface, transition, rebind)
+                }
             }
             bind(selectedIndex)
             surface.installFeaturedDockGestures(
                 apps = apps,
                 chapters = chapters,
                 currentIndex = { selectedIndex },
-                selectIndex = { bind(it) },
+                selectAppIndex = { index, transition -> bind(index, transition) },
+                cycleNotification = { transition ->
+                    if (cycleFeaturedNotification(apps, chapters, selectedIndex, transition.direction)) {
+                        bind(selectedIndex, transition)
+                        true
+                    } else {
+                        false
+                    }
+                },
             )
             surface
         }
@@ -85,92 +102,126 @@ class DockController(
 
     private fun hybridDock(apps: List<AppEntry>, config: DockConfig, chapters: List<AppChapter>): View {
         var selectedIndex = selectedFeaturedIndex(apps)
-        val surface = FrameLayout(activity).apply {
-            tag = CalmAnimationTags.CHROME
-            clipChildren = false
-            clipToPadding = false
-            background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(22))
-            setPadding(activity.dp(12), activity.dp(8), activity.dp(12), activity.dp(10))
-        }
-        fun bind(index: Int) {
+        val surface = FrameLayout(activity)
+        fun bind(index: Int, transition: DockTransition? = null) {
             selectedIndex = normalizedIndex(index, apps.size)
-            val featuredApp = apps.getOrNull(selectedIndex)
-            val featuredTarget = featuredApp?.let { targetFor(it, chapters) }
-            surface.removeAllViews()
-            surface.addView(
-                LinearLayout(activity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    gravity = Gravity.CENTER
-                    clipChildren = false
-                    clipToPadding = false
-                    featuredApp?.let { app ->
-                        addView(
-                            featuredDockContent(app, featuredTarget),
-                            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(56)).apply {
-                                bottomMargin = activity.dp(8)
-                            },
-                        )
-                    }
-                    addView(
-                        classicDockRow(apps, config, chapters),
-                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT),
-                    )
-                },
-                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
-            )
-            featuredApp?.let { app ->
-                rememberFeaturedDockApp(app)
-                surface.contentDescription = dockDescription(app, featuredTarget)
-                surface.tooltipText = app.label
-                surface.setOnClickListener { openAppEntry(app) }
-            } ?: run {
-                surface.contentDescription = null
-                surface.tooltipText = null
-                surface.setOnClickListener(null)
+            rememberFeaturedDockApp(apps[selectedIndex])
+            val rebind = {
+                bindFeaturedDockStack(surface, apps, chapters, selectedIndex, includeClassicRow = true, config = config)
             }
-            surface.addNotificationBadge(featuredTarget)
-            surface.installNotificationLongPress(featuredTarget)
+            if (transition == null) {
+                rebind()
+            } else {
+                animateDockStack(surface, transition, rebind)
+            }
         }
         bind(selectedIndex)
         surface.installFeaturedDockGestures(
             apps = apps,
             chapters = chapters,
             currentIndex = { selectedIndex },
-            selectIndex = { bind(it) },
+            selectAppIndex = { index, transition -> bind(index, transition) },
+            cycleNotification = { transition ->
+                if (cycleFeaturedNotification(apps, chapters, selectedIndex, transition.direction)) {
+                    bind(selectedIndex, transition)
+                    true
+                } else {
+                    false
+                }
+            },
         )
         return surface
     }
 
-    private fun bindFeaturedDockSurface(surface: FrameLayout, app: AppEntry, target: DockNotificationTarget?, minimumHeight: Int) {
+    private fun bindFeaturedDockStack(
+        surface: FrameLayout,
+        apps: List<AppEntry>,
+        chapters: List<AppChapter>,
+        selectedIndex: Int,
+        includeClassicRow: Boolean,
+        config: DockConfig? = null,
+    ) {
+        if (apps.isEmpty()) return
         surface.removeAllViews()
         surface.tag = CalmAnimationTags.CHROME
         surface.clipChildren = false
         surface.clipToPadding = false
-        surface.background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(22))
-        surface.setPadding(activity.dp(12), activity.dp(8), activity.dp(14), activity.dp(8))
-        surface.minimumHeight = minimumHeight
-        surface.contentDescription = dockDescription(app, target)
-        surface.tooltipText = app.label
-        surface.addView(
-            featuredDockContent(app, target),
-            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
+        surface.background = null
+        surface.setPadding(0, 0, 0, 0)
+        surface.minimumHeight = activity.dp(if (includeClassicRow) 142 else 90)
+        val selectedApp = apps[normalizedIndex(selectedIndex, apps.size)]
+        val selectedTarget = targetFor(selectedApp, chapters)
+        val stack = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+        }
+        stack.addView(
+            tightDockStack(apps, chapters, selectedIndex),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(90)),
         )
-        surface.addNotificationBadge(target)
-        surface.setOnClickListener { openAppEntry(app) }
-        surface.installNotificationLongPress(target)
+        if (includeClassicRow && config != null) {
+            stack.addView(
+                classicDockRow(apps, config, chapters),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    topMargin = activity.dp(8)
+                },
+            )
+        }
+        surface.addView(
+            stack,
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+        )
+        surface.contentDescription = dockDescription(selectedApp, selectedTarget)
+        surface.tooltipText = selectedApp.label
+        surface.setOnClickListener { openFeaturedDockItem(selectedApp, selectedTarget) }
+        surface.installNotificationLongPress(selectedTarget)
     }
 
-    private fun featuredDockContent(app: AppEntry, target: DockNotificationTarget?): View {
+    private fun tightDockStack(apps: List<AppEntry>, chapters: List<AppChapter>, selectedIndex: Int): FrameLayout {
+        val stack = FrameLayout(activity).apply {
+            clipChildren = false
+            clipToPadding = false
+        }
+        val visibleCount = minOf(DOCK_STACK_VISIBLE_CARDS, apps.size)
+        for (layer in (visibleCount - 1) downTo 0) {
+            val app = apps[normalizedIndex(selectedIndex + layer, apps.size)]
+            val target = targetFor(app, chapters)
+            val card = featuredDockCard(app, target, front = layer == 0).apply {
+                translationY = activity.dp(DOCK_STACK_OFFSET_DP * layer).toFloat()
+                scaleX = 1f - (0.035f * layer)
+                scaleY = 1f - (0.035f * layer)
+                alpha = 1f - (0.17f * layer)
+            }
+            stack.addView(
+                card,
+                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(72), Gravity.TOP),
+            )
+        }
+        return stack
+    }
+
+    private fun featuredDockCard(app: AppEntry, target: DockNotificationTarget?, front: Boolean): View {
+        val selectedNotification = selectedNotification(app, target)
+        val icon = resolveIcon(app)
         return LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            background = drawables.cardWithSideImage(
+                activity.dp(22),
+                target?.chapter?.hueColor ?: app.hueColor,
+                true,
+                icon,
+            )
+            setPadding(activity.dp(12), activity.dp(8), activity.dp(14), activity.dp(8))
             contentDescription = dockDescription(app, target)
             tooltipText = app.label
-            resolveIcon(app)?.let { icon ->
+            icon?.let { bitmap ->
                 addView(
                     ImageView(activity).apply {
                         scaleType = ImageView.ScaleType.CENTER_CROP
-                        setImageDrawable(RoundedBitmapDrawable(icon, activity.dp(14).toFloat()))
+                        setImageDrawable(RoundedBitmapDrawable(bitmap, activity.dp(14).toFloat()))
                     },
                     LinearLayout.LayoutParams(activity.dp(50), activity.dp(50)).apply {
                         marginEnd = activity.dp(12)
@@ -180,14 +231,16 @@ class DockController(
             addView(
                 LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
-                    addView(dockText(app.label, 15, Typeface.BOLD, CalmTheme.INK, 1))
+                    addView(dockText(app.label, if (front) 15 else 13, Typeface.BOLD, CalmTheme.INK, 1))
                     addView(
                         dockText(
-                            notificationDetail(target) ?: activity.getString(R.string.dock_card_tap_to_open),
+                            selectedNotification?.let { notificationPreview(it) }
+                                ?: notificationDetail(target)
+                                ?: activity.getString(R.string.dock_card_tap_to_open),
                             12,
                             Typeface.NORMAL,
                             CalmTheme.MUTED_INK,
-                            1,
+                            if (front) 2 else 1,
                         ).apply {
                             setPadding(0, activity.dp(4), 0, 0)
                         },
@@ -195,6 +248,9 @@ class DockController(
                 },
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
             )
+            target?.summary?.count?.takeIf { it > 1 }?.let { count ->
+                addView(notificationCountChip(count), LinearLayout.LayoutParams(activity.dp(28), activity.dp(24)))
+            }
         }
     }
 
@@ -292,6 +348,51 @@ class DockController(
         return summary.latestText.ifBlank { summary.latestTitle }.takeIf { it.isNotBlank() }
     }
 
+    private fun selectedNotification(
+        app: AppEntry,
+        target: DockNotificationTarget?,
+    ): CalmNotificationListenerService.CalmNotification? {
+        val notifications = target?.chapter?.notifications.orEmpty()
+            .sortedByDescending { notification -> notification.postTime }
+        if (notifications.isEmpty()) return null
+        val index = normalizedIndex(featuredNotificationIndexes[app.identityKey] ?: 0, notifications.size)
+        featuredNotificationIndexes[app.identityKey] = index
+        return notifications[index]
+    }
+
+    private fun notificationPreview(notification: CalmNotificationListenerService.CalmNotification): String {
+        return notification.bodyText()
+            .ifBlank { notification.subText }
+            .ifBlank { notification.title }
+            .ifBlank { activity.getString(R.string.dock_card_tap_to_open) }
+    }
+
+    private fun openFeaturedDockItem(app: AppEntry, target: DockNotificationTarget?) {
+        val notification = selectedNotification(app, target)
+        if (notification != null) {
+            openNotification(notification)
+        } else {
+            openAppEntry(app)
+        }
+    }
+
+    private fun notificationCountChip(count: Int): TextView {
+        return TextView(activity).apply {
+            text = count.coerceAtMost(99).toString()
+            setTextColor(Color.WHITE)
+            textSize = 11f
+            typeface = Typeface.DEFAULT
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = activity.dp(999).toFloat()
+                setColor(Color.rgb(196, 57, 72))
+            }
+        }
+    }
+
     private fun targetFor(app: AppEntry, chapters: List<AppChapter>): DockNotificationTarget? {
         return notificationResolver.targetFor(app, chapters)
     }
@@ -317,7 +418,8 @@ class DockController(
         apps: List<AppEntry>,
         chapters: List<AppChapter>,
         currentIndex: () -> Int,
-        selectIndex: (Int) -> Unit,
+        selectAppIndex: (Int, DockTransition) -> Unit,
+        cycleNotification: (DockTransition) -> Boolean,
     ) {
         if (apps.isEmpty()) return
         val swipeThreshold = max(activity.dp(28), ViewConfiguration.get(activity).scaledTouchSlop * 2)
@@ -347,14 +449,14 @@ class DockController(
                 if (max(abs(dx), abs(dy)) < swipeThreshold) return false
                 return if (abs(dy) > abs(dx)) {
                     val direction = if (dy < 0) 1 else -1
-                    selectIndex(currentIndex() + direction)
+                    selectAppIndex(currentIndex() + direction, DockTransition.Vertical(direction))
                     performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                     true
                 } else {
                     val direction = if (dx < 0) 1 else -1
-                    val navigated = navigateDockNotification(apps, chapters, currentIndex(), direction, selectIndex)
-                    if (navigated) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                    navigated
+                    val cycled = cycleNotification(DockTransition.Horizontal(direction))
+                    if (cycled) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    cycled
                 }
             }
         })
@@ -368,22 +470,51 @@ class DockController(
         }
     }
 
-    private fun navigateDockNotification(
+    private fun cycleFeaturedNotification(
         apps: List<AppEntry>,
         chapters: List<AppChapter>,
-        startIndex: Int,
+        selectedIndex: Int,
         direction: Int,
-        selectIndex: (Int) -> Unit,
     ): Boolean {
-        if (apps.isEmpty()) return false
-        for (offset in 1..apps.size) {
-            val index = normalizedIndex(startIndex + (direction * offset), apps.size)
-            val target = targetFor(apps[index], chapters) ?: continue
-            selectIndex(index)
-            openNotificationPage(target.chapter)
-            return true
+        val app = apps.getOrNull(selectedIndex) ?: return false
+        val target = targetFor(app, chapters) ?: return false
+        val count = target.chapter.notifications.size
+        if (count <= 1) return false
+        val current = featuredNotificationIndexes[app.identityKey] ?: 0
+        featuredNotificationIndexes[app.identityKey] = normalizedIndex(current + direction, count)
+        return true
+    }
+
+    private fun animateDockStack(surface: FrameLayout, transition: DockTransition, rebind: () -> Unit) {
+        if (surface.childCount == 0 || surface.width == 0) {
+            rebind()
+            return
         }
-        return false
+        val stack = surface.getChildAt(0)
+        val distance = if (transition is DockTransition.Horizontal) surface.width * 0.42f else activity.dp(48).toFloat()
+        stack.animate()
+            .alpha(0f)
+            .translationX(if (transition is DockTransition.Horizontal) -transition.direction * distance else 0f)
+            .translationY(if (transition is DockTransition.Vertical) -transition.direction * distance else 0f)
+            .setDuration(DOCK_STACK_ANIMATION_MS)
+            .setListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    stack.animate().setListener(null)
+                    rebind()
+                    val next = surface.getChildAt(0) ?: return
+                    next.alpha = 0f
+                    next.translationX = if (transition is DockTransition.Horizontal) transition.direction * activity.dp(34).toFloat() else 0f
+                    next.translationY = if (transition is DockTransition.Vertical) transition.direction * activity.dp(28).toFloat() else 0f
+                    next.animate()
+                        .alpha(1f)
+                        .translationX(0f)
+                        .translationY(0f)
+                        .setDuration(DOCK_STACK_ANIMATION_MS)
+                        .setListener(null)
+                        .start()
+                }
+            })
+            .start()
     }
 
     private fun dockText(textValue: String, sp: Int, style: Int, color: Int, maxLineCount: Int): TextView {
@@ -444,4 +575,15 @@ class DockController(
             count,
         )
     }
+
+    private companion object {
+        const val DOCK_STACK_VISIBLE_CARDS = 3
+        const val DOCK_STACK_OFFSET_DP = 6
+        const val DOCK_STACK_ANIMATION_MS = 160L
+    }
+}
+
+private sealed class DockTransition(val direction: Int) {
+    class Vertical(direction: Int) : DockTransition(direction)
+    class Horizontal(direction: Int) : DockTransition(direction)
 }

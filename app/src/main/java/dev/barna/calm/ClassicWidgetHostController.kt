@@ -21,6 +21,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import java.text.Collator
+import java.util.concurrent.Executor
 
 class ClassicWidgetHostController(
     private val activity: MainActivity,
@@ -30,19 +31,29 @@ class ClassicWidgetHostController(
     private val render: () -> Unit,
     private val selectPage: (String) -> Unit,
     private val beginClassicItemPlacement: (ClassicLauncherPageDefinition, String) -> Unit,
+    private val widgetIpcRunner: WidgetHostIpcRunner = WidgetHostIpcRunner(
+        callbackExecutor = Executor { command -> activity.runOnUiThread(command) },
+        logFailure = { message, throwable -> Log.w(TAG, message, throwable) },
+    ),
 ) {
     private val appWidgetManager = AppWidgetManager.getInstance(activity)
     private val appWidgetHost = AppWidgetHost(activity, HOST_ID)
     private var pendingRequest: PendingWidgetRequest? = null
 
     fun startListening() {
-        runCatching { appWidgetHost.startListening() }
-            .onFailure { Log.w(TAG, "Widget host startListening failed", it) }
+        widgetIpcRunner.run("Widget host startListening failed") {
+            appWidgetHost.startListening()
+        }
     }
 
     fun stopListening() {
-        runCatching { appWidgetHost.stopListening() }
-            .onFailure { Log.w(TAG, "Widget host stopListening failed", it) }
+        widgetIpcRunner.run("Widget host stopListening failed") {
+            appWidgetHost.stopListening()
+        }
+    }
+
+    fun shutdown() {
+        widgetIpcRunner.shutdown()
     }
 
     fun requestAddWidget(page: ClassicLauncherPageDefinition) {
@@ -158,21 +169,24 @@ class ClassicWidgetHostController(
     private fun beginAddWidget(page: ClassicLauncherPageDefinition, provider: AppWidgetProviderInfo) {
         val appWidgetId = appWidgetHost.allocateAppWidgetId()
         pendingRequest = PendingWidgetRequest(page.id, appWidgetId)
-        val bound = runCatching {
-            appWidgetManager.bindAppWidgetIdIfAllowed(appWidgetId, provider.provider)
-        }.onFailure { Log.w(TAG, "bindAppWidgetIdIfAllowed failed for ${provider.provider}", it) }
-            .getOrDefault(false)
-        if (bound) {
-            continueWidgetSetup(appWidgetId)
-            return
-        }
-        launchOrDelete(appWidgetId, "Widget permission unavailable") {
-            requestWidgetBind(
-                Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
-                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider.provider)
-                },
-            )
+        widgetIpcRunner.call(
+            message = "bindAppWidgetIdIfAllowed failed for ${provider.provider}",
+            defaultValue = false,
+            action = { appWidgetManager.bindAppWidgetIdIfAllowed(appWidgetId, provider.provider) },
+        ) { bound ->
+            if (pendingRequest?.appWidgetId != appWidgetId) return@call
+            if (bound) {
+                continueWidgetSetup(appWidgetId)
+                return@call
+            }
+            launchOrDelete(appWidgetId, "Widget permission unavailable") {
+                requestWidgetBind(
+                    Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider.provider)
+                    },
+                )
+            }
         }
     }
 

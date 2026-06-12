@@ -1,6 +1,7 @@
 package dev.barna.calm
 
 import android.content.Context
+import android.os.Bundle
 import android.os.Handler
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -204,6 +205,17 @@ class CardStackController(
     fun hasPendingRestore(scroller: ScrollView): Boolean {
         val stackKey = activeStackKeys[scroller] ?: return false
         return scrollMemory.pendingRestoreTarget(stackKey) != null
+    }
+
+    fun restoreInstanceState(savedInstanceState: Bundle?) {
+        savedInstanceState?.toCardStackScrollSnapshot()?.let(scrollMemory::restore)
+    }
+
+    fun saveInstanceState(outState: Bundle) {
+        activeStackKeys.forEach { (scroller, stackKey) ->
+            scrollMemory.remember(stackKey, scroller.scrollY)
+        }
+        outState.putCardStackScrollSnapshot(scrollMemory.snapshot())
     }
 
     private fun tunedCardStep(baseStep: Int, tuning: CardStackTuning): Int {
@@ -412,6 +424,37 @@ class CardStackController(
 
     private companion object {
         const val MAX_REMEMBERED_STACKS = 48
+        const val STATE_SCROLL_KEYS = "calm.cardStack.scroll.keys"
+        const val STATE_SCROLL_VALUES = "calm.cardStack.scroll.values"
+        const val STATE_PENDING_KEYS = "calm.cardStack.pending.keys"
+        const val STATE_PENDING_VALUES = "calm.cardStack.pending.values"
+    }
+
+    private fun Bundle.toCardStackScrollSnapshot(): CardStackScrollSnapshot? {
+        val remembered = mapFromState(STATE_SCROLL_KEYS, STATE_SCROLL_VALUES)
+        val pending = mapFromState(STATE_PENDING_KEYS, STATE_PENDING_VALUES)
+        if (remembered.isEmpty() && pending.isEmpty()) return null
+        return CardStackScrollSnapshot(remembered, pending)
+    }
+
+    private fun Bundle.putCardStackScrollSnapshot(snapshot: CardStackScrollSnapshot) {
+        putMapState(STATE_SCROLL_KEYS, STATE_SCROLL_VALUES, snapshot.rememberedScrollPositions)
+        putMapState(STATE_PENDING_KEYS, STATE_PENDING_VALUES, snapshot.pendingRestoreTargets)
+    }
+
+    private fun Bundle.mapFromState(keysKey: String, valuesKey: String): LinkedHashMap<String, Int> {
+        val keys = getStringArrayList(keysKey).orEmpty()
+        val values = getIntArray(valuesKey) ?: IntArray(0)
+        return linkedMapOf<String, Int>().apply {
+            keys.take(values.size).forEachIndexed { index, key ->
+                put(key, values[index])
+            }
+        }
+    }
+
+    private fun Bundle.putMapState(keysKey: String, valuesKey: String, values: LinkedHashMap<String, Int>) {
+        putStringArrayList(keysKey, ArrayList(values.keys))
+        putIntArray(valuesKey, values.values.toIntArray())
     }
 }
 

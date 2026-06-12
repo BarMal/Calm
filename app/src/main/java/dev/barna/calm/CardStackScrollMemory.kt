@@ -37,6 +37,22 @@ class CardStackScrollMemory(
 
     fun pendingRestoreTarget(stackKey: String): Int? = pendingRestoreTargets[stackKey]
 
+    fun snapshot(): CardStackScrollSnapshot {
+        return CardStackScrollSnapshot(
+            rememberedScrollPositions = LinkedHashMap(rememberedScrollPositions),
+            pendingRestoreTargets = LinkedHashMap(pendingRestoreTargets),
+        )
+    }
+
+    fun restore(snapshot: CardStackScrollSnapshot) {
+        rememberedScrollPositions.clear()
+        pendingRestoreTargets.clear()
+        rememberedScrollPositions.putAll(snapshot.rememberedScrollPositions.mapValues { it.value.coerceAtLeast(0) })
+        pendingRestoreTargets.putAll(snapshot.pendingRestoreTargets.mapValues { it.value.coerceAtLeast(0) })
+        prune(rememberedScrollPositions)
+        prune(pendingRestoreTargets)
+    }
+
     private fun prune(map: LinkedHashMap<String, Int>) {
         while (map.size > maxRememberedStacks) {
             val first = map.keys.firstOrNull() ?: return
@@ -48,4 +64,9 @@ class CardStackScrollMemory(
 data class CardStackScrollRestore(
     val scrollY: Int,
     val pendingTarget: Int?,
+)
+
+data class CardStackScrollSnapshot(
+    val rememberedScrollPositions: LinkedHashMap<String, Int>,
+    val pendingRestoreTargets: LinkedHashMap<String, Int>,
 )

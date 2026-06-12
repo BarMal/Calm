@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
             requestWidgetBind = { intent: Intent -> widgetBindLauncher.launch(intent) },
             requestWidgetConfigure = { intent: Intent -> widgetConfigureLauncher.launch(intent) },
         )
+        runner.restoreInstanceState(savedInstanceState)
         // Back dismisses the expanded card (returning to the current page); otherwise it is a no-op,
         // as expected for a home launcher, instead of finishing and reopening on the overview page.
         onBackPressedDispatcher.addCallback(this) { runner.onBackPressed() }
@@ -53,5 +54,12 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         runner.onDestroy()
         super.onDestroy()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        if (::runner.isInitialized) {
+            runner.onSaveInstanceState(outState)
+        }
     }
 }

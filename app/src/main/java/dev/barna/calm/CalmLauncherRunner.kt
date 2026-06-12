@@ -12,6 +12,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
@@ -415,6 +416,14 @@ class CalmLauncherRunner(
             stateManager.refreshAsync()
         }
         appLibraryDataManager.refreshInBackground()
+    }
+
+    fun restoreInstanceState(savedInstanceState: Bundle?) {
+        cardStackController.restoreInstanceState(savedInstanceState)
+    }
+
+    fun onSaveInstanceState(outState: Bundle) {
+        cardStackController.saveInstanceState(outState)
     }
 
     fun onResume() {

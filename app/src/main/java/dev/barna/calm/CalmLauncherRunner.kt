@@ -775,6 +775,7 @@ class CalmLauncherRunner(
             override fun onPageScrollStateChanged(state: Int) {
                 when (state) {
                     ViewPager2.SCROLL_STATE_DRAGGING -> {
+                        pagePrewarmGeneration++
                         animTrigger.onDragging()
                     }
                     ViewPager2.SCROLL_STATE_SETTLING -> {
@@ -794,6 +795,13 @@ class CalmLauncherRunner(
                         if (suppressedPageEntryKey == currentPage.key) {
                             suppressedPageEntryKey = null
                         }
+                        schedulePagePrewarm(
+                            pager,
+                            pagerAdapter,
+                            pages.size,
+                            pager.currentItem,
+                            PAGE_PREWARM_AFTER_NAVIGATION_DELAY_MS,
+                        )
                     }
                 }
             }
@@ -819,7 +827,7 @@ class CalmLauncherRunner(
         if (animate) {
             pager.post { entryAnimator.animateCurrentPage(pager) }
         }
-        schedulePagePrewarm(pager, pagerAdapter, pages.size, initialPage)
+        schedulePagePrewarm(pager, pagerAdapter, pages.size, initialPage, PAGE_PREWARM_INITIAL_DELAY_MS)
         if (reopenOverview) {
             screen.post { showPageOverview(screen, state, pages, pager.currentItem, haptic = false, focusPageKey = reopenOverviewFocusKey) }
         }
@@ -859,11 +867,12 @@ class CalmLauncherRunner(
         adapter: ChapterPagerAdapter,
         pageCount: Int,
         initialPage: Int,
+        initialDelayMs: Long,
     ) {
         val generation = ++pagePrewarmGeneration
         if (pageCount <= 1) return
         val positions = pagePrewarmPlanner.positions(pageCount, initialPage, PAGE_PREWARM_MAX_PAGES)
-        scheduleNextPagePrewarm(pager, adapter, positions, generation, 0, PAGE_PREWARM_INITIAL_DELAY_MS)
+        scheduleNextPagePrewarm(pager, adapter, positions, generation, 0, initialDelayMs)
     }
 
     private fun scheduleNextPagePrewarm(
@@ -877,7 +886,12 @@ class CalmLauncherRunner(
         if (offset >= positions.size) return
         mainHandler.postDelayed({
             if (generation != pagePrewarmGeneration) return@postDelayed
-            if (pager.scrollState != ViewPager2.SCROLL_STATE_IDLE) {
+            val recycler = pager.getChildAt(0) as? RecyclerView
+            if (
+                !pager.isAttachedToWindow ||
+                pager.scrollState != ViewPager2.SCROLL_STATE_IDLE ||
+                recycler?.isComputingLayout == true
+            ) {
                 scheduleNextPagePrewarm(pager, adapter, positions, generation, offset, PAGE_PREWARM_STEP_DELAY_MS)
                 return@postDelayed
             }
@@ -2391,8 +2405,9 @@ class CalmLauncherRunner(
         const val PAGE_OVERVIEW_MAGNET_THRESHOLD = 0.16f
         const val PAGE_OVERVIEW_REMOVE_ANIMATION_MS = 190L
         const val PAGE_OVERVIEW_REORDER_PREVIEW_MS = 70L
-        const val PAGE_PREWARM_INITIAL_DELAY_MS = 260L
-        const val PAGE_PREWARM_STEP_DELAY_MS = 120L
-        const val PAGE_PREWARM_MAX_PAGES = 3
+        const val PAGE_PREWARM_INITIAL_DELAY_MS = 420L
+        const val PAGE_PREWARM_AFTER_NAVIGATION_DELAY_MS = 360L
+        const val PAGE_PREWARM_STEP_DELAY_MS = 180L
+        const val PAGE_PREWARM_MAX_PAGES = 2
     }
 }

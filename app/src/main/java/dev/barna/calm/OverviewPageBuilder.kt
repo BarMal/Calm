@@ -208,13 +208,14 @@ class OverviewPageBuilder(
         nested: Boolean,
     ): TextView {
         val data = notificationCardDisplayCache.getOrCreate(item, chapter, ::formatNotificationTime)
+        val hueColor = if (nested) OverviewChildCardStyle.hueColor(chapter.hueColor, item) else chapter.hueColor
         return cardRenderer.stackCard(
             data.text,
-            chapter.hueColor,
-            activePreferences().useTintedNotificationCards,
-            data.sideImage,
+            hueColor,
+            nested || activePreferences().useTintedNotificationCards,
+            data.sideImage.takeUnless { nested },
             data.sideImageAlpha,
-            data.sideImageRenderKey,
+            data.sideImageRenderKey.takeUnless { nested },
         ).apply {
             maxLines = 3
             if (nested) {

@@ -1,9 +1,6 @@
-name: Build and Publish Calm APKs
+name: Calm APK Check
 
 on:
-  push:
-    branches:
-      - master
   pull_request:
   workflow_dispatch:
 
@@ -38,32 +35,6 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Prepare release signing key
-        env:
-          CALM_RELEASE_KEYSTORE_BASE64: ${{ secrets.CALM_RELEASE_KEYSTORE_BASE64 }}
-          CALM_RELEASE_STORE_PASSWORD: ${{ secrets.CALM_RELEASE_STORE_PASSWORD }}
-          CALM_RELEASE_KEY_ALIAS: ${{ secrets.CALM_RELEASE_KEY_ALIAS }}
-          CALM_RELEASE_KEY_PASSWORD: ${{ secrets.CALM_RELEASE_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${CALM_RELEASE_KEYSTORE_BASE64}" || -z "${CALM_RELEASE_STORE_PASSWORD}" || -z "${CALM_RELEASE_KEY_ALIAS}" || -z "${CALM_RELEASE_KEY_PASSWORD}" ]]; then
-            if [[ "${GITHUB_REF}" == "refs/heads/master" && "${GITHUB_EVENT_NAME}" != "pull_request" ]]; then
-              echo "Release signing secrets are required before publishing master APKs." >&2
-              exit 1
-            fi
-            echo "HAS_RELEASE_SIGNING=false" >> "$GITHUB_ENV"
-            exit 0
-          fi
-
-          echo "${CALM_RELEASE_KEYSTORE_BASE64}" | base64 --decode > app/calm-release.keystore
-          {
-            echo "HAS_RELEASE_SIGNING=true"
-            echo "ORG_GRADLE_PROJECT_calmSigningKeystoreFile=app/calm-release.keystore"
-            echo "ORG_GRADLE_PROJECT_calmSigningStorePassword=${CALM_RELEASE_STORE_PASSWORD}"
-            echo "ORG_GRADLE_PROJECT_calmSigningKeyAlias=${CALM_RELEASE_KEY_ALIAS}"
-            echo "ORG_GRADLE_PROJECT_calmSigningKeyPassword=${CALM_RELEASE_KEY_PASSWORD}"
-          } >> "$GITHUB_ENV"
-
       - name: Compute APK version
         run: |
           set -euo pipefail
@@ -77,26 +48,18 @@ jobs:
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
 
-      - name: Build signed release APK
-        if: env.HAS_RELEASE_SIGNING == 'true'
+      - name: Build release APK
         run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Prepare APKs
         run: |
           set -euo pipefail
-          mkdir -p dist release-assets
+          mkdir -p dist
           DEBUG_APK_PATH="$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
+          RELEASE_APK_PATH="$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)"
 
           cp "$DEBUG_APK_PATH" "dist/Calm-alpha-debug-side-by-side-${VERSION_NAME}-${VERSION_CODE}.apk"
-          cp "$DEBUG_APK_PATH" "release-assets/Calm-alpha-debug-side-by-side-${VERSION_NAME}-${VERSION_CODE}.apk"
-          cp "$DEBUG_APK_PATH" release-assets/Calm-alpha-debug-side-by-side-latest.apk
-
-          if [[ "${HAS_RELEASE_SIGNING}" == "true" ]]; then
-            RELEASE_APK_PATH="$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)"
-            cp "$RELEASE_APK_PATH" "dist/Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk"
-            cp "$RELEASE_APK_PATH" "release-assets/Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk"
-            cp "$RELEASE_APK_PATH" release-assets/Calm-alpha-latest.apk
-          fi
+          cp "$RELEASE_APK_PATH" "dist/Calm-alpha-release-check-${VERSION_NAME}-${VERSION_CODE}.apk"
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
@@ -105,79 +68,3 @@ jobs:
           path: |
             dist/Calm-alpha-*.apk
           if-no-files-found: error
-
-      - name: Upload release assets
-        if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Calm-alpha-release-assets
-          path: |
-            release-assets/*.apk
-          if-no-files-found: error
-
-  publish:
-    name: Publish latest APK release
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
-    permissions:
-      actions: read
-      contents: write
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download release assets
-        uses: actions/download-artifact@v4
-        with:
-          name: Calm-alpha-release-assets
-          path: release-assets
-
-      - name: Compute APK version
-        run: |
-          set -euo pipefail
-          VERSION_NAME_BASE="$(grep '^calm.versionNameBase=' gradle.properties | cut -d= -f2-)"
-          echo "VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
-          echo "VERSION_NAME=${VERSION_NAME_BASE}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
-
-      - name: Generate release notes
-        run: |
-          set -euo pipefail
-          {
-            echo "Alpha build for commit \`${GITHUB_SHA}\`."
-            echo
-            echo "Built from branch \`${GITHUB_REF_NAME}\` via \`${GITHUB_EVENT_NAME}\`."
-            echo
-            echo "Version: \`${VERSION_NAME}\` / code \`${VERSION_CODE}\`."
-            echo
-            echo "### Which APK should I install?"
-            echo "- **Calm-alpha-latest.apk** updates the existing Calm install using package \`dev.barna.calm\`. Use this for normal alpha testing."
-            echo "- **Calm-alpha-debug-side-by-side-latest.apk** installs separately using package \`dev.barna.calm.debug\`. Use this only when you intentionally want a second test copy."
-            echo "- Versioned APK assets are also attached to this release so the current build is visible even when stable download aliases are cached by a browser or device."
-            echo
-            echo "### Recent changes"
-            git log -10 --pretty=format:'- %s (%h)'
-            echo
-          } > release-notes.md
-
-      - name: Publish latest APK release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if gh release view debug-latest >/dev/null 2>&1; then
-            gh release delete debug-latest --yes --cleanup-tag
-          fi
-
-          if gh release view apks-latest >/dev/null 2>&1; then
-            gh release delete apks-latest --yes --cleanup-tag
-          fi
-
-          gh release create apks-latest release-assets/*.apk \
-            --title "Latest Calm Alpha APKs" \
-            --notes-file release-notes.md \
-            --prerelease \
-            --target "$GITHUB_SHA"

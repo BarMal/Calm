@@ -1,30 +1,34 @@
 package dev.barna.calm
 
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.text.TextUtils
 import android.text.format.DateFormat
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import java.util.Calendar
 import java.util.Date
-import java.util.Locale
 
 class AgendaPageBuilder(
     private val activity: MainActivity,
     private val cardRenderer: CardRenderer,
+    private val cardStackController: CardStackController,
+    private val settings: LauncherSettings,
     private val calendarRepository: CalendarRepository,
     private val contextActionFactory: LauncherContextActionFactory,
     private val focusOverlay: FocusOverlayController,
     private val activePreferences: () -> LauncherUiPreferences,
     private val barePagePanel: (Int) -> LinearLayout,
+    private val render: () -> Unit,
 ) {
     private val dayFormat by lazy { DateFormat.getMediumDateFormat(activity) }
     private val timeFormat by lazy { DateFormat.getTimeFormat(activity) }
+    private val expandedDayGroups = mutableSetOf<Long>()
 
     fun buildPage(state: LauncherRenderModel): LinearLayout {
         return barePagePanel(activity.dp(20)).apply {
@@ -64,34 +68,18 @@ class AgendaPageBuilder(
         if (state.calendarEvents.isEmpty()) {
             return singleStateCard("All clear\nNo upcoming calendar events found.")
         }
-        return ScrollView(activity).apply {
-            clipToPadding = false
-            addView(
-                LinearLayout(activity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    clipChildren = false
-                    clipToPadding = false
-                    groupedEvents(state.calendarEvents).forEach { group ->
-                        addView(sectionTitle(group.title))
-                        group.events.forEach { event ->
-                            addView(
-                                eventCard(event),
-                                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, cardRenderer.cardHeight()).apply {
-                                    bottomMargin = activity.dp(12)
-                                },
-                            )
-                        }
-                    }
-                },
-                ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
-            )
-        }
+        return cardStackController.cardStack(
+            agendaCards(groupedEvents(state.calendarEvents)),
+            cardRenderer.cardHeight(),
+            cardRenderer.cardStep(),
+            activePreferences().cardStackTuning,
+            CardStackStateKey.AGENDA,
+        )
     }
 
     private fun singleStateCard(text: String, onClick: (() -> Unit)? = null): View {
-        return LinearLayout(activity).apply {
-            gravity = Gravity.CENTER
-            addView(
+        return cardStackController.cardStack(
+            listOf(
                 cardRenderer.stackCard(
                     text,
                     CalmTheme.ACCENT,
@@ -102,9 +90,25 @@ class AgendaPageBuilder(
                     maxLines = 4
                     if (onClick != null) setOnClickListener { onClick() }
                 },
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, cardRenderer.cardHeight()),
-            )
+            ),
+            cardRenderer.cardHeight(),
+            cardRenderer.cardStep(),
+            activePreferences().cardStackTuning,
+            CardStackStateKey.AGENDA,
+        )
+    }
+
+    private fun agendaCards(groups: List<AgendaEventGroup>): List<TextView> {
+        val cards = mutableListOf<TextView>()
+        val mode = activePreferences().agendaSectionMode
+        groups.forEach { group ->
+            val expanded = group.dayStart in expandedDayGroups
+            cards += sectionTitleCard(group, mode, expanded)
+            if (mode == CardStackSectionMode.TITLE_CARDS || expanded) {
+                cards += group.events.map(::eventCard)
+            }
         }
+        return cards
     }
 
     private fun eventCard(event: CalendarEvent): TextView {
@@ -136,10 +140,56 @@ class AgendaPageBuilder(
         }
     }
 
-    private fun sectionTitle(text: String): TextView {
-        return label(text.uppercase(Locale.getDefault()), 12, CalmTheme.ACCENT, Typeface.BOLD).apply {
-            tag = CalmAnimationTags.CHROME
-            setPadding(0, activity.dp(12), 0, activity.dp(8))
+    private fun sectionTitleCard(
+        group: AgendaEventGroup,
+        mode: CardStackSectionMode,
+        expanded: Boolean,
+    ): TextView {
+        val style = activePreferences().agendaSectionTitleStyle
+        val count = group.events.size
+        val summary = when {
+            mode == CardStackSectionMode.FOLDERS && expanded -> "$count event${if (count == 1) "" else "s"} - tap to collapse"
+            mode == CardStackSectionMode.FOLDERS -> "$count event${if (count == 1) "" else "s"} - tap to expand"
+            else -> "$count event${if (count == 1) "" else "s"}"
+        }
+        val text = sectionTitleText(group.title, summary, style.underline)
+        val card = if (style.transparentBackground) {
+            label(text, sectionTitleSp(style.height), CalmTheme.INK, sectionTitleTypeface(style)).apply {
+                background = ColorDrawable(Color.TRANSPARENT)
+                elevation = 0f
+            }
+        } else {
+            cardRenderer.stackCard(text, CalmTheme.ACCENT, activePreferences().useTintedNotificationCards).apply {
+                setTypeface(Typeface.DEFAULT, sectionTitleTypeface(style))
+                textSize = sectionTitleSp(style.height).toFloat()
+            }
+        }
+        return card.apply {
+            maxLines = if (style.underline == SectionTitleUnderline.FULL) 4 else 3
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            setPadding(
+                activity.dp(22),
+                activity.dp(sectionTitleVerticalPadding(style.height)),
+                activity.dp(22),
+                activity.dp(sectionTitleVerticalPadding(style.height)),
+            )
+            paintFlags = if (style.underline == SectionTitleUnderline.TITLE) {
+                paintFlags or Paint.UNDERLINE_TEXT_FLAG
+            } else {
+                paintFlags and Paint.UNDERLINE_TEXT_FLAG.inv()
+            }
+            if (mode == CardStackSectionMode.FOLDERS) {
+                setOnClickListener {
+                    if (!expandedDayGroups.remove(group.dayStart)) {
+                        expandedDayGroups.add(group.dayStart)
+                    }
+                    render()
+                }
+            }
+            setOnLongClickListener {
+                showSectionStyleMenu(this)
+                true
+            }
         }
     }
 
@@ -148,9 +198,127 @@ class AgendaPageBuilder(
             .groupBy { dayStart(it.begin) }
             .toSortedMap()
             .map { (day, dayEvents) ->
-                AgendaEventGroup(dayTitle(day), dayEvents.sortedBy { it.begin })
+                AgendaEventGroup(day, dayTitle(day), dayEvents.sortedBy { it.begin })
             }
     }
+
+    private fun showSectionStyleMenu(source: View) {
+        val prefs = activePreferences()
+        val style = prefs.agendaSectionTitleStyle
+        val actions = listOf(
+            ContextAction(
+                if (prefs.agendaSectionMode == CardStackSectionMode.FOLDERS) "Use title cards" else "Use folders",
+                Runnable {
+                    settings.setAgendaSectionMode(
+                        if (prefs.agendaSectionMode == CardStackSectionMode.FOLDERS) {
+                            CardStackSectionMode.TITLE_CARDS
+                        } else {
+                            CardStackSectionMode.FOLDERS
+                        },
+                    )
+                    render()
+                },
+            ),
+            ContextAction(
+                "Height: ${style.height.next().label}",
+                Runnable {
+                    settings.setAgendaSectionTitleStyle(style.copy(height = style.height.next()))
+                    render()
+                },
+            ),
+            ContextAction(
+                if (style.transparentBackground) "Add card background" else "Make transparent",
+                Runnable {
+                    settings.setAgendaSectionTitleStyle(style.copy(transparentBackground = !style.transparentBackground))
+                    render()
+                },
+            ),
+            ContextAction(
+                if (style.bold) "Turn bold off" else "Turn bold on",
+                Runnable {
+                    settings.setAgendaSectionTitleStyle(style.copy(bold = !style.bold))
+                    render()
+                },
+            ),
+            ContextAction(
+                if (style.italic) "Turn italics off" else "Turn italics on",
+                Runnable {
+                    settings.setAgendaSectionTitleStyle(style.copy(italic = !style.italic))
+                    render()
+                },
+            ),
+            ContextAction(
+                "Underline: ${style.underline.next().label}",
+                Runnable {
+                    settings.setAgendaSectionTitleStyle(style.copy(underline = style.underline.next()))
+                    render()
+                },
+            ),
+        )
+        GoogleInteractionStyle.popupMenu(activity, source, source.screenCenter(), actions)
+    }
+
+    private fun sectionTitleText(title: String, summary: String, underline: SectionTitleUnderline): String {
+        return when (underline) {
+            SectionTitleUnderline.FULL -> "$title\n$summary\n------------------------------"
+            else -> "$title\n$summary"
+        }
+    }
+
+    private fun sectionTitleSp(height: SectionTitleHeight): Int {
+        return when (height) {
+            SectionTitleHeight.COMPACT -> 18
+            SectionTitleHeight.NORMAL -> 21
+            SectionTitleHeight.TALL -> 25
+        }
+    }
+
+    private fun sectionTitleVerticalPadding(height: SectionTitleHeight): Int {
+        return when (height) {
+            SectionTitleHeight.COMPACT -> 12
+            SectionTitleHeight.NORMAL -> 18
+            SectionTitleHeight.TALL -> 24
+        }
+    }
+
+    private fun sectionTitleTypeface(style: SectionTitleCardStyle): Int {
+        return when {
+            style.bold && style.italic -> Typeface.BOLD_ITALIC
+            style.bold -> Typeface.BOLD
+            style.italic -> Typeface.ITALIC
+            else -> Typeface.NORMAL
+        }
+    }
+
+    private fun SectionTitleHeight.next(): SectionTitleHeight {
+        return when (this) {
+            SectionTitleHeight.COMPACT -> SectionTitleHeight.NORMAL
+            SectionTitleHeight.NORMAL -> SectionTitleHeight.TALL
+            SectionTitleHeight.TALL -> SectionTitleHeight.COMPACT
+        }
+    }
+
+    private fun SectionTitleUnderline.next(): SectionTitleUnderline {
+        return when (this) {
+            SectionTitleUnderline.OFF -> SectionTitleUnderline.TITLE
+            SectionTitleUnderline.TITLE -> SectionTitleUnderline.FULL
+            SectionTitleUnderline.FULL -> SectionTitleUnderline.OFF
+        }
+    }
+
+    private val SectionTitleHeight.label: String
+        get() = when (this) {
+            SectionTitleHeight.COMPACT -> "compact"
+            SectionTitleHeight.NORMAL -> "normal"
+            SectionTitleHeight.TALL -> "tall"
+        }
+
+    private val SectionTitleUnderline.label: String
+        get() = when (this) {
+            SectionTitleUnderline.OFF -> "off"
+            SectionTitleUnderline.TITLE -> "title"
+            SectionTitleUnderline.FULL -> "full width"
+        }
 
     private fun dayTitle(dayStart: Long): String {
         return when {
@@ -199,7 +367,14 @@ class AgendaPageBuilder(
         }
     }
 
+    private fun View.screenCenter(): Pair<Int, Int> {
+        val location = IntArray(2)
+        getLocationOnScreen(location)
+        return (location[0] + width / 2) to (location[1] + height / 2)
+    }
+
     private data class AgendaEventGroup(
+        val dayStart: Long,
         val title: String,
         val events: List<CalendarEvent>,
     )

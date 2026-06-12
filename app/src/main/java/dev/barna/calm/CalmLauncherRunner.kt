@@ -186,11 +186,14 @@ class CalmLauncherRunner(
     private val agendaPageBuilder = AgendaPageBuilder(
         activity = activity,
         cardRenderer = cardRenderer,
+        cardStackController = cardStackController,
+        settings = settings,
         calendarRepository = calendarRepository,
         contextActionFactory = contextActionFactory,
         focusOverlay = focusOverlay,
         activePreferences = { activePreferences },
         barePagePanel = ::createBarePagePanel,
+        render = ::render,
     )
     private val alarmsPageBuilder = AlarmsPageBuilder(
         activity = activity,

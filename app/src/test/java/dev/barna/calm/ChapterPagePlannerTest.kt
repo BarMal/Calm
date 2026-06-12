@@ -80,6 +80,20 @@ class ChapterPagePlannerTest {
     }
 
     @Test
+    fun agendaPageAppearsWhenEnabledBeforeOverview() {
+        val pages = planner.buildPages(
+            preferences = preferences(agendaPageEnabled = true),
+            notificationChapters = emptyList(),
+            appEntries = listOf(app("browser", "Browser")),
+            pinnedApps = emptyList(),
+        )
+
+        assertEquals(listOf("Apps", "Agenda", "Overview"), pages.map { it.title })
+        assertEquals(PageSlot.AGENDA, PageArranger.slotOf(pages[1]))
+        assertEquals(listOf("I", "II", "III"), pages.map { it.marker })
+    }
+
+    @Test
     fun legacyDisabledClassicPagesStillAppearWhenAdded() {
         val pages = planner.buildPages(
             preferences = preferences(),
@@ -96,6 +110,7 @@ class ChapterPagePlannerTest {
         splitAppsByProfile: Boolean = false,
         placeWorkNotificationChaptersBeforeApps: Boolean = false,
         sortOrder: PageSortOrder = PageSortOrder.DEFAULT,
+        agendaPageEnabled: Boolean = false,
     ): LauncherUiPreferences {
         return LauncherUiPreferences(
             useTintedNotificationCards = true,
@@ -111,6 +126,7 @@ class ChapterPagePlannerTest {
             showAdvancedStackControls = false,
             cardVibrancy = 50,
             pageSortOrder = sortOrder,
+            agendaPageEnabled = agendaPageEnabled,
         )
     }
 

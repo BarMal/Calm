@@ -6,6 +6,7 @@ import org.junit.Test
 class PageArrangerTest {
     private val apps = ChapterPage.appLibrary(CalmTheme.APP_LIBRARY_KEY)
     private val pinned = ChapterPage.pinned(CalmTheme.PINNED_KEY, "II")
+    private val agenda = ChapterPage.agenda(CalmTheme.AGENDA_KEY, "II")
     private val overview = ChapterPage.overview(CalmTheme.OVERVIEW_KEY)
     private val classic = ChapterPage.classic(ClassicLauncherPageDefinition("classic-1", "Classic"), "III")
     private val chatA = ChapterPage.notifications(chapter("com.a", "A"), "IV")
@@ -30,6 +31,11 @@ class PageArrangerTest {
     @Test
     fun classicPageUsesClassicPagesSlot() {
         assertEquals(PageSlot.CLASSIC_PAGES, PageArranger.slotOf(classic))
+    }
+
+    @Test
+    fun agendaPageUsesAgendaSlot() {
+        assertEquals(PageSlot.AGENDA, PageArranger.slotOf(agenda))
     }
 
     @Test

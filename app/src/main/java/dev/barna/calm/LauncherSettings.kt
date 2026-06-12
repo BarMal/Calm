@@ -553,6 +553,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             pageSortOrder = pageSortOrder(),
             expandedCardsEnabled = expandedCardsEnabled(),
             contactsPageEnabled = contactsPageEnabled(),
+            agendaPageEnabled = agendaPageEnabled(),
             cardAppearance = cardAppearance(),
             pageLayout = pageLayout(),
         )
@@ -641,6 +642,16 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         return nextValue
     }
 
+    fun agendaPageEnabled(): Boolean {
+        return preferences.getBoolean(PREF_AGENDA_PAGE, false)
+    }
+
+    fun toggleAgendaPage(): Boolean {
+        val nextValue = !agendaPageEnabled()
+        preferences.edit().putBoolean(PREF_AGENDA_PAGE, nextValue).apply()
+        return nextValue
+    }
+
     fun launcherChangeToken(): Int {
         return listOf(
             uiPreferences(),
@@ -653,6 +664,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             classicGridConfig(),
             dockConfig(),
             dockKeys(),
+            agendaPageEnabled(),
         ).hashCode()
     }
 
@@ -908,6 +920,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_PAGE_SORT_ORDER = "page_sort_order"
         private const val PREF_EXPANDED_CARDS = "expanded_cards"
         private const val PREF_CONTACTS_PAGE = "contacts_page"
+        private const val PREF_AGENDA_PAGE = "agenda_page"
         private const val PREF_CLASSIC_PAGES = "classic_pages"
         private const val PREF_CLASSIC_HOME_PAGE_ID = "classic_home_page_id"
         private const val PREF_CLASSIC_GRID_COLUMNS = "classic_grid_columns"

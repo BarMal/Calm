@@ -608,6 +608,7 @@ class CalmSettingsActivity : ComponentActivity() {
                 PageSlot.NOTIFICATIONS -> addNotificationPreviewRows(this, accent)
                 PageSlot.PINNED -> addPinnedPreviewRows(this, accent)
                 PageSlot.CONTACTS -> addContactPreviewRows(this, accent)
+                PageSlot.AGENDA -> addAgendaPreviewRows(this, accent)
                 PageSlot.WORK_OVERVIEW -> addOverviewPreviewRows(this, accent, dense = true)
                 PageSlot.OVERVIEW -> addOverviewPreviewRows(this, accent, dense = false)
             }
@@ -680,6 +681,26 @@ class CalmSettingsActivity : ComponentActivity() {
                 addView(View(this@CalmSettingsActivity).apply {
                     background = roundedBlock(color, 999)
                 }, LinearLayout.LayoutParams(dp(22), dp(22)).apply {
+                    rightMargin = dp(8)
+                })
+                addView(View(this@CalmSettingsActivity).apply {
+                    background = roundedBlock(color, 999)
+                }, LinearLayout.LayoutParams(0, dp(8), 1f))
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+                leftMargin = dp(8)
+                rightMargin = dp(8)
+            })
+        }
+    }
+
+    private fun addAgendaPreviewRows(parent: LinearLayout, color: Int) {
+        repeat(3) {
+            parent.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(View(this@CalmSettingsActivity).apply {
+                    background = roundedBlock(color, 8)
+                }, LinearLayout.LayoutParams(dp(28), dp(10)).apply {
                     rightMargin = dp(8)
                 })
                 addView(View(this@CalmSettingsActivity).apply {

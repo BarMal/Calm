@@ -1056,4 +1056,14 @@ class LauncherSettingsTest {
 
         assertEquals(PageSlot.OVERVIEW, settings.pageLayout().defaultHome)
     }
+
+    @Test
+    fun agendaPageTogglePersistsInUiPreferences() {
+        assertFalse(settings.uiPreferences().agendaPageEnabled)
+
+        assertTrue(settings.toggleAgendaPage())
+
+        assertTrue(settings.agendaPageEnabled())
+        assertTrue(settings.uiPreferences().agendaPageEnabled)
+    }
 }

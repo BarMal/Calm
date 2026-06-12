@@ -1364,9 +1364,9 @@ class CalmLauncherRunner(
                         if (targetEntryIndex != previewTargetEntryIndex) {
                             previewTargetEntryIndex = targetEntryIndex
                             view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                        }
-                        dropPlaceholder?.let { placeholder ->
-                            updatePageOverviewDropPreview(view, entryIndex, previewTargetEntryIndex, cardWidth, placeholder)
+                            dropPlaceholder?.let { placeholder ->
+                                updatePageOverviewDropPreview(view, entryIndex, previewTargetEntryIndex, cardWidth, placeholder)
+                            }
                         }
                     }
                     true
@@ -1377,16 +1377,13 @@ class CalmLauncherRunner(
                     val dx = event.rawX - downRawX
                     val dy = event.rawY - downRawY
                     val dragX = pageOverviewDragDistance(view, downScrollX, dx)
-                    clearPageOverviewDropPreview(view, dropPlaceholder)
-                    dropPlaceholder = null
-                    view.elevation = 0f
-                    view.animate().translationX(0f).translationY(0f).alpha(1f).scaleX(1f).scaleY(1f).setDuration(120L).start()
+                    var handledByReorder = false
                     if (dragArmed && dragging) {
                         val targetEntryIndex = previewTargetEntryIndex
                         val targetIndex = entries[targetEntryIndex].firstPageIndex.coerceIn(0, pages.lastIndex)
                         if (targetEntryIndex != entryIndex && targetIndex != index) {
                             view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                            reorderPageFromOverview(page, pages, targetIndex, state)
+                            handledByReorder = reorderPageFromOverview(page, pages, targetIndex, state)
                         } else {
                             magnetizePageOverviewToCard(view, index, cardWidth)
                         }
@@ -1397,6 +1394,12 @@ class CalmLauncherRunner(
                         hidePageOverview()
                         navigateToChapterPage(index)
                     }
+                    if (!handledByReorder) {
+                        clearPageOverviewDropPreview(view, dropPlaceholder)
+                        view.elevation = 0f
+                        view.animate().translationX(0f).translationY(0f).alpha(1f).scaleX(1f).scaleY(1f).setDuration(90L).start()
+                    }
+                    dropPlaceholder = null
                     true
                 }
                 else -> true
@@ -1461,6 +1464,7 @@ class CalmLauncherRunner(
                 else -> 0f
             }
             if (child.translationX != translation) {
+                child.animate().cancel()
                 child.animate().translationX(translation).setDuration(PAGE_OVERVIEW_REORDER_PREVIEW_MS).start()
             }
         }
@@ -1473,6 +1477,7 @@ class CalmLauncherRunner(
         for (childIndex in 0 until row.childCount) {
             val child = row.getChildAt(childIndex)
             if (child !== card && child.translationX != 0f) {
+                child.animate().cancel()
                 child.animate().translationX(0f).setDuration(PAGE_OVERVIEW_REORDER_PREVIEW_MS).start()
             }
         }
@@ -1702,32 +1707,34 @@ class CalmLauncherRunner(
         pages: List<ChapterPage>,
         targetPageIndex: Int,
         state: LauncherRenderModel,
-    ) {
-        val targetPage = pages.getOrNull(targetPageIndex) ?: return
+    ): Boolean {
+        val targetPage = pages.getOrNull(targetPageIndex) ?: return false
         val sourceSlot = PageArranger.slotOf(page)
         val targetSlot = PageArranger.slotOf(targetPage)
         if (sourceSlot == PageSlot.CLASSIC_PAGES && targetSlot == PageSlot.CLASSIC_PAGES) {
-            val classic = page.classicPage ?: return
-            val targetClassic = targetPage.classicPage ?: return
+            val classic = page.classicPage ?: return false
+            val targetClassic = targetPage.classicPage ?: return false
             val targetIndex = state.classicPages.indexOfFirst { it.id == targetClassic.id }
             if (targetIndex != -1) {
                 if (settings.moveClassicPage(classic.id, targetIndex)) {
                     selectPage(classic.key)
                     Toast.makeText(activity, "Moved ${classic.title}", Toast.LENGTH_SHORT).show()
                     renderAndReopenPageOverview()
+                    return true
                 }
             }
-            return
+            return false
         }
-        if (sourceSlot == targetSlot) return
+        if (sourceSlot == targetSlot) return false
         val layout = settings.pageLayout()
         val from = layout.order.indexOf(sourceSlot)
         val to = layout.order.indexOf(targetSlot)
-        if (from == -1 || to == -1 || from == to) return
+        if (from == -1 || to == -1 || from == to) return false
         val next = layout.order.toMutableList().apply { add(to, removeAt(from)) }
         settings.setPageLayoutOrder(next)
         Toast.makeText(activity, "Moved ${page.title}", Toast.LENGTH_SHORT).show()
         renderAndReopenPageOverview()
+        return true
     }
 
     private fun pageOverviewCard(
@@ -2182,7 +2189,7 @@ class CalmLauncherRunner(
         const val PAGE_OVERVIEW_MAGNET_DELAY_MS = 120L
         const val PAGE_OVERVIEW_MAGNET_THRESHOLD = 0.16f
         const val PAGE_OVERVIEW_REMOVE_ANIMATION_MS = 190L
-        const val PAGE_OVERVIEW_REORDER_PREVIEW_MS = 130L
+        const val PAGE_OVERVIEW_REORDER_PREVIEW_MS = 70L
         const val PAGE_PREWARM_INITIAL_DELAY_MS = 260L
         const val PAGE_PREWARM_STEP_DELAY_MS = 120L
         const val PAGE_PREWARM_MAX_PAGES = 3

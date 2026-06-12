@@ -1311,6 +1311,7 @@ class CalmLauncherRunner(
         val touchSlop = ViewConfiguration.get(activity).scaledTouchSlop
         var downRawX = 0f
         var downRawY = 0f
+        var downScrollX = 0
         var dragArmed = false
         var dragging = false
         val longPress = Runnable {
@@ -1324,6 +1325,7 @@ class CalmLauncherRunner(
                 MotionEvent.ACTION_DOWN -> {
                     downRawX = event.rawX
                     downRawY = event.rawY
+                    downScrollX = pageOverviewScrollerFor(view)?.scrollX ?: 0
                     dragArmed = false
                     dragging = false
                     view.animate().cancel()
@@ -1344,7 +1346,8 @@ class CalmLauncherRunner(
                         view.parent?.requestDisallowInterceptTouchEvent(true)
                     }
                     if (dragArmed) {
-                        view.translationX = dx
+                        val dragX = pageOverviewDragDistance(view, downScrollX, dx)
+                        view.translationX = dragX
                         view.translationY = dy.coerceIn(-activity.dp(18).toFloat(), activity.dp(18).toFloat())
                         view.scaleX = 1.03f
                         view.scaleY = 1.03f
@@ -1357,9 +1360,10 @@ class CalmLauncherRunner(
                     view.parent?.requestDisallowInterceptTouchEvent(false)
                     val dx = event.rawX - downRawX
                     val dy = event.rawY - downRawY
+                    val dragX = pageOverviewDragDistance(view, downScrollX, dx)
                     view.animate().translationX(0f).translationY(0f).scaleX(1f).scaleY(1f).setDuration(120L).start()
                     if (dragArmed && dragging) {
-                        val targetEntryIndex = (entryIndex + (dx / (cardWidth * 0.72f)).roundToInt()).coerceIn(0, entries.lastIndex)
+                        val targetEntryIndex = (entryIndex + (dragX / (cardWidth * 0.72f)).roundToInt()).coerceIn(0, entries.lastIndex)
                         val targetIndex = entries[targetEntryIndex].firstPageIndex.coerceIn(0, pages.lastIndex)
                         if (targetEntryIndex != entryIndex && targetIndex != index) {
                             view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
@@ -1381,6 +1385,15 @@ class CalmLauncherRunner(
         }
     }
 
+    private fun pageOverviewDragDistance(card: View, downScrollX: Int, fingerDeltaX: Float): Float {
+        val scroller = pageOverviewScrollerFor(card) ?: return fingerDeltaX
+        return fingerDeltaX + (scroller.scrollX - downScrollX)
+    }
+
+    private fun pageOverviewScrollerFor(card: View): HorizontalScrollView? {
+        return card.parent?.parent as? HorizontalScrollView
+    }
+
     private fun installPageOverviewScrollMagnet(scroller: HorizontalScrollView, cardWidth: Int) {
         var snap: Runnable? = null
         scroller.setOnTouchListener { view, event ->
@@ -1395,7 +1408,7 @@ class CalmLauncherRunner(
     }
 
     private fun autoScrollPageOverviewWhileDragging(card: View, rawX: Float) {
-        val scroller = card.parent?.parent as? HorizontalScrollView ?: return
+        val scroller = pageOverviewScrollerFor(card) ?: return
         val location = IntArray(2)
         scroller.getLocationOnScreen(location)
         val leftEdge = location[0] + activity.dp(44)
@@ -1409,7 +1422,7 @@ class CalmLauncherRunner(
     }
 
     private fun magnetizePageOverviewToCard(card: View, index: Int, cardWidth: Int) {
-        val scroller = card.parent?.parent as? HorizontalScrollView ?: return
+        val scroller = pageOverviewScrollerFor(card) ?: return
         scroller.post { scrollPageOverviewToCard(scroller, index, cardWidth, smooth = true) }
     }
 

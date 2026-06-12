@@ -128,9 +128,14 @@ class AlarmsPageBuilder(
     }
 
     private fun openAlarmApp() {
-        val intent = Intent(AlarmClock.ACTION_SHOW_ALARMS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { activity.startActivity(intent) }
-            .recoverCatching { activity.startActivity(Intent(Settings.ACTION_SETTINGS)) }
+        SafeActivityLauncher.startAnyOrToast(
+            activity,
+            listOf(
+                Intent(AlarmClock.ACTION_SHOW_ALARMS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            ),
+            "Alarm settings unavailable",
+        )
     }
 
     private fun label(text: String, sp: Int, color: Int, style: Int): TextView {

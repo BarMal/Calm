@@ -88,7 +88,11 @@ class ContactsRepository(
     }
 
     private fun launch(intent: Intent) {
-        runCatching { activity.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        SafeActivityLauncher.startOrToast(
+            activity,
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            "Contact action unavailable",
+        )
     }
 
     private fun primaryNumber(resolver: ContentResolver, contactId: Long): String? {

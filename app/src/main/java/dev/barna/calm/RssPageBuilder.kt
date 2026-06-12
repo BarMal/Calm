@@ -77,7 +77,11 @@ class RssPageBuilder(
         return card(body).apply {
             setOnClickListener {
                 if (item.link.isNotBlank()) {
-                    activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    SafeActivityLauncher.startOrToast(
+                        activity,
+                        Intent(Intent.ACTION_VIEW, Uri.parse(item.link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        "RSS link unavailable",
+                    )
                 }
             }
         }

@@ -2343,9 +2343,13 @@ class CalmLauncherRunner(
             }.isSuccess
             if (opened) return
         }
-        activity.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = Uri.parse("package:$packageName")
-        })
+        try {
+            activity.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+            })
+        } catch (_: android.content.ActivityNotFoundException) {
+            Toast.makeText(activity, "App info screen unavailable", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun performCardScrollHaptic(source: View) {

@@ -173,17 +173,28 @@ class LauncherAppLibraryController(
             precomputedIconRenderData = data.iconRenderData,
         ).apply {
             maxLines = 4
-            setOnClickListener { openAppEntry(app) }
+            setOnClickListener {
+                if (activePreferences().expandedCardsEnabled) {
+                    showExpandedAppCard(this, data)
+                } else {
+                    openAppEntry(app)
+                }
+            }
             setOnLongClickListener {
                 val actions = contextActionFactory.appActions(data.app, data.isPinned)
                 if (activePreferences().expandedCardsEnabled) {
-                    focusOverlay.showExpandedCard(this, expandedAppContent(data), actions)
+                    showExpandedAppCard(this, data)
                 } else {
                     focusOverlay.show(this, actions, data.app.label)
                 }
                 true
             }
         }
+    }
+
+    private fun showExpandedAppCard(source: View, data: AppCardDisplayData) {
+        val actions = contextActionFactory.appActions(data.app, data.isPinned)
+        focusOverlay.showExpandedCard(source, expandedAppContent(data), actions)
     }
 
     private fun expandedAppContent(data: AppCardDisplayData): View {

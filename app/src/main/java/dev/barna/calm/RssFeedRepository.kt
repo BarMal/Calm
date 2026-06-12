@@ -20,10 +20,7 @@ class RssFeedRepository(
     }
 
     fun parse(input: InputStream, fallbackFeedTitle: String = "RSS"): List<RssFeedItem> {
-        val document = DocumentBuilderFactory.newInstance().apply {
-            isIgnoringComments = true
-            isCoalescing = true
-        }.newDocumentBuilder().parse(input)
+        val document = secureDocumentBuilderFactory().newDocumentBuilder().parse(input)
         document.documentElement.normalize()
         return when (document.documentElement.tagName.lowercase(Locale.ROOT)) {
             "feed" -> parseAtom(document.documentElement, fallbackFeedTitle)
@@ -38,6 +35,19 @@ class RssFeedRepository(
         connection.instanceFollowRedirects = true
         connection.setRequestProperty("User-Agent", "CalmLauncher/1.0")
         return connection.inputStream.use { stream -> parse(stream, url) }
+    }
+
+    private fun secureDocumentBuilderFactory(): DocumentBuilderFactory {
+        return DocumentBuilderFactory.newInstance().apply {
+            isIgnoringComments = true
+            isCoalescing = true
+            isXIncludeAware = false
+            isExpandEntityReferences = false
+            setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+            setFeature("http://xml.org/sax/features/external-general-entities", false)
+            setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+            setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+        }
     }
 
     private fun parseRss(root: org.w3c.dom.Element, fallbackFeedTitle: String): List<RssFeedItem> {

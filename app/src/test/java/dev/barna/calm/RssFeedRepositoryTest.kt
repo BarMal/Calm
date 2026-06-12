@@ -2,7 +2,9 @@ package dev.barna.calm
 
 import java.io.ByteArrayInputStream
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
+import org.xml.sax.SAXException
 
 class RssFeedRepositoryTest {
     private val repository = RssFeedRepository(now = { 1_700_000_000_000L })
@@ -53,5 +55,24 @@ class RssFeedRepositoryTest {
         assertEquals("Atom item", items.first().title)
         assertEquals("Short summary", items.first().summary)
         assertEquals("https://example.com/atom", items.first().link)
+    }
+
+    @Test
+    fun rejectsDoctypeDeclarations() {
+        val xml = """
+            <!DOCTYPE rss [
+                <!ENTITY secret SYSTEM "file:///etc/passwd">
+            ]>
+            <rss version="2.0">
+                <channel>
+                    <title>&secret;</title>
+                    <item><title>Unsafe</title></item>
+                </channel>
+            </rss>
+        """.trimIndent()
+
+        assertThrows(SAXException::class.java) {
+            repository.parse(xml.byteInputStream())
+        }
     }
 }

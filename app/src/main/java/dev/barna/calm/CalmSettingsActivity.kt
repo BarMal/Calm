@@ -351,6 +351,9 @@ class CalmSettingsActivity : ComponentActivity() {
         content.addView(actionRow("Classic pages", classicPagesManagementSummary()) {
             showClassicPagesDialog()
         })
+        content.addView(actionRow("RSS feeds", rssFeedsSummary()) {
+            showRssFeedsDialog()
+        })
         val classicGrid = settings.classicGridConfig()
         content.addView(sliderRow(
             title = "Classic grid columns",
@@ -770,6 +773,7 @@ class CalmSettingsActivity : ComponentActivity() {
                 PageSlot.CONTACTS -> addContactPreviewRows(this, accent)
                 PageSlot.AGENDA -> addAgendaPreviewRows(this, accent)
                 PageSlot.ALARMS -> addAlarmsPreviewRows(this, accent)
+                PageSlot.RSS -> addRssPreviewRows(this, accent)
                 PageSlot.WORK_OVERVIEW -> addOverviewPreviewRows(this, accent, dense = true)
                 PageSlot.OVERVIEW -> addOverviewPreviewRows(this, accent, dense = false)
             }
@@ -1076,6 +1080,17 @@ class CalmSettingsActivity : ComponentActivity() {
         addPreviewBlock(parent, dp(22), dp(22), color, bottomMargin = dp(10))
         addPreviewBlock(parent, dp(88), dp(12), color, bottomMargin = dp(8))
         addPreviewBlock(parent, dp(64), dp(8), color, bottomMargin = dp(8))
+    }
+
+    private fun addRssPreviewRows(parent: LinearLayout, color: Int) {
+        listOf(92, 66, 80).forEach { width ->
+            parent.addView(View(this).apply {
+                background = roundedBlock(color, 10)
+            }, LinearLayout.LayoutParams(dp(width), dp(14)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(8)
+            })
+        }
     }
 
     private fun addPreviewBlock(parent: LinearLayout, width: Int, height: Int, color: Int, bottomMargin: Int) {
@@ -1453,6 +1468,16 @@ class CalmSettingsActivity : ComponentActivity() {
         return "${pages.size} ${if (pages.size == 1) "page" else "pages"}; home is $home."
     }
 
+    private fun rssFeedsSummary(): String {
+        val count = settings.rssFeedUrls().size
+        val pageState = if (settings.rssPageEnabled()) "page added" else "page not added"
+        return when (count) {
+            0 -> "No feeds; $pageState."
+            1 -> "1 feed; $pageState."
+            else -> "$count feeds; $pageState."
+        }
+    }
+
     private fun classicPageDetail(page: ClassicLauncherPageDefinition): String {
         val itemCount = page.items.size
         return "$itemCount ${if (itemCount == 1) "item" else "items"}."
@@ -1489,6 +1514,84 @@ class CalmSettingsActivity : ComponentActivity() {
                 requestRender()
             }
             .show()
+    }
+
+    private fun showRssFeedsDialog() {
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
+        lateinit var rebuild: () -> Unit
+        rebuild = {
+            list.removeAllViews()
+            list.addView(miniButton("Add feed") { showAddRssFeedDialog(rebuild) }.apply {
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    bottomMargin = dp(8)
+                }
+            })
+            list.addView(miniButton(if (settings.rssPageEnabled()) "Remove RSS page" else "Add RSS page") {
+                settings.setRssPageEnabled(!settings.rssPageEnabled())
+                rebuild()
+            }.apply {
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    bottomMargin = dp(8)
+                }
+            })
+            val urls = settings.rssFeedUrls()
+            if (urls.isEmpty()) {
+                list.addView(label("No RSS feeds yet.", 14, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
+                    gravity = Gravity.CENTER
+                    setPadding(0, dp(12), 0, dp(12))
+                })
+            } else {
+                urls.forEach { url -> list.addView(rssFeedRow(url, rebuild)) }
+            }
+        }
+        rebuild()
+        GoogleInteractionStyle.dialogBuilder(this)
+            .setTitle("RSS feeds")
+            .setView(ScrollView(this).apply { addView(list) })
+            .setPositiveButton("Done") { _, _ -> requestRender() }
+            .show()
+            .setOnDismissListener { requestRender() }
+    }
+
+    private fun showAddRssFeedDialog(rebuild: () -> Unit) {
+        val input = EditText(this).apply {
+            hint = "https://example.com/feed.xml"
+            setSingleLine(true)
+        }
+        GoogleInteractionStyle.dialogBuilder(this)
+            .setTitle("Add RSS feed")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Add") { _, _ ->
+                if (!settings.addRssFeedUrl(input.text?.toString().orEmpty())) {
+                    Toast.makeText(this, "Enter a new feed URL", Toast.LENGTH_SHORT).show()
+                }
+                rebuild()
+                requestRender()
+            }
+            .show()
+    }
+
+    private fun rssFeedRow(url: String, rebuild: () -> Unit): View {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(8), 0, dp(8))
+            addView(label(url, 15, CalmTheme.INK, Typeface.BOLD).apply {
+                maxLines = 2
+            })
+            addView(LinearLayout(this@CalmSettingsActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(miniButton("Remove") {
+                    settings.removeRssFeedUrl(url)
+                    rebuild()
+                })
+            })
+        }
     }
 
     private fun requestRender() {

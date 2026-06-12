@@ -556,6 +556,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             contactsPageEnabled = contactsPageEnabled(),
             agendaPageEnabled = agendaPageEnabled(),
             alarmsPageEnabled = alarmsPageEnabled(),
+            rssPageEnabled = rssPageEnabled(),
             agendaSectionMode = agendaSectionMode(),
             agendaSectionTitleStyle = agendaSectionTitleStyle(),
             cardAppearance = cardAppearance(),
@@ -674,6 +675,47 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         return nextValue
     }
 
+    fun rssPageEnabled(): Boolean {
+        return preferences.getBoolean(PREF_RSS_PAGE, false)
+    }
+
+    fun setRssPageEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean(PREF_RSS_PAGE, enabled).apply()
+    }
+
+    fun toggleRssPage(): Boolean {
+        val nextValue = !rssPageEnabled()
+        setRssPageEnabled(nextValue)
+        return nextValue
+    }
+
+    fun rssFeedUrls(): List<String> {
+        return (preferences.getString(PREF_RSS_FEED_URLS, null) ?: "")
+            .lineSequence()
+            .map { line -> line.trim() }
+            .filter { line -> line.isNotBlank() }
+            .distinct()
+            .toList()
+    }
+
+    fun addRssFeedUrl(url: String): Boolean {
+        val clean = url.trim()
+        if (clean.isBlank()) return false
+        val current = rssFeedUrls()
+        if (current.any { it.equals(clean, ignoreCase = true) }) return false
+        setRssFeedUrls(current + clean)
+        setRssPageEnabled(true)
+        return true
+    }
+
+    fun removeRssFeedUrl(url: String) {
+        setRssFeedUrls(rssFeedUrls().filterNot { it == url })
+    }
+
+    fun setRssFeedUrls(urls: List<String>) {
+        preferences.edit().putString(PREF_RSS_FEED_URLS, urls.map { it.trim() }.filter { it.isNotBlank() }.distinct().joinToString("\n")).apply()
+    }
+
     fun agendaSectionMode(): CardStackSectionMode {
         return enumPreference(PREF_AGENDA_SECTION_MODE, CardStackSectionMode.TITLE_CARDS)
     }
@@ -717,6 +759,8 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             pinnedPageEnabled(),
             agendaPageEnabled(),
             alarmsPageEnabled(),
+            rssPageEnabled(),
+            rssFeedUrls(),
             agendaSectionMode(),
             agendaSectionTitleStyle(),
         ).hashCode()
@@ -983,6 +1027,8 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_CONTACTS_PAGE = "contacts_page"
         private const val PREF_AGENDA_PAGE = "agenda_page"
         private const val PREF_ALARMS_PAGE = "alarms_page"
+        private const val PREF_RSS_PAGE = "rss_page"
+        private const val PREF_RSS_FEED_URLS = "rss_feed_urls"
         private const val PREF_AGENDA_SECTION_MODE = "agenda_section_mode"
         private const val PREF_AGENDA_SECTION_TRANSPARENT = "agenda_section_transparent"
         private const val PREF_AGENDA_SECTION_BOLD = "agenda_section_bold"

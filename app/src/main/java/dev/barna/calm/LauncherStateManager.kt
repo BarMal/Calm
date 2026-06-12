@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class LauncherStateManager(
     private val notificationRepository: NotificationChapterRepository,
     private val calendarRepository: CalendarRepository,
+    private val rssFeedRepository: RssFeedRepository,
     private val settings: LauncherSettings,
     private val renderModelFactory: LauncherRenderModelFactory,
     private val appCardDisplayCache: AppCardDisplayCache,
@@ -32,6 +33,9 @@ class LauncherStateManager(
                 val hasPermission = calendarRepository.hasCalendarPermission()
                 hasPermission to if (hasPermission) calendarRepository.loadUpcomingEvents() else emptyList()
             }
+            val rss = executor.submit<List<RssFeedItem>> {
+                if (settings.rssPageEnabled()) rssFeedRepository.loadItems(settings.rssFeedUrls()) else emptyList()
+            }
             executor.execute {
                 try {
                     val appEntries = apps.get()
@@ -49,6 +53,8 @@ class LauncherStateManager(
                         dockKeys = settings.dockKeys(),
                         hasCalendarPermission = calendarState.first,
                         calendarEvents = calendarState.second,
+                        rssFeedUrls = settings.rssFeedUrls(),
+                        rssItems = rss.get(),
                     )
                     appCardDisplayCache.preloadNow(state.appEntries, state.pinnedKeys)
                     mainHandler.post {
@@ -82,6 +88,8 @@ class LauncherStateManager(
             dockKeys = settings.dockKeys(),
             hasCalendarPermission = calendarRepository.hasCalendarPermission(),
             calendarEvents = emptyList(),
+            rssFeedUrls = settings.rssFeedUrls(),
+            rssItems = emptyList(),
         )
     }
 
@@ -90,6 +98,7 @@ class LauncherStateManager(
         val notificationChapters = notificationRepository.buildNotificationChapters(appEntries)
         val pinnedKeys = settings.pinnedPackages()
         val hasCalendarPermission = calendarRepository.hasCalendarPermission()
+        val rssFeedUrls = settings.rssFeedUrls()
         return renderModelFactory.create(
             preferences = settings.uiPreferences(),
             notificationChapters = notificationChapters,
@@ -102,6 +111,8 @@ class LauncherStateManager(
             dockKeys = settings.dockKeys(),
             hasCalendarPermission = hasCalendarPermission,
             calendarEvents = if (hasCalendarPermission) calendarRepository.loadUpcomingEvents() else emptyList(),
+            rssFeedUrls = rssFeedUrls,
+            rssItems = if (settings.rssPageEnabled()) rssFeedRepository.loadItems(rssFeedUrls) else emptyList(),
         )
     }
 }

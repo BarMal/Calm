@@ -97,6 +97,18 @@ class LauncherPageStateTest {
     }
 
     @Test
+    fun includesRssPageWhenEnabled() {
+        val state = factory.create(
+            preferences = preferences(rssPageEnabled = true),
+            notificationChapters = emptyList(),
+            appEntries = listOf(app("browser.pkg", "Browser")),
+            pinnedKeys = emptySet(),
+        )
+
+        assertEquals(listOf("Apps", "RSS", "Overview"), state.pages.map { it.title })
+    }
+
+    @Test
     fun includesPinnedPageWhenEnabledWithoutPinnedApps() {
         val state = factory.create(
             preferences = preferences(pinnedPageEnabled = true),
@@ -115,6 +127,7 @@ class LauncherPageStateTest {
         pinnedPageEnabled: Boolean = false,
         agendaPageEnabled: Boolean = false,
         alarmsPageEnabled: Boolean = false,
+        rssPageEnabled: Boolean = false,
     ): LauncherUiPreferences {
         return LauncherUiPreferences(
             useTintedNotificationCards = true,
@@ -132,6 +145,7 @@ class LauncherPageStateTest {
             pinnedPageEnabled = pinnedPageEnabled,
             agendaPageEnabled = agendaPageEnabled,
             alarmsPageEnabled = alarmsPageEnabled,
+            rssPageEnabled = rssPageEnabled,
         )
     }
 

@@ -10,6 +10,7 @@ enum class PageSlot {
     CONTACTS,
     AGENDA,
     ALARMS,
+    RSS,
     OVERVIEW,
     WORK_OVERVIEW,
     CLASSIC_PAGES,
@@ -38,6 +39,7 @@ data class LauncherPageLayout(
             PageSlot.CONTACTS,
             PageSlot.AGENDA,
             PageSlot.ALARMS,
+            PageSlot.RSS,
             PageSlot.OVERVIEW,
             PageSlot.WORK_OVERVIEW,
             PageSlot.CLASSIC_PAGES,
@@ -55,6 +57,7 @@ object PageArranger {
         page.key == CalmTheme.CONTACTS_KEY -> PageSlot.CONTACTS
         page.key == CalmTheme.AGENDA_KEY -> PageSlot.AGENDA
         page.key == CalmTheme.ALARMS_KEY -> PageSlot.ALARMS
+        page.key == CalmTheme.RSS_KEY -> PageSlot.RSS
         page.key == CalmTheme.WORK_OVERVIEW_KEY -> PageSlot.WORK_OVERVIEW
         page.key == CalmTheme.OVERVIEW_KEY -> PageSlot.OVERVIEW
         page.classicPage != null -> PageSlot.CLASSIC_PAGES

@@ -54,6 +54,11 @@ class ChapterPage private constructor(
         }
 
         @JvmStatic
+        fun rss(rssKey: String, marker: String): ChapterPage {
+            return ChapterPage(rssKey, marker, "RSS", null, null, null)
+        }
+
+        @JvmStatic
         fun workOverview(workOverviewKey: String, marker: String): ChapterPage {
             return ChapterPage(workOverviewKey, marker, "Work", null, null, null)
         }

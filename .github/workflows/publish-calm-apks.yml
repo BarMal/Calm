@@ -70,9 +70,15 @@ jobs:
       - name: Compute APK version
         run: |
           set -euo pipefail
+          mkdir -p release-metadata
           VERSION_NAME_BASE="$(grep '^calm.versionNameBase=' gradle.properties | cut -d= -f2-)"
-          echo "VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
-          echo "VERSION_NAME=${VERSION_NAME_BASE}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          VERSION_CODE="$(date -u +%y%j%H%M)"
+          echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=${VERSION_NAME_BASE}.${VERSION_CODE}" >> "$GITHUB_ENV"
+          {
+            echo "VERSION_CODE=${VERSION_CODE}"
+            echo "VERSION_NAME=${VERSION_NAME_BASE}.${VERSION_CODE}"
+          } > release-metadata/version.env
 
       - name: Run unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace
@@ -86,7 +92,7 @@ jobs:
       - name: Prepare release assets
         run: |
           set -euo pipefail
-          mkdir -p dist release-assets
+          mkdir -p dist release-assets release-metadata
           DEBUG_APK_PATH="$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
           RELEASE_APK_PATH="$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)"
 
@@ -97,6 +103,31 @@ jobs:
           cp "$RELEASE_APK_PATH" "dist/Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk"
           cp "$RELEASE_APK_PATH" "release-assets/Calm-alpha-${VERSION_NAME}-${VERSION_CODE}.apk"
           cp "$RELEASE_APK_PATH" release-assets/Calm-alpha-latest.apk
+
+      - name: Verify release APK metadata
+        run: |
+          set -euo pipefail
+          APKSIGNER="${ANDROID_HOME}/build-tools/36.0.0/apksigner"
+          AAPT="${ANDROID_HOME}/build-tools/36.0.0/aapt"
+          {
+            echo "### APK verification"
+            echo
+            echo "| APK | Package | Version | SHA-256 | Signing certificate |"
+            echo "| --- | --- | --- | --- | --- |"
+          } > release-metadata/apk-verification.md
+
+          for apk in release-assets/*.apk; do
+            "${APKSIGNER}" verify --verbose --print-certs "$apk" > "${apk}.apksigner.txt"
+            "${AAPT}" dump badging "$apk" > "${apk}.badging.txt"
+            package="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" "${apk}.badging.txt" | head -n 1)"
+            version_name="$(sed -n "s/^package: .*versionName='\([^']*\)'.*/\1/p" "${apk}.badging.txt" | head -n 1)"
+            version_code="$(sed -n "s/^package: .*versionCode='\([^']*\)'.*/\1/p" "${apk}.badging.txt" | head -n 1)"
+            cert_digest="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "${apk}.apksigner.txt" | head -n 1)"
+            sha256="$(sha256sum "$apk" | cut -d' ' -f1)"
+            echo "| $(basename "$apk") | \`${package}\` | \`${version_name}\` / \`${version_code}\` | \`${sha256}\` | \`${cert_digest}\` |" >> release-metadata/apk-verification.md
+          done
+
+          cat release-metadata/apk-verification.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
@@ -112,6 +143,17 @@ jobs:
           name: Calm-alpha-release-assets
           path: |
             release-assets/*.apk
+          if-no-files-found: error
+
+      - name: Upload release metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: Calm-alpha-release-metadata
+          path: |
+            release-metadata/*.md
+            release-metadata/*.env
+            release-assets/*.apksigner.txt
+            release-assets/*.badging.txt
           if-no-files-found: error
 
   publish:
@@ -134,12 +176,23 @@ jobs:
           name: Calm-alpha-release-assets
           path: release-assets
 
-      - name: Compute APK version
+      - name: Download release metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: Calm-alpha-release-metadata
+          path: release-metadata
+
+      - name: Load APK version
         run: |
           set -euo pipefail
-          VERSION_NAME_BASE="$(grep '^calm.versionNameBase=' gradle.properties | cut -d= -f2-)"
-          echo "VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
-          echo "VERSION_NAME=${VERSION_NAME_BASE}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          version_file="$(find release-metadata -name version.env | head -n 1)"
+          if [[ -z "${version_file}" ]]; then
+            echo "Missing APK version metadata." >&2
+            exit 1
+          fi
+          source "${version_file}"
+          echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
 
       - name: Generate release notes
         run: |
@@ -154,7 +207,14 @@ jobs:
             echo "### Which APK should I install?"
             echo "- **Calm-alpha-latest.apk** updates the existing Calm install using package \`dev.barna.calm\`. Use this for normal alpha testing."
             echo "- **Calm-alpha-debug-side-by-side-latest.apk** installs separately using package \`dev.barna.calm.debug\`. Use this only when you intentionally want a second test copy."
-            echo "- Versioned APK assets are also attached to this release so the current build is visible even when stable download aliases are cached by a browser or device."
+            echo "- This release is pruned on every publish, so only the current versioned APKs and latest aliases are attached."
+            echo
+            metadata_file="$(find release-metadata -name apk-verification.md | head -n 1)"
+            if [[ -z "${metadata_file}" ]]; then
+              echo "Missing APK verification metadata." >&2
+              exit 1
+            fi
+            cat "${metadata_file}"
             echo
             echo "### Recent changes"
             git log -10 --pretty=format:'- %s (%h)'
@@ -180,6 +240,13 @@ jobs:
               --notes-file release-notes.md \
               --prerelease \
               --target "$GITHUB_SHA"
+          fi
+
+          apk_assets="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name' | grep -E '^Calm-alpha.*\.apk$' || true)"
+          if [[ -n "${apk_assets}" ]]; then
+            while read -r asset_name; do
+              gh release delete-asset "${RELEASE_TAG}" "${asset_name}" --yes
+            done <<< "${apk_assets}"
           fi
 
           gh release upload "${RELEASE_TAG}" release-assets/*.apk --clobber

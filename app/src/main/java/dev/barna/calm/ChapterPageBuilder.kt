@@ -123,6 +123,9 @@ class ChapterPageBuilder(
     }
 
     private fun notificationStack(chapter: AppChapter, tintCards: Boolean): View {
+        if (chapter.notifications.isEmpty()) {
+            return emptyPinnedChapterStack(chapter, tintCards)
+        }
         val cards = NotificationCardGrouper.cards(
             chapter.notifications,
             settings.groupNotifications(chapter.identityKey),
@@ -134,6 +137,54 @@ class ChapterPageBuilder(
             activePreferences().cardStackTuning,
             CardStackStateKey.notifications(chapter),
         )
+    }
+
+    private fun emptyPinnedChapterStack(chapter: AppChapter, tintCards: Boolean): View {
+        val cards = ArrayList<TextView>()
+        cards.add(emptyPinnedChapterCard(chapter, tintCards))
+        if (chapter.launchable) {
+            cards.add(chapterAffordanceCard("Open ${chapter.label}", chapter, tintCards) {
+                openPackage(chapter)
+            })
+        }
+        notificationRepository.getAppShortcuts(chapter).take(MAX_EMPTY_CHAPTER_SHORTCUTS).forEach { shortcut ->
+            cards.add(chapterAffordanceCard(shortcut.label, chapter, tintCards) {
+                notificationRepository.launchShortcut(shortcut)
+            })
+        }
+        return cardStackController.cardStack(
+            cards,
+            cardRenderer.cardHeight(),
+            cardRenderer.cardStep(),
+            activePreferences().cardStackTuning,
+            CardStackStateKey.notifications(chapter),
+        )
+    }
+
+    private fun emptyPinnedChapterCard(chapter: AppChapter, tintCards: Boolean): TextView {
+        return cardRenderer.stackCard(
+            "${chapter.label}\nNo active notifications",
+            chapter.hueColor,
+            tintCards,
+        ).apply {
+            maxLines = 3
+        }
+    }
+
+    private fun chapterAffordanceCard(
+        title: String,
+        chapter: AppChapter,
+        tintCards: Boolean,
+        action: () -> Unit,
+    ): TextView {
+        return cardRenderer.stackCard(
+            title,
+            chapter.hueColor,
+            tintCards,
+        ).apply {
+            maxLines = 2
+            setOnClickListener { action() }
+        }
     }
 
     private fun notificationCard(
@@ -307,5 +358,9 @@ class ChapterPageBuilder(
             setTypeface(typeface, style)
             includeFontPadding = true
         }
+    }
+
+    private companion object {
+        const val MAX_EMPTY_CHAPTER_SHORTCUTS = 3
     }
 }

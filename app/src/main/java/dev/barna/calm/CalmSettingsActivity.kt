@@ -501,13 +501,21 @@ class CalmSettingsActivity : ComponentActivity() {
     private fun renderAccessSettings(content: LinearLayout) {
         content.addView(section("Access"))
         content.addView(actionRow("Set wallpaper", "Open Android's wallpaper picker.") {
-            startActivity(Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Set wallpaper"))
+            SafeActivityLauncher.startOrToast(
+                this,
+                Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Set wallpaper"),
+                "Wallpaper picker unavailable",
+            )
         })
         content.addView(actionRow(
             if (isNotificationAccessEnabled()) "Notification access enabled" else "Enable notification access",
             "Manage Calm's notification listener permission.",
         ) {
-            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            SafeActivityLauncher.startOrToast(
+                this,
+                Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
+                "Notification access settings unavailable",
+            )
         })
         content.addView(actionRow(
             if (calendarRepository.hasCalendarPermission()) "Calendar access enabled" else "Allow calendar access",

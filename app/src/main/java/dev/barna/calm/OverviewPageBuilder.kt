@@ -306,7 +306,11 @@ class OverviewPageBuilder(
             } catch (_: PendingIntent.CanceledException) {
             }
         }
-        activity.startActivity(Intent(Settings.ACTION_SETTINGS))
+        SafeActivityLauncher.startOrToast(
+            activity,
+            Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            "Settings unavailable",
+        )
     }
 
     private fun sectionTitle(text: String): TextView {

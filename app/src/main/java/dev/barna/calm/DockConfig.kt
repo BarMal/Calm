@@ -1,7 +1,14 @@
 package dev.barna.calm
 
+enum class DockStyle {
+    CLASSIC,
+    CARD,
+    HYBRID,
+}
+
 data class DockConfig(
     val enabled: Boolean = false,
+    val style: DockStyle = DockStyle.CLASSIC,
     val itemCount: Int = DEFAULT_ITEM_COUNT,
     val itemSpan: Int = DEFAULT_ITEM_SPAN,
     val verticalPaddingDp: Int = DEFAULT_VERTICAL_PADDING_DP,

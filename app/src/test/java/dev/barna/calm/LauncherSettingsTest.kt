@@ -67,6 +67,7 @@ class LauncherSettingsTest {
     fun defaultDockConfig() {
         val dock = settings.dockConfig()
         assertFalse(dock.enabled)
+        assertEquals(DockStyle.CLASSIC, dock.style)
         assertEquals(DockConfig.DEFAULT_ITEM_COUNT, dock.itemCount)
         assertEquals(DockConfig.DEFAULT_ITEM_SPAN, dock.itemSpan)
         assertEquals(DockConfig.DEFAULT_VERTICAL_PADDING_DP, dock.verticalPaddingDp)
@@ -150,6 +151,15 @@ class LauncherSettingsTest {
     fun dockEnabledRoundTrips() {
         settings.setDockEnabled(true)
         assertTrue(settings.dockConfig().enabled)
+    }
+
+    @Test
+    fun dockStyleRoundTrips() {
+        settings.setDockStyle(DockStyle.CARD)
+        assertEquals(DockStyle.CARD, settings.dockConfig().style)
+
+        settings.setDockStyle(DockStyle.HYBRID)
+        assertEquals(DockStyle.HYBRID, settings.dockConfig().style)
     }
 
     @Test

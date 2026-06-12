@@ -87,7 +87,13 @@ class DockController(
                 chapters = chapters,
                 currentIndex = { selectedIndex },
                 config = config,
-                selectAppIndex = { index, transition -> bind(index, transition) },
+                selectAppIndex = { index, transition ->
+                    val newIndex = normalizedIndex(index, apps.size)
+                    if (transition is DockTransition.Horizontal) {
+                        resetFeaturedNotificationIndex(apps[newIndex], chapters, transition.direction)
+                    }
+                    bind(index, transition)
+                },
                 cycleNotification = { transition ->
                     if (cycleFeaturedNotification(apps, chapters, selectedIndex, transition.direction)) {
                         bind(selectedIndex, transition)
@@ -122,7 +128,13 @@ class DockController(
             chapters = chapters,
             currentIndex = { selectedIndex },
             config = config,
-            selectAppIndex = { index, transition -> bind(index, transition) },
+            selectAppIndex = { index, transition ->
+                val newIndex = normalizedIndex(index, apps.size)
+                if (transition is DockTransition.Horizontal) {
+                    resetFeaturedNotificationIndex(apps[newIndex], chapters, transition.direction)
+                }
+                bind(index, transition)
+            },
             cycleNotification = { transition ->
                 if (cycleFeaturedNotification(apps, chapters, selectedIndex, transition.direction)) {
                     bind(selectedIndex, transition)
@@ -562,8 +574,20 @@ class DockController(
         val count = target.chapter.notifications.size
         if (count <= 1) return false
         val current = featuredNotificationIndexes[app.identityKey] ?: 0
-        featuredNotificationIndexes[app.identityKey] = normalizedIndex(current + direction, count)
+        val next = current + direction
+        // Don't wrap — returning false at the boundary lets the caller navigate to the next app.
+        if (next < 0 || next >= count) return false
+        featuredNotificationIndexes[app.identityKey] = next
         return true
+    }
+
+    private fun resetFeaturedNotificationIndex(app: AppEntry, chapters: List<AppChapter>, direction: Int) {
+        val target = targetFor(app, chapters) ?: return
+        val count = target.chapter.notifications.size
+        if (count <= 1) return
+        // When arriving at an app via horizontal swipe, start at the near edge:
+        // swiping right → show first (newest) notification; swiping left → show last.
+        featuredNotificationIndexes[app.identityKey] = if (direction > 0) 0 else count - 1
     }
 
     private fun animateDockStack(surface: FrameLayout, transition: DockTransition, rebind: () -> Unit) {
@@ -579,8 +603,10 @@ class DockController(
             .translationY(if (transition is DockTransition.Vertical) -transition.direction * distance else 0f)
             .setDuration(DOCK_STACK_ANIMATION_MS)
             .setListener(object : AnimatorListenerAdapter() {
+                private var cancelled = false
+                override fun onAnimationCancel(animation: Animator) { cancelled = true }
                 override fun onAnimationEnd(animation: Animator) {
-                    stack.animate().setListener(null)
+                    if (cancelled) return
                     rebind()
                     val next = surface.getChildAt(0) ?: return
                     next.alpha = 0f

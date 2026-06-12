@@ -452,6 +452,7 @@ class CalmLauncherRunner(
         try {
             mainHandler.removeCallbacksAndMessages(null)
             classicWidgetHostController.shutdown()
+            notificationRepository.shutdown()
             stateExecutor.shutdown()
         } finally {
             unregisterPackageChangeReceiver()

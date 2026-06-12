@@ -315,6 +315,10 @@ class NotificationChapterRepository(
         appIconRepository.invalidate()
     }
 
+    fun shutdown() {
+        appIconRepository.shutdown()
+    }
+
     fun getAppShortcuts(chapter: AppChapter): List<AppShortcutEntry> {
         return getAppShortcuts(chapter.packageName, chapter.userHandle)
     }

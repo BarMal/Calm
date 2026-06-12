@@ -9,20 +9,25 @@ import java.io.File
 import java.security.MessageDigest
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 class AppIconRepository(
     cacheDir: File,
     private val launcherApps: LauncherApps?,
     private val packageManager: PackageManager,
     private val settings: LauncherSettings,
+    private val maxMemoryCacheEntries: Int = DEFAULT_MEMORY_CACHE_ENTRIES,
+    private val hueExecutor: ExecutorService = Executors.newSingleThreadExecutor(),
 ) {
     private val iconDiskCacheDir = File(cacheDir, "calm_icons").apply { mkdirs() }
-    private val hueCache = ConcurrentHashMap<String, Int>()
-    private val iconCache = ConcurrentHashMap<String, Bitmap>()
-    private val maskedIconCache = ConcurrentHashMap<String, Bitmap>()
+    private val hueCache = BoundedMemoryCache<String, Int>(maxMemoryCacheEntries)
+    private val iconCache = BoundedMemoryCache<String, Bitmap>(maxMemoryCacheEntries)
+    private val maskedIconCache = BoundedMemoryCache<String, Bitmap>(maxMemoryCacheEntries)
     private val pendingHueKeys = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
-    private val hueExecutor = Executors.newSingleThreadExecutor()
+    @Volatile
+    private var shutdown = false
     @Volatile
     private var onHueResolved: Runnable? = null
 
@@ -43,7 +48,7 @@ class AppIconRepository(
             }
             val generated = profileIcon ?: runCatching {
                 packageManager.getApplicationIcon(packageName).toUnmaskedIconBitmap()
-            }.getOrNull() ?: return null
+            }.getOrNull() ?: return@getOrPut null
             cacheIcon("unmasked", identityKey, generated)
             generated
         }
@@ -62,7 +67,7 @@ class AppIconRepository(
             }
             val generated = profileIcon ?: runCatching {
                 packageManager.getApplicationIcon(packageName).toBitmap()
-            }.getOrNull() ?: return null
+            }.getOrNull() ?: return@getOrPut null
             cacheIcon("masked", identityKey, generated)
             generated
         }
@@ -91,18 +96,30 @@ class AppIconRepository(
         pendingHueKeys.clear()
     }
 
+    fun shutdown() {
+        shutdown = true
+        onHueResolved = null
+        invalidate()
+        hueExecutor.shutdownNow()
+    }
+
     private fun scheduleHueResolution(identityKey: String, packageName: String, userHandle: UserHandle?) {
+        if (shutdown) return
         if (!pendingHueKeys.add(identityKey)) return
-        hueExecutor.execute {
-            val hue = computeAppHue(identityKey, packageName, userHandle)
-            if (hue != 0) {
-                hueCache[identityKey] = hue
-                settings.cacheAppHue(identityKey, hue)
+        try {
+            hueExecutor.execute {
+                val hue = computeAppHue(identityKey, packageName, userHandle)
+                if (!shutdown && hue != 0) {
+                    hueCache[identityKey] = hue
+                    settings.cacheAppHue(identityKey, hue)
+                }
+                pendingHueKeys.remove(identityKey)
+                if (!shutdown && hue != 0) {
+                    onHueResolved?.run()
+                }
             }
+        } catch (_: RejectedExecutionException) {
             pendingHueKeys.remove(identityKey)
-            if (hue != 0) {
-                onHueResolved?.run()
-            }
         }
     }
 
@@ -132,5 +149,9 @@ class AppIconRepository(
     private fun String.sha256(): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(toByteArray(Charsets.UTF_8))
         return digest.joinToString("") { byte -> "%02x".format(byte) }
+    }
+
+    private companion object {
+        const val DEFAULT_MEMORY_CACHE_ENTRIES = 96
     }
 }

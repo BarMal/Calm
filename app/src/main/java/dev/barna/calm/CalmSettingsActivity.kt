@@ -83,6 +83,9 @@ class CalmSettingsActivity : ComponentActivity() {
         destroyed = true
         mainHandler.removeCallbacks(deferredRender)
         appLoadExecutor.shutdownNow()
+        if (::appRepository.isInitialized) {
+            appRepository.shutdown()
+        }
         super.onDestroy()
     }
 

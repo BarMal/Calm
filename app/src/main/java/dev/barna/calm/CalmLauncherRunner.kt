@@ -307,6 +307,7 @@ class CalmLauncherRunner(
     private var pageOverviewOverlay: View? = null
     private val pageOverviewHiddenViews = ArrayList<View>()
     private var reopenPageOverviewAfterRender = false
+    private var reopenPageOverviewFocusKey: String? = null
     private val currentUiState: LauncherRenderModel?
         get() = launcherStateViewModel.uiState.value.renderModel
     private var activePreferences: LauncherUiPreferences = settings.uiPreferences()
@@ -578,7 +579,9 @@ class CalmLauncherRunner(
         val pages = state.pages
         val initialPage = resolveInitialPage(pages)
         val reopenOverview = reopenPageOverviewAfterRender
+        val reopenOverviewFocusKey = reopenPageOverviewFocusKey
         reopenPageOverviewAfterRender = false
+        reopenPageOverviewFocusKey = null
 
         val screen = object : FrameLayout(activity) {
             private var overviewScale = 1f
@@ -734,7 +737,7 @@ class CalmLauncherRunner(
         }
         schedulePagePrewarm(pager, pagerAdapter, pages.size, initialPage)
         if (reopenOverview) {
-            screen.post { showPageOverview(screen, state, pages, pager.currentItem, haptic = false) }
+            screen.post { showPageOverview(screen, state, pages, pager.currentItem, haptic = false, focusPageKey = reopenOverviewFocusKey) }
         }
     }
 
@@ -892,6 +895,7 @@ class CalmLauncherRunner(
         pages: List<ChapterPage>,
         selectedIndex: Int,
         haptic: Boolean = true,
+        focusPageKey: String? = null,
     ) {
         if (pageOverviewOverlay != null || pages.isEmpty()) return
         focusOverlay.dismiss(false)
@@ -925,6 +929,12 @@ class CalmLauncherRunner(
         val snapshotAdapter = currentPagerAdapter
         val entries = pageOverviewEntries(pages)
         val selectedEntryIndex = pageOverviewSelectedEntryIndex(entries, selectedIndex)
+        val focusEntryIndex = focusPageKey
+            ?.let { key -> pages.indexOfFirst { page -> page.key == key } }
+            ?.takeIf { index -> index >= 0 }
+            ?.let { index -> pageOverviewSelectedEntryIndex(entries, index) }
+            ?.takeIf { index -> index >= 0 }
+            ?: selectedEntryIndex
         entries.forEachIndexed { entryIndex, entry ->
             val card = when (entry) {
                 is PageOverviewEntry.Page -> {
@@ -962,7 +972,7 @@ class CalmLauncherRunner(
         pageOverviewOverlay = overlay
         overlay.animate().alpha(1f).setDuration(160L).start()
         scroller.post {
-            scrollPageOverviewToCard(scroller, selectedEntryIndex, cardWidth, smooth = true)
+            scrollPageOverviewToCard(scroller, focusEntryIndex, cardWidth, smooth = false)
         }
     }
 
@@ -1239,7 +1249,7 @@ class CalmLauncherRunner(
         editingClassicPageId = page.id
         selectPage(page.key)
         Toast.makeText(activity, "Added ${page.title}", Toast.LENGTH_SHORT).show()
-        renderAndReopenPageOverview()
+        renderAndReopenPageOverview(page.key)
     }
 
     private fun addPeoplePageFromOverview(pages: List<ChapterPage>) {
@@ -1290,11 +1300,12 @@ class CalmLauncherRunner(
         }
         Toast.makeText(activity, "$label is already added", Toast.LENGTH_SHORT).show()
         selectPage(pages[index].key)
-        renderAndReopenPageOverview()
+        renderAndReopenPageOverview(pages[index].key)
     }
 
-    private fun renderAndReopenPageOverview() {
+    private fun renderAndReopenPageOverview(focusPageKey: String? = null) {
         reopenPageOverviewAfterRender = true
+        reopenPageOverviewFocusKey = focusPageKey
         render()
     }
 
@@ -1593,14 +1604,14 @@ class CalmLauncherRunner(
             if (!settings.setDefaultClassicPage(it.id)) return
             settings.setDefaultHomeSlot(PageSlot.CLASSIC_PAGES)
             Toast.makeText(activity, "${it.title} is now home", Toast.LENGTH_SHORT).show()
-            renderAndReopenPageOverview()
+            renderAndReopenPageOverview(page.key)
             return
         }
         val slot = PageArranger.slotOf(page)
         if (slot == PageSlot.NOTIFICATIONS) return
         settings.setDefaultHomeSlot(slot)
         Toast.makeText(activity, "${page.title} is now home", Toast.LENGTH_SHORT).show()
-        renderAndReopenPageOverview()
+        renderAndReopenPageOverview(page.key)
     }
 
     private fun customisePageFromOverview(page: ChapterPage) {
@@ -1616,17 +1627,18 @@ class CalmLauncherRunner(
     }
 
     private fun deletePageAction(source: View, page: ChapterPage, index: Int, entryIndex: Int, pages: List<ChapterPage>): ContextAction? {
+        val nextFocusKey = pages.getOrNull(index + 1)?.key ?: pages.getOrNull(index - 1)?.key
         page.classicPage?.let { classicPage ->
             return ContextAction("Delete", Runnable {
                 animatePageOverviewRemoval(source, entryIndex, index, pages) {
-                    removeClassicPageFromOverview(classicPage)
+                    removeClassicPageFromOverview(classicPage, nextFocusKey)
                 }
             }, ContextActionCloseBehavior.REMOVE_CARD)
         }
         page.chapter?.let { chapter ->
             return ContextAction("Remove", Runnable {
                 animatePageOverviewRemoval(source, entryIndex, index, pages) {
-                    hideNotificationPageFromOverview(chapter)
+                    hideNotificationPageFromOverview(chapter, nextFocusKey)
                 }
             }, ContextActionCloseBehavior.REMOVE_CARD)
         }
@@ -1636,7 +1648,7 @@ class CalmLauncherRunner(
             animatePageOverviewRemoval(source, entryIndex, index, pages) {
                 if (settings.contactsPageEnabled()) settings.toggleContactsPage()
                 Toast.makeText(activity, "Removed People page", Toast.LENGTH_SHORT).show()
-                renderAndReopenPageOverview()
+                renderAndReopenPageOverview(nextFocusKey)
             }
         }, ContextActionCloseBehavior.REMOVE_CARD)
     }
@@ -1683,7 +1695,7 @@ class CalmLauncherRunner(
         }, PAGE_OVERVIEW_REMOVE_ANIMATION_MS)
     }
 
-    private fun removeClassicPageFromOverview(page: ClassicLauncherPageDefinition) {
+    private fun removeClassicPageFromOverview(page: ClassicLauncherPageDefinition, focusPageKey: String?) {
         val removed = settings.removeClassicPage(page.id) ?: return
         if (editingClassicPageId == removed.id) {
             editingClassicPageId = null
@@ -1693,13 +1705,13 @@ class CalmLauncherRunner(
             .filter { item -> item.type == ClassicGridItemType.WIDGET }
             .forEach(classicWidgetHostController::deleteWidget)
         Toast.makeText(activity, "Removed ${removed.title}", Toast.LENGTH_SHORT).show()
-        renderAndReopenPageOverview()
+        renderAndReopenPageOverview(focusPageKey)
     }
 
-    private fun hideNotificationPageFromOverview(chapter: AppChapter) {
+    private fun hideNotificationPageFromOverview(chapter: AppChapter, focusPageKey: String?) {
         settings.exclude(chapter)
         Toast.makeText(activity, "Removed ${chapter.label}", Toast.LENGTH_SHORT).show()
-        renderAndReopenPageOverview()
+        renderAndReopenPageOverview(focusPageKey)
     }
 
     private fun reorderPageFromOverview(
@@ -1717,9 +1729,8 @@ class CalmLauncherRunner(
             val targetIndex = state.classicPages.indexOfFirst { it.id == targetClassic.id }
             if (targetIndex != -1) {
                 if (settings.moveClassicPage(classic.id, targetIndex)) {
-                    selectPage(classic.key)
                     Toast.makeText(activity, "Moved ${classic.title}", Toast.LENGTH_SHORT).show()
-                    renderAndReopenPageOverview()
+                    renderAndReopenPageOverview(classic.key)
                     return true
                 }
             }
@@ -1733,7 +1744,7 @@ class CalmLauncherRunner(
         val next = layout.order.toMutableList().apply { add(to, removeAt(from)) }
         settings.setPageLayoutOrder(next)
         Toast.makeText(activity, "Moved ${page.title}", Toast.LENGTH_SHORT).show()
-        renderAndReopenPageOverview()
+        renderAndReopenPageOverview(page.key)
         return true
     }
 

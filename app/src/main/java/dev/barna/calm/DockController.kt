@@ -1,11 +1,14 @@
 package dev.barna.calm
 
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -18,8 +21,11 @@ class DockController(
     private val drawables: CalmDrawables,
     private val resolveIcon: (AppEntry) -> Bitmap?,
     private val openAppEntry: (AppEntry) -> Unit,
+    private val openNotificationPage: (AppChapter) -> Unit,
 ) {
-    fun buildDock(apps: List<AppEntry>, config: DockConfig): View {
+    private val notificationResolver = DockNotificationResolver()
+
+    fun buildDock(apps: List<AppEntry>, config: DockConfig, chapters: List<AppChapter>): View {
         val row = LinearLayout(activity).apply {
             tag = CalmAnimationTags.CHROME
             orientation = LinearLayout.HORIZONTAL
@@ -28,8 +34,9 @@ class DockController(
             clipToPadding = false
             apps.take(config.itemCount).forEach { app ->
                 val width = DockConfig.itemWidthDp(config.itemSpan)
+                val target = notificationResolver.targetFor(app, chapters)
                 addView(
-                    dockItem(app, config),
+                    dockItem(app, config, target),
                     LinearLayout.LayoutParams(activity.dp(width), activity.dp(56)).apply {
                         marginStart = activity.dp(6)
                         marginEnd = activity.dp(6)
@@ -52,36 +59,43 @@ class DockController(
         }
     }
 
-    private fun dockItem(app: AppEntry, config: DockConfig): View {
+    private fun dockItem(app: AppEntry, config: DockConfig, target: DockNotificationTarget?): View {
         return if (DockConfig.showsItemLabels(config.itemSpan)) {
-            dockCard(app)
+            dockCard(app, target)
         } else {
-            dockIcon(app)
+            dockIcon(app, target)
         }
     }
 
-    private fun dockIcon(app: AppEntry): View {
-        return ImageButton(activity).apply {
+    private fun dockIcon(app: AppEntry, target: DockNotificationTarget?): View {
+        val button = ImageButton(activity).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(18))
             setPadding(activity.dp(6), activity.dp(6), activity.dp(6), activity.dp(6))
-            contentDescription = app.label
+            contentDescription = dockDescription(app, target)
             tooltipText = app.label
             resolveIcon(app)?.let { icon ->
                 setImageDrawable(RoundedBitmapDrawable(icon, activity.dp(14).toFloat()))
             }
-            layoutParams = ViewGroup.LayoutParams(activity.dp(56), activity.dp(56))
             setOnClickListener { openAppEntry(app) }
+            installNotificationLongPress(target)
+        }
+        return FrameLayout(activity).apply {
+            clipChildren = false
+            clipToPadding = false
+            addView(button, FrameLayout.LayoutParams(activity.dp(56), activity.dp(56)))
+            addNotificationBadge(target)
+            installNotificationLongPress(target)
         }
     }
 
-    private fun dockCard(app: AppEntry): View {
-        return LinearLayout(activity).apply {
+    private fun dockCard(app: AppEntry, target: DockNotificationTarget?): View {
+        val card = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(18))
             setPadding(activity.dp(8), activity.dp(6), activity.dp(10), activity.dp(6))
-            contentDescription = app.label
+            contentDescription = dockDescription(app, target)
             tooltipText = app.label
             resolveIcon(app)?.let { icon ->
                 addView(
@@ -90,24 +104,84 @@ class DockController(
                         setImageDrawable(RoundedBitmapDrawable(icon, activity.dp(12).toFloat()))
                     },
                     LinearLayout.LayoutParams(activity.dp(42), activity.dp(42)).apply {
-                        marginEnd = activity.dp(8)
+                        marginEnd = activity.dp(7)
                     },
                 )
             }
             addView(
-                TextView(activity).apply {
-                    text = app.label
-                    setTextColor(CalmTheme.INK)
-                    textSize = 13f
-                    typeface = Typeface.DEFAULT
-                    setTypeface(typeface, Typeface.BOLD)
-                    maxLines = 2
-                    ellipsize = TextUtils.TruncateAt.END
-                    includeFontPadding = false
+                LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(dockText(app.label, 13, Typeface.BOLD, CalmTheme.INK, 1))
+                    val detail = target?.summary?.let { summary ->
+                        summary.latestText.ifBlank { summary.latestTitle }
+                    }
+                    if (!detail.isNullOrBlank()) {
+                        addView(dockText(detail, 11, Typeface.NORMAL, CalmTheme.MUTED_INK, 1).apply {
+                            setPadding(0, activity.dp(2), 0, 0)
+                        })
+                    }
                 },
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
             )
             setOnClickListener { openAppEntry(app) }
+            installNotificationLongPress(target)
         }
+        return FrameLayout(activity).apply {
+            clipChildren = false
+            clipToPadding = false
+            addView(card, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            addNotificationBadge(target)
+            installNotificationLongPress(target)
+        }
+    }
+
+    private fun dockText(textValue: String, sp: Int, style: Int, color: Int, maxLineCount: Int): TextView {
+        return TextView(activity).apply {
+            text = textValue
+            setTextColor(color)
+            textSize = sp.toFloat()
+            typeface = Typeface.DEFAULT
+            setTypeface(typeface, style)
+            maxLines = maxLineCount
+            ellipsize = TextUtils.TruncateAt.END
+            includeFontPadding = false
+        }
+    }
+
+    private fun View.installNotificationLongPress(target: DockNotificationTarget?) {
+        if (target == null) return
+        setOnLongClickListener {
+            openNotificationPage(target.chapter)
+            true
+        }
+    }
+
+    private fun FrameLayout.addNotificationBadge(target: DockNotificationTarget?) {
+        val count = target?.summary?.count ?: return
+        addView(
+            TextView(activity).apply {
+                text = count.coerceAtMost(99).toString()
+                setTextColor(Color.WHITE)
+                textSize = 10f
+                typeface = Typeface.DEFAULT
+                setTypeface(typeface, Typeface.BOLD)
+                gravity = Gravity.CENTER
+                includeFontPadding = false
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = activity.dp(999).toFloat()
+                    setColor(Color.rgb(196, 57, 72))
+                }
+            },
+            FrameLayout.LayoutParams(activity.dp(20), activity.dp(20), Gravity.TOP or Gravity.END).apply {
+                topMargin = -activity.dp(2)
+                marginEnd = -activity.dp(2)
+            },
+        )
+    }
+
+    private fun dockDescription(app: AppEntry, target: DockNotificationTarget?): String {
+        val count = target?.summary?.count ?: return app.label
+        return "${app.label}, $count ${if (count == 1) "notification" else "notifications"}"
     }
 }

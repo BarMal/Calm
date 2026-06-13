@@ -153,6 +153,27 @@ class LauncherContextActionFactoryTest {
     }
 
     @Test
+    fun setCategoryActionAbsentWhenNoCategoriesConfigured() {
+        val factory = factory(ArrayList())
+        val actions = factory.appActions(app("maps.pkg"), pinned = false)
+        assertEquals(false, actions.any { it.label == "Set category" })
+    }
+
+    @Test
+    fun setCategoryActionPresentAndFiresCallbackWhenCategoriesExist() {
+        val events = ArrayList<String>()
+        val factory = factory(
+            events,
+            categoryCount = { 2 },
+            assignCategory = { app -> events.add("assignCategory:${app.packageName}") },
+        )
+        val actions = factory.appActions(app("maps.pkg"), pinned = false)
+        assertEquals(true, actions.any { it.label == "Set category" })
+        actions.first { it.label == "Set category" }.action.run()
+        assertEquals(listOf("assignCategory:maps.pkg"), events)
+    }
+
+    @Test
     fun dockActionOnlyRequiresDockCallbacks() {
         val events = ArrayList<String>()
         val factory = LauncherContextActionFactory(
@@ -175,6 +196,8 @@ class LauncherContextActionFactoryTest {
         shortcuts: List<AppShortcutEntry> = emptyList(),
         dockedKeys: Set<String> = emptySet(),
         classicPageKeys: Set<String> = emptySet(),
+        categoryCount: () -> Int = { 0 },
+        assignCategory: (AppEntry) -> Unit = {},
     ): LauncherContextActionFactory {
         return LauncherContextActionFactory(
             notificationCallbacks = NotificationContextActionCallbacks(
@@ -197,6 +220,7 @@ class LauncherContextActionFactoryTest {
                 hideApp = { events.add("hide:${it.packageName}") },
                 appShortcuts = { shortcuts },
                 launchShortcut = { events.add("shortcut:${it.id}") },
+                assignCategory = assignCategory,
             ),
             dockCallbacks = DockContextActionCallbacks(
                 isDockItem = { it in dockedKeys },
@@ -207,6 +231,7 @@ class LauncherContextActionFactoryTest {
                 isClassicPageApp = { it in classicPageKeys },
                 addAppToClassicPage = { events.add("addClassic:${it.identityKey}") },
             ),
+            categoryCount = categoryCount,
         )
     }
 

@@ -7,7 +7,7 @@ class LauncherContextActionFactoryTest {
     @Test
     fun appActionsPinAndUnpinAccordingToPinnedState() {
         val events = ArrayList<String>()
-        val factory = LauncherContextActionFactory(callbacks(events))
+        val factory = factory(events)
         val app = app("maps.pkg")
 
         val pinActions = factory.appActions(app, pinned = false)
@@ -27,7 +27,7 @@ class LauncherContextActionFactoryTest {
     @Test
     fun appActionsHideRemovesCard() {
         val events = ArrayList<String>()
-        val factory = LauncherContextActionFactory(callbacks(events))
+        val factory = factory(events)
         val app = app("maps.pkg")
 
         val actions = factory.appActions(app, pinned = false)
@@ -47,7 +47,7 @@ class LauncherContextActionFactoryTest {
             shortcut("Scan", "scan"),
             shortcut("Overflow", "overflow"),
         )
-        val factory = LauncherContextActionFactory(callbacks(events, shortcuts))
+        val factory = factory(events, shortcuts)
         val app = app("maps.pkg")
 
         val actions = factory.appActions(app, pinned = false)
@@ -65,7 +65,7 @@ class LauncherContextActionFactoryTest {
     @Test
     fun appActionsRemoveFromDockWhenAlreadyDocked() {
         val events = ArrayList<String>()
-        val factory = LauncherContextActionFactory(callbacks(events, dockedKeys = setOf("maps.pkg")))
+        val factory = factory(events, dockedKeys = setOf("maps.pkg"))
         val app = app("maps.pkg")
 
         val actions = factory.appActions(app, pinned = false)
@@ -78,7 +78,7 @@ class LauncherContextActionFactoryTest {
     @Test
     fun appActionsAddToClassicPageWhenNotAlreadyPlaced() {
         val events = ArrayList<String>()
-        val factory = LauncherContextActionFactory(callbacks(events))
+        val factory = factory(events)
         val app = app("maps.pkg")
 
         val actions = factory.appActions(app, pinned = false)
@@ -91,7 +91,7 @@ class LauncherContextActionFactoryTest {
     @Test
     fun appActionsSkipClassicPageActionWhenAlreadyPlaced() {
         val events = ArrayList<String>()
-        val factory = LauncherContextActionFactory(callbacks(events, classicPageKeys = setOf("maps.pkg")))
+        val factory = factory(events, classicPageKeys = setOf("maps.pkg"))
         val app = app("maps.pkg")
 
         val actions = factory.appActions(app, pinned = false)
@@ -102,7 +102,7 @@ class LauncherContextActionFactoryTest {
     @Test
     fun calendarActionsReflectPermissionState() {
         val events = ArrayList<String>()
-        val factory = LauncherContextActionFactory(callbacks(events))
+        val factory = factory(events)
         val event = CalendarEvent("Standup", begin = 10L, end = 20L, location = "", allDay = false)
 
         val deniedActions = factory.calendarActions(event, hasCalendarPermission = false)
@@ -121,7 +121,7 @@ class LauncherContextActionFactoryTest {
     @Test
     fun notificationActionsKeepSystemActionsAndCardRemovalBehaviour() {
         val events = ArrayList<String>()
-        val factory = LauncherContextActionFactory(callbacks(events))
+        val factory = factory(events)
         val notificationAction = NotificationAction("Reply", intent = null, remoteInputs = emptyList())
         val notification = notification("note-1", notificationAction)
         val item = NotificationCardItem(listOf(notification))
@@ -152,40 +152,68 @@ class LauncherContextActionFactoryTest {
         )
     }
 
-    private fun callbacks(
+    @Test
+    fun dockActionOnlyRequiresDockCallbacks() {
+        val events = ArrayList<String>()
+        val factory = LauncherContextActionFactory(
+            dockCallbacks = DockContextActionCallbacks(
+                isDockItem = { it == "maps.pkg" },
+                addDockItem = { key, label -> events.add("addDock:$key:$label") },
+                removeDockItem = { key, label -> events.add("removeDock:$key:$label") },
+            ),
+        )
+
+        val action = factory.dockAction("maps.pkg", "Maps")
+
+        assertEquals("Remove from dock", action.label)
+        action.action.run()
+        assertEquals(listOf("removeDock:maps.pkg:Maps"), events)
+    }
+
+    private fun factory(
         events: MutableList<String>,
         shortcuts: List<AppShortcutEntry> = emptyList(),
         dockedKeys: Set<String> = emptySet(),
         classicPageKeys: Set<String> = emptySet(),
-    ): LauncherContextActionCallbacks {
-        return LauncherContextActionCallbacks(
-            openNotification = { events.add("openNotification:${it.key}") },
-            openPackage = { events.add("openPackage:${it.packageName}") },
-            dismissNotificationItem = { events.add("dismiss:${it.primary.key}") },
-            clearChapter = { events.add("clear:${it.packageName}") },
-            performNotificationAction = { events.add("notificationAction:${it.label}") },
-            openCalendarEvent = { events.add("calendar:${it.title}") },
-            requestCalendarAccess = { events.add("requestCalendarAccess") },
-            openSettings = { events.add("settings") },
-            openAppEntry = { events.add("openApp:${it.packageName}") },
-            pinApp = { events.add("pin:${it.packageName}") },
-            unpinApp = { events.add("unpin:${it.packageName}") },
-            openAppInfo = { events.add("info:${it.packageName}") },
-            hideApp = { events.add("hide:${it.packageName}") },
-            appShortcuts = { shortcuts },
-            launchShortcut = { events.add("shortcut:${it.id}") },
-            isDockItem = { it in dockedKeys },
-            addDockItem = { key, label -> events.add("addDock:$key:$label") },
-            removeDockItem = { key, label -> events.add("removeDock:$key:$label") },
-            isClassicPageApp = { it in classicPageKeys },
-            addAppToClassicPage = { events.add("addClassic:${it.identityKey}") },
+    ): LauncherContextActionFactory {
+        return LauncherContextActionFactory(
+            notificationCallbacks = NotificationContextActionCallbacks(
+                openNotification = { events.add("openNotification:${it.key}") },
+                openPackage = { events.add("openPackage:${it.packageName}") },
+                dismissNotificationItem = { events.add("dismiss:${it.primary.key}") },
+                clearChapter = { events.add("clear:${it.packageName}") },
+                performNotificationAction = { events.add("notificationAction:${it.label}") },
+            ),
+            calendarCallbacks = CalendarContextActionCallbacks(
+                openCalendarEvent = { events.add("calendar:${it.title}") },
+                requestCalendarAccess = { events.add("requestCalendarAccess") },
+                openSettings = { events.add("settings") },
+            ),
+            appCallbacks = AppContextActionCallbacks(
+                openAppEntry = { events.add("openApp:${it.packageName}") },
+                pinApp = { events.add("pin:${it.packageName}") },
+                unpinApp = { events.add("unpin:${it.packageName}") },
+                openAppInfo = { events.add("info:${it.packageName}") },
+                hideApp = { events.add("hide:${it.packageName}") },
+                appShortcuts = { shortcuts },
+                launchShortcut = { events.add("shortcut:${it.id}") },
+            ),
+            dockCallbacks = DockContextActionCallbacks(
+                isDockItem = { it in dockedKeys },
+                addDockItem = { key, label -> events.add("addDock:$key:$label") },
+                removeDockItem = { key, label -> events.add("removeDock:$key:$label") },
+            ),
+            classicPageCallbacks = ClassicPageContextActionCallbacks(
+                isClassicPageApp = { it in classicPageKeys },
+                addAppToClassicPage = { events.add("addClassic:${it.identityKey}") },
+            ),
         )
     }
 
     @Test
     fun notificationActionsSkipDockForNonLaunchableChapters() {
         val events = ArrayList<String>()
-        val factory = LauncherContextActionFactory(callbacks(events))
+        val factory = factory(events)
         val notification = notification("note-1", NotificationAction("Reply", intent = null, remoteInputs = emptyList()))
         val item = NotificationCardItem(listOf(notification))
         val chapter = chapter("chat.pkg", launchable = false)

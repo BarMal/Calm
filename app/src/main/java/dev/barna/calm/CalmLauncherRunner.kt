@@ -125,6 +125,7 @@ class CalmLauncherRunner(
                     toast(R.string.toast_shortcut_unavailable)
                 }
             },
+            assignCategory = appMutationHandler::showCategoryPicker,
         ),
         dockCallbacks = DockContextActionCallbacks(
             isDockItem = appMutationHandler::isDockItem,
@@ -136,6 +137,7 @@ class CalmLauncherRunner(
             addAppToClassicPage = appMutationHandler::addAppToClassicPage,
         ),
         labels = LauncherContextActionLabels.from(activity),
+        categoryCount = { settings.categoryList().count { it.enabled } },
     )
     private val cardStackController = CardStackController(activity, mainHandler, ::performCardScrollHaptic)
     private val pageRemovalPlanner = ChapterPageRemovalPlanner()

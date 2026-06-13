@@ -94,6 +94,28 @@ class LauncherAppMutationHandler(
         }
     }
 
+    fun showCategoryPicker(app: AppEntry) {
+        val categories = settings.categoryList().filter { it.enabled }
+        if (categories.isEmpty()) {
+            Toast.makeText(activity, "No categories configured.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val currentIds = settings.appCategoryAssignments()[app.identityKey] ?: emptyList()
+        val selected = BooleanArray(categories.size) { i -> categories[i].id in currentIds }
+        GoogleInteractionStyle.dialogBuilder(activity)
+            .setTitle(app.label)
+            .setMultiChoiceItems(categories.map { it.title }.toTypedArray(), selected) { _, which, checked ->
+                selected[which] = checked
+            }
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Done") { _, _ ->
+                val chosen = categories.filterIndexed { i, _ -> selected[i] }.map { it.id }
+                settings.setAppCategoryIds(app.identityKey, chosen)
+                render()
+            }
+            .show()
+    }
+
     fun showApp(appKey: String) {
         settings.showApp(appKey)
         render()

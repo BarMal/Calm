@@ -18,11 +18,22 @@ val hasReleaseSigning = signingKeystoreFile?.exists() == true &&
     !signingKeyAlias.isNullOrBlank() &&
     !signingKeyPassword.isNullOrBlank()
 
+val ciDebugKeystoreFile = signingValue("calmCiDebugKeystoreFile", "CALM_CI_DEBUG_KEYSTORE_FILE")?.let(rootProject::file)
+val hasCiDebugSigning = ciDebugKeystoreFile?.exists() == true
+
 android {
     namespace = "dev.barna.calm"
     compileSdk = 36
 
     signingConfigs {
+        if (hasCiDebugSigning) {
+            create("ciDebugSigning") {
+                storeFile = ciDebugKeystoreFile
+                storePassword = "calmdebug"
+                keyAlias = "calm-debug"
+                keyPassword = "calmdebug"
+            }
+        }
         if (hasReleaseSigning) {
             create("releaseSigning") {
                 storeFile = signingKeystoreFile
@@ -45,6 +56,9 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            if (hasCiDebugSigning) {
+                signingConfig = signingConfigs.getByName("ciDebugSigning")
+            }
         }
         release {
             isMinifyEnabled = true

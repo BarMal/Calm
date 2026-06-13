@@ -654,6 +654,7 @@ class DockController(
         addView(
             TextView(activity).apply {
                 text = count.coerceAtMost(99).toString()
+                contentDescription = AccessibilityCopy.notificationBadgeDescription(count)
                 setTextColor(Color.WHITE)
                 textSize = 10f
                 typeface = Typeface.DEFAULT

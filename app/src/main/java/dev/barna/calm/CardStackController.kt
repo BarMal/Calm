@@ -30,6 +30,7 @@ class CardStackController(
     ): ScrollView {
         val scroller = ScrollView(context).apply {
             tag = CalmAnimationTags.CARD_STACK
+            contentDescription = AccessibilityCopy.cardStackDescription(cards.firstOrNull()?.text?.toString())
             isFillViewport = true
             overScrollMode = android.view.View.OVER_SCROLL_NEVER
             isVerticalScrollBarEnabled = false

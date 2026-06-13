@@ -482,6 +482,7 @@ class FocusOverlayController(
 
     private fun contextActionButton(action: ContextAction): TextView {
         return labelFactory(action.label, 14, CalmTheme.INK, Typeface.BOLD).apply {
+            contentDescription = action.label
             gravity = android.view.Gravity.CENTER
             setSingleLine(true)
             ellipsize = TextUtils.TruncateAt.END

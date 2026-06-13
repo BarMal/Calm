@@ -1190,6 +1190,7 @@ class CalmLauncherRunner(
             gravity = Gravity.CENTER
             clipChildren = false
             clipToPadding = false
+            contentDescription = "$title. Tap to add."
             setPadding(activity.dp(16), activity.dp(16), activity.dp(16), activity.dp(16))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
@@ -1236,6 +1237,7 @@ class CalmLauncherRunner(
             orientation = LinearLayout.VERTICAL
             clipChildren = false
             clipToPadding = false
+            contentDescription = "Notifications bundle. Tap to choose a notification page."
             setPadding(activity.dp(12), activity.dp(12), activity.dp(12), activity.dp(12))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
@@ -1962,6 +1964,7 @@ class CalmLauncherRunner(
             orientation = LinearLayout.VERTICAL
             clipChildren = false
             clipToPadding = false
+            contentDescription = AccessibilityCopy.pageOverviewCardDescription(page.title)
             setPadding(activity.dp(12), activity.dp(12), activity.dp(12), activity.dp(12))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE

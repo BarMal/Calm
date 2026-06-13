@@ -439,6 +439,7 @@ class CalmSettingsActivity : ComponentActivity() {
             summary = "Organise the app library into sections by category.",
             checked = settings.appGroupingEnabled(),
         ) { settings.setAppGroupingEnabled(!settings.appGroupingEnabled()); requestRender() })
+        content.addView(actionRow("Manage categories", categoryListSummary()) { showCategoriesDialog() })
         content.addView(actionRow("Auto-categorise apps", categoriesSummary()) {
             val apps = cachedAppEntries ?: run {
                 Toast.makeText(this, "App list is still loading.", Toast.LENGTH_SHORT).show()
@@ -1536,10 +1537,108 @@ class CalmSettingsActivity : ComponentActivity() {
             .show()
     }
 
+    private fun categoryListSummary(): String {
+        val categories = settings.categoryList()
+        val enabled = categories.count { it.enabled }
+        return if (enabled == categories.size) {
+            "${categories.size} ${if (categories.size == 1) "category" else "categories"}."
+        } else {
+            "$enabled of ${categories.size} categories enabled."
+        }
+    }
+
     private fun categoriesSummary(): String {
         val assignments = settings.appCategoryAssignments()
         if (assignments.isEmpty()) return "Automatically assign apps to categories."
         return "${assignments.size} ${if (assignments.size == 1) "app" else "apps"} categorised."
+    }
+
+    private fun showCategoriesDialog() {
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
+        lateinit var rebuild: () -> Unit
+        rebuild = {
+            list.removeAllViews()
+            list.addView(miniButton("Add category") { showAddCategoryDialog(rebuild) }.apply {
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    bottomMargin = dp(8)
+                }
+            })
+            val categories = settings.categoryList()
+            categories.forEachIndexed { index, category ->
+                list.addView(categoryRow(category, index, categories.lastIndex, rebuild))
+            }
+        }
+        rebuild()
+        GoogleInteractionStyle.dialogBuilder(this)
+            .setTitle("Categories")
+            .setView(ScrollView(this).apply { addView(list) })
+            .setPositiveButton(R.string.action_done) { _, _ -> requestRender() }
+            .show()
+            .setOnDismissListener { requestRender() }
+    }
+
+    private fun showAddCategoryDialog(rebuild: () -> Unit) {
+        val input = EditText(this).apply {
+            hint = "Category name"
+            setSingleLine(true)
+        }
+        GoogleInteractionStyle.dialogBuilder(this)
+            .setTitle("Add category")
+            .setView(input)
+            .setNegativeButton(R.string.action_cancel, null)
+            .setPositiveButton("Add") { _, _ ->
+                if (!settings.addCustomCategory(input.text?.toString().orEmpty())) {
+                    Toast.makeText(this, "Enter a unique category name.", Toast.LENGTH_SHORT).show()
+                }
+                rebuild()
+            }
+            .show()
+    }
+
+    private fun categoryRow(
+        category: AppCategory,
+        index: Int,
+        lastIndex: Int,
+        rebuild: () -> Unit,
+    ): View {
+        val defaultIds = AppCategory.DEFAULTS.map { it.id }.toSet()
+        val isDefault = category.id in defaultIds
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(8), 0, dp(8))
+            addView(
+                label(
+                    category.title,
+                    16,
+                    if (category.enabled) CalmTheme.INK else CalmTheme.MUTED_INK,
+                    Typeface.BOLD,
+                ),
+            )
+            addView(
+                LinearLayout(this@CalmSettingsActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(miniButton(if (category.enabled) "Enabled" else "Disabled") {
+                        settings.setCategoryEnabled(category.id, !category.enabled)
+                        rebuild()
+                    })
+                    addView(miniButton("Up") {
+                        settings.moveCategory(category.id, index - 1); rebuild()
+                    }.apply { isEnabled = index > 0; alpha = if (index > 0) 1f else 0.38f })
+                    addView(miniButton("Down") {
+                        settings.moveCategory(category.id, index + 1); rebuild()
+                    }.apply { isEnabled = index < lastIndex; alpha = if (index < lastIndex) 1f else 0.38f })
+                    if (!isDefault) {
+                        addView(miniButton("Remove") {
+                            settings.removeCategory(category.id); rebuild()
+                        })
+                    }
+                },
+            )
+        }
     }
 
     private fun dockAppsSummary(): String {

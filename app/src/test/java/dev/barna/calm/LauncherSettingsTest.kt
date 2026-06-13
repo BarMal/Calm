@@ -1205,4 +1205,66 @@ class LauncherSettingsTest {
         assertTrue(settings.pinnedPageEnabled())
         assertTrue(settings.uiPreferences().pinnedPageEnabled)
     }
+
+    // ---- category list management ----
+
+    @Test
+    fun addCustomCategoryAppendsToList() {
+        val before = settings.categoryList().size
+
+        assertTrue(settings.addCustomCategory("Shopping Tools"))
+
+        val after = settings.categoryList()
+        assertEquals(before + 1, after.size)
+        assertEquals("Shopping Tools", after.last().title)
+        assertTrue(after.last().enabled)
+    }
+
+    @Test
+    fun addCustomCategoryRejectsBlanksAndDuplicates() {
+        assertFalse(settings.addCustomCategory(""))
+        assertFalse(settings.addCustomCategory("   "))
+        assertFalse(settings.addCustomCategory("Communications"))
+    }
+
+    @Test
+    fun setCategoryEnabledTogglesEnabledFlag() {
+        val id = settings.categoryList().first().id
+        settings.setCategoryEnabled(id, false)
+        assertFalse(settings.categoryList().first { it.id == id }.enabled)
+        settings.setCategoryEnabled(id, true)
+        assertTrue(settings.categoryList().first { it.id == id }.enabled)
+    }
+
+    @Test
+    fun moveCategoryReordersTheList() {
+        val before = settings.categoryList()
+        val secondId = before[1].id
+        settings.moveCategory(secondId, 0)
+        assertEquals(secondId, settings.categoryList()[0].id)
+        assertEquals(before[0].id, settings.categoryList()[1].id)
+    }
+
+    @Test
+    fun removeCustomCategoryDeletesItAndCleansAssignments() {
+        settings.addCustomCategory("Hobbies")
+        val hobbyId = settings.categoryList().last().id
+        settings.setAppCategoryIds("com.chess", listOf(hobbyId))
+        assertEquals(listOf(hobbyId), settings.appCategoryAssignments()["com.chess"])
+
+        settings.removeCategory(hobbyId)
+
+        assertTrue(settings.categoryList().none { it.id == hobbyId })
+        assertNull(settings.appCategoryAssignments()["com.chess"])
+    }
+
+    @Test
+    fun removeDefaultCategoryIsIgnored() {
+        val before = settings.categoryList()
+        val defaultId = AppCategory.DEFAULTS.first().id
+
+        settings.removeCategory(defaultId)
+
+        assertEquals(before.map { it.id }, settings.categoryList().map { it.id })
+    }
 }

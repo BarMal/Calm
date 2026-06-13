@@ -830,6 +830,39 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         setAppCategoryAssignments(assignments)
     }
 
+    fun addCustomCategory(title: String): Boolean {
+        val trimmed = title.trim()
+        if (trimmed.isBlank()) return false
+        val current = categoryList()
+        val candidate = AppCategory.custom(trimmed)
+        if (current.any { it.id == candidate.id }) return false
+        setCategoryList(current + candidate)
+        return true
+    }
+
+    fun setCategoryEnabled(id: String, enabled: Boolean) {
+        val current = categoryList()
+        setCategoryList(current.map { if (it.id == id) it.copy(enabled = enabled) else it })
+    }
+
+    fun moveCategory(id: String, toIndex: Int) {
+        val current = categoryList().toMutableList()
+        val fromIndex = current.indexOfFirst { it.id == id }
+        if (fromIndex == -1 || toIndex < 0 || toIndex >= current.size) return
+        current.add(toIndex, current.removeAt(fromIndex))
+        setCategoryList(current)
+    }
+
+    fun removeCategory(id: String) {
+        val defaultIds = AppCategory.DEFAULTS.map { it.id }.toSet()
+        if (id in defaultIds) return
+        setCategoryList(categoryList().filter { it.id != id })
+        val cleaned = appCategoryAssignments()
+            .mapValues { (_, ids) -> ids.filter { it != id } }
+            .filterValues { it.isNotEmpty() }
+        setAppCategoryAssignments(cleaned)
+    }
+
     fun launcherChangeToken(): Int {
         return listOf(
             uiPreferences(),

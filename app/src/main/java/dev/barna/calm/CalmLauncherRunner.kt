@@ -784,13 +784,25 @@ class CalmLauncherRunner(
                 }
                 previousPageIndex = position
                 if (animTrigger.isSwipeInProgress && prev != position) {
-                    entryAnimator.animatePageExit(pager, prev)
+                    entryAnimator.animatePageExit(
+                        pager,
+                        prev,
+                        NavigationAnimationBudget.SWIPE_EXIT_ANIMATED_CARDS,
+                    )
                     // Trigger entry animation now — pager.currentItem reflects the new page here,
                     // but SCROLL_STATE_SETTLING fires before onPageSelected updates currentItem,
                     // so triggering at SETTLING would animate the wrong (outgoing) page.
                     val direction = currentNavigationDirection
                     animTrigger.onSwipePageChanged(pages[position].key, suppressedPageEntryKey)
-                        ?.let { pager.post { entryAnimator.animateCurrentPage(pager, direction) } }
+                        ?.let {
+                            pager.post {
+                                entryAnimator.animateCurrentPage(
+                                    pager,
+                                    direction,
+                                    NavigationAnimationBudget.SWIPE_ENTRY_ANIMATED_CARDS,
+                                )
+                            }
+                        }
                 }
                 selectPage(pages[position].key)
                 if (suppressedPageEntryKey != selectedPageKey) {
@@ -810,7 +822,15 @@ class CalmLauncherRunner(
                         // Handles swipe-back-to-same-page and overscroll past last page.
                         val direction = currentNavigationDirection
                         animTrigger.onSettling(pages[pager.currentItem].key, suppressedPageEntryKey)
-                            ?.let { pager.post { entryAnimator.animateCurrentPage(pager, direction) } }
+                            ?.let {
+                                pager.post {
+                                    entryAnimator.animateCurrentPage(
+                                        pager,
+                                        direction,
+                                        NavigationAnimationBudget.SWIPE_ENTRY_ANIMATED_CARDS,
+                                    )
+                                }
+                            }
                     }
                     ViewPager2.SCROLL_STATE_IDLE -> {
                         val currentPage = pages[pager.currentItem]

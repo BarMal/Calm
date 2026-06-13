@@ -8,18 +8,22 @@ import android.view.animation.DecelerateInterpolator
 import androidx.viewpager2.widget.ViewPager2
 
 class LauncherEntryAnimator(private val activity: MainActivity) {
-    fun animateCurrentPage(pager: ViewPager2, direction: Int = 0) {
+    fun animateCurrentPage(
+        pager: ViewPager2,
+        direction: Int = 0,
+        maxAnimatedCards: Int = NavigationAnimationBudget.DEFAULT_ENTRY_ANIMATED_CARDS,
+    ) {
         val recycler = pager.recyclerViewOrNull() ?: return
         for (index in 0 until recycler.childCount) {
             val child = recycler.getChildAt(index)
             if (recycler.getChildAdapterPosition(child) == pager.currentItem) {
-                child.post { animatePageEntryWhenReady(child, 0, direction) }
+                child.post { animatePageEntryWhenReady(child, 0, direction, maxAnimatedCards) }
                 return
             }
         }
     }
 
-    private fun animatePageEntryWhenReady(page: View, attempt: Int, direction: Int) {
+    private fun animatePageEntryWhenReady(page: View, attempt: Int, direction: Int, maxAnimatedCards: Int) {
         if (!page.isAttachedToWindow) return
         val panelViews = ArrayList<View>()
         val chromeViews = ArrayList<View>()
@@ -27,31 +31,37 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
         collectAnimatedViews(page, panelViews, chromeViews, cardStacks)
         val waitingStacks = cardStacks.filter(::isCardStackWaitingForFirstStyle)
         if (waitingStacks.isNotEmpty() && attempt < MAX_ENTRY_READY_RETRIES) {
-            page.postDelayed({ animatePageEntryWhenReady(page, attempt + 1, direction) }, ENTRY_READY_RETRY_DELAY_MS)
+            page.postDelayed({ animatePageEntryWhenReady(page, attempt + 1, direction, maxAnimatedCards) }, ENTRY_READY_RETRY_DELAY_MS)
             return
         }
-        animatePageEntry(panelViews, chromeViews, cardStacks - waitingStacks.toSet(), direction)
+        animatePageEntry(panelViews, chromeViews, cardStacks - waitingStacks.toSet(), direction, maxAnimatedCards)
     }
 
-    fun animatePageExit(pager: ViewPager2, pageIndex: Int) {
+    fun animatePageExit(
+        pager: ViewPager2,
+        pageIndex: Int,
+        maxAnimatedCards: Int = NavigationAnimationBudget.DEFAULT_EXIT_ANIMATED_CARDS,
+    ) {
         val recycler = pager.recyclerViewOrNull() ?: return
         for (index in 0 until recycler.childCount) {
             val child = recycler.getChildAt(index)
             if (recycler.getChildAdapterPosition(child) == pageIndex) {
-                animateCardsOut(child)
+                animateCardsOut(child, maxAnimatedCards)
                 return
             }
         }
     }
 
-    private fun animateCardsOut(page: View) {
+    private fun animateCardsOut(page: View, maxAnimatedCards: Int) {
         val visibleCards = ArrayList<View>()
         collectVisibleCards(page, visibleCards)
         if (visibleCards.isEmpty()) return
-        val count = visibleCards.size
+        val animatedCards = visibleCards.take(maxAnimatedCards.coerceAtLeast(0))
+        if (animatedCards.isEmpty()) return
+        val count = animatedCards.size
         val perCardDelay = (CARD_EXIT_WINDOW_MS / count).coerceAtMost(CARD_EXIT_MAX_DELAY_MS)
         // Reverse: bottom card (highest index = "first in") exits first, top card exits last
-        visibleCards.reversed().forEachIndexed { exitOrder, card ->
+        animatedCards.reversed().forEachIndexed { exitOrder, card ->
             card.animate().cancel()
             card.animate()
                 .alpha(0f)
@@ -97,10 +107,16 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
         afterRemoval()
     }
 
-    private fun animatePageEntry(panelViews: List<View>, chromeViews: List<View>, cardStacks: List<View>, direction: Int) {
+    private fun animatePageEntry(
+        panelViews: List<View>,
+        chromeViews: List<View>,
+        cardStacks: List<View>,
+        direction: Int,
+        maxAnimatedCards: Int,
+    ) {
         panelViews.forEach { animatePanelIntoView(it) }
         chromeViews.forEachIndexed { index, view -> animateChromeIntoView(view, index) }
-        cardStacks.forEach { stack -> animateCardStackIntoView(stack, direction) }
+        cardStacks.forEach { stack -> animateCardStackIntoView(stack, direction, maxAnimatedCards) }
     }
 
     private fun collectAnimatedViews(root: View, panelViews: MutableList<View>, chromeViews: MutableList<View>, cardStacks: MutableList<View>) {
@@ -143,7 +159,7 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
             .start()
     }
 
-    private fun animateCardStackIntoView(stackView: View, direction: Int) {
+    private fun animateCardStackIntoView(stackView: View, direction: Int, maxAnimatedCards: Int) {
         val content = (stackView as? ViewGroup)?.getChildAt(0) as? ViewGroup ?: return
 
         data class CardAnimParams(
@@ -161,7 +177,7 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
         for (index in 0 until content.childCount) {
             val card = content.getChildAt(index)
             if (card.tag != CalmAnimationTags.CARD) continue
-            if (animatedCount >= MAX_ENTRY_ANIMATED_CARDS) break
+            if (animatedCount >= maxAnimatedCards.coerceAtLeast(0)) break
 
             val currentTranslationY = card.translationY
             // Capture the styled horizontal-curve X that style() just set. The entry animation must
@@ -254,7 +270,6 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
     }
 
     private companion object {
-        const val MAX_ENTRY_ANIMATED_CARDS = 8
         const val MAX_ENTRY_READY_RETRIES = 6
         const val ENTRY_READY_RETRY_DELAY_MS = 32L
         const val CARD_EXIT_WINDOW_MS = 180L

@@ -49,6 +49,25 @@ class ChapterSpineFormatterTest {
     }
 
     @Test
+    fun iconsOnlyModeSuppressesTextForIconBackedPages() {
+        assertEquals(
+            "",
+            ChapterSpineFormatter.displayText(page, ChapterSpineStyle(titleMode = ChapterSpineTitleMode.ICONS_ONLY)),
+        )
+    }
+
+    @Test
+    fun iconsOnlyModeKeepsMarkerFallbackForPagesWithoutIcons() {
+        assertEquals(
+            "I",
+            ChapterSpineFormatter.displayText(
+                ChapterPage.overview(CalmTheme.OVERVIEW_KEY),
+                ChapterSpineStyle(titleMode = ChapterSpineTitleMode.ICONS_ONLY),
+            ),
+        )
+    }
+
+    @Test
     fun hiddenModeAndHiddenPositionSuppressText() {
         assertNull(ChapterSpineFormatter.displayText(page, ChapterSpineStyle(titleMode = ChapterSpineTitleMode.HIDDEN)))
         assertNull(ChapterSpineFormatter.displayText(page, ChapterSpineStyle(position = ChapterSpinePosition.HIDDEN)))

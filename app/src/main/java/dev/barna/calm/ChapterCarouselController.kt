@@ -145,7 +145,8 @@ class ChapterCarouselController(
             setSingleLine(style.titleMode != ChapterSpineTitleMode.SPLIT)
             maxLines = if (style.titleMode == ChapterSpineTitleMode.SPLIT) 2 else 1
             ellipsize = TextUtils.TruncateAt.END
-            setPadding(activity.dp(if (selected) 12 else 8), activity.dp(8), activity.dp(if (selected) 12 else 8), activity.dp(8))
+            val iconOnly = style.titleMode == ChapterSpineTitleMode.ICONS_ONLY
+            setPadding(activity.dp(if (iconOnly) 10 else if (selected) 12 else 8), activity.dp(8), activity.dp(if (iconOnly) 10 else if (selected) 12 else 8), activity.dp(8))
             alpha = if (selected) 1f else 0.5f
             background = null
             setCompoundDrawables(null, null, null, null)
@@ -155,8 +156,8 @@ class ChapterCarouselController(
                     setCompoundDrawables(icon.toSizedDrawable(activity, activity.dp(if (selected) 20 else 16)), null, null, null)
                 }
             }
-            maxWidth = activity.dp(if (selected) 176 else 126)
-            minWidth = activity.dp(if (selected) 118 else 74)
+            maxWidth = activity.dp(if (iconOnly) 54 else if (selected) 176 else 126)
+            minWidth = activity.dp(if (iconOnly) 44 else if (selected) 118 else 74)
             setOnClickListener { onNavigateToPage(index) }
         }
     }

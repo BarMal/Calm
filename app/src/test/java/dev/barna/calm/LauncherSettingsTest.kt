@@ -108,6 +108,7 @@ class LauncherSettingsTest {
         assertEquals(CardStackSectionMode.TITLE_CARDS, prefs.agendaSectionMode)
         assertEquals(SectionTitleCardStyle(), prefs.agendaSectionTitleStyle)
         assertEquals(ChapterSpineStyle.DEFAULT, prefs.chapterSpineStyle)
+        assertFalse(prefs.fullScreenModeEnabled)
     }
 
     // ---- round-trip correctness ----
@@ -158,6 +159,16 @@ class LauncherSettingsTest {
             settings.chapterSpineStyle(),
         )
         assertEquals(settings.chapterSpineStyle(), settings.uiPreferences().chapterSpineStyle)
+    }
+
+    @Test
+    fun fullScreenModeRoundTrips() {
+        settings.setFullScreenModeEnabled(true)
+        assertTrue(settings.fullScreenModeEnabled())
+        assertTrue(settings.uiPreferences().fullScreenModeEnabled)
+
+        settings.setFullScreenModeEnabled(false)
+        assertFalse(settings.fullScreenModeEnabled())
     }
 
     @Test
@@ -1014,6 +1025,14 @@ class LauncherSettingsTest {
         val before = settings.launcherChangeToken()
         settings.setChapterSpineTitleMode(ChapterSpineTitleMode.TITLE_ONLY)
         settings.setChapterSpinePosition(ChapterSpinePosition.BOTTOM)
+        val after = settings.launcherChangeToken()
+        assertNotEquals(before, after)
+    }
+
+    @Test
+    fun changeTokenAltersAfterFullScreenModeMutation() {
+        val before = settings.launcherChangeToken()
+        settings.setFullScreenModeEnabled(true)
         val after = settings.launcherChangeToken()
         assertNotEquals(before, after)
     }

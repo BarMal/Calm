@@ -5,6 +5,7 @@ enum class ChapterSpineTitleMode {
     COMBINED,
     TITLE_ONLY,
     SPINE_ONLY,
+    ICONS_ONLY,
     HIDDEN,
 }
 
@@ -33,6 +34,7 @@ object ChapterSpineFormatter {
             ChapterSpineTitleMode.COMBINED -> "${page.marker}  ${page.title}"
             ChapterSpineTitleMode.TITLE_ONLY -> page.title
             ChapterSpineTitleMode.SPINE_ONLY -> page.marker
+            ChapterSpineTitleMode.ICONS_ONLY -> if (page.chapter == null) page.marker else ""
             ChapterSpineTitleMode.HIDDEN -> null
         }
     }

@@ -74,10 +74,13 @@
     <string name="settings_spine_mode_combined">Combined</string>
     <string name="settings_spine_mode_title_only">Title only</string>
     <string name="settings_spine_mode_spine_only">Spine only</string>
+    <string name="settings_spine_mode_icons_only">Icons only</string>
     <string name="settings_spine_mode_hidden">Hidden</string>
     <string name="settings_spine_position_top">Top</string>
     <string name="settings_spine_position_bottom">Bottom</string>
     <string name="settings_spine_position_hidden">Hidden</string>
+    <string name="settings_full_screen_mode_title">Full screen mode</string>
+    <string name="settings_full_screen_mode_summary">Pinch out to zoom in: compact title, bottom icon spine, and larger notification stacks.</string>
     <string name="dialog_dock_apps_title">Dock apps (up to %1$d)</string>
     <string name="dialog_hidden_apps_title">Hidden apps</string>
     <string name="dock_card_tap_to_open">Tap to open</string>

@@ -19,6 +19,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.CalendarContract
 import android.provider.Settings
+import android.text.TextUtils
 import android.text.format.DateFormat
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
@@ -405,6 +406,7 @@ class CalmLauncherRunner(
     private var currentPager: ViewPager2? = null
     private var currentPagerAdapter: ChapterPagerAdapter? = null
     private var currentScreen: FrameLayout? = null
+    private var currentHeaderTitle: TextView? = null
     private var pageOverviewOverlay: View? = null
     private val pageOverviewHiddenViews = ArrayList<View>()
     private var reopenPageOverviewAfterRender = false
@@ -550,6 +552,7 @@ class CalmLauncherRunner(
             stateExecutor,
         )
         activePreferences = state.preferences
+        CalmSystemBars.applyLauncherWindow(activity, activePreferences.fullScreenModeEnabled)
         settingsChangeToken = settings.launcherChangeToken()
         renderedNotificationRevision = CalmNotificationListenerService.revision()
         val pages = state.pages
@@ -561,17 +564,31 @@ class CalmLauncherRunner(
 
         val screen = object : FrameLayout(activity) {
             private var overviewScale = 1f
+            private var handledScaleModeChange = false
             private val scaleDetector = ScaleGestureDetector(
                 activity,
                 object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
                     override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
                         overviewScale = 1f
+                        handledScaleModeChange = false
                         return true
                     }
 
                     override fun onScale(detector: ScaleGestureDetector): Boolean {
                         overviewScale *= detector.scaleFactor
+                        if (!handledScaleModeChange && overviewScale > FULL_SCREEN_PINCH_THRESHOLD && !settings.fullScreenModeEnabled()) {
+                            handledScaleModeChange = true
+                            settings.setFullScreenModeEnabled(true)
+                            requestRender()
+                            return true
+                        }
                         if (overviewScale < PAGE_OVERVIEW_PINCH_THRESHOLD && pageOverviewOverlay == null) {
+                            if (!handledScaleModeChange && settings.fullScreenModeEnabled()) {
+                                handledScaleModeChange = true
+                                settings.setFullScreenModeEnabled(false)
+                                requestRender()
+                                return true
+                            }
                             val currentIndex = currentPager?.currentItem ?: initialPage
                             currentScreen?.let { screen -> showPageOverview(screen, state, pages, currentIndex) }
                             return true
@@ -598,10 +615,16 @@ class CalmLauncherRunner(
             orientation = LinearLayout.VERTICAL
             clipChildren = false
             clipToPadding = false
-            setPadding(0, activity.statusBarHeightFallback() + activity.dp(28), 0, activity.dp(34))
+            val fullScreen = activePreferences.fullScreenModeEnabled
+            setPadding(
+                0,
+                if (fullScreen) activity.dp(8) else activity.statusBarHeightFallback() + activity.dp(28),
+                0,
+                activity.dp(if (fullScreen) 10 else 34),
+            )
         }
         screen.addView(root, matchParentParams())
-        root.addView(createHeader())
+        root.addView(createHeader(pages.getOrNull(initialPage)?.title.orEmpty(), activePreferences.fullScreenModeEnabled))
 
         val pagerAdapter = ChapterPagerAdapter(pages) { page -> pageFactory.createPage(page, state) }
         currentPagerAdapter = pagerAdapter
@@ -632,7 +655,7 @@ class CalmLauncherRunner(
         if (!animate) {
             suppressedPageEntryKey = pages.getOrNull(initialPage)?.key
         }
-        val spineStyle = state.preferences.chapterSpineStyle
+        val spineStyle = LauncherFullscreenLayoutPolicy.spineStyle(state.preferences)
         var previousPageIndex = initialPage
         var currentNavigationDirection = 0
         val animTrigger = PageScrollAnimationTrigger()
@@ -649,6 +672,7 @@ class CalmLauncherRunner(
                     else -> 0
                 }
                 previousPageIndex = position
+                currentHeaderTitle?.text = pages[position].title
                 if (animTrigger.isSwipeInProgress && prev != position) {
                     entryAnimator.animatePageExit(
                         pager,
@@ -826,12 +850,22 @@ class CalmLauncherRunner(
         mainHandler.postDelayed(deferredRender, 90)
     }
 
-    private fun createHeader(): View {
+    private fun createHeader(currentPageTitle: String, fullScreen: Boolean): View {
+        currentHeaderTitle = null
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(activity.dp(20), activity.dp(2), activity.dp(20), activity.dp(2))
+            setPadding(activity.dp(20), activity.dp(2), activity.dp(20), activity.dp(if (fullScreen) 8 else 2))
             setBackgroundColor(Color.TRANSPARENT)
             elevation = 0f
+            if (fullScreen) {
+                addView(label(currentPageTitle, 26, CalmTheme.INK, Typeface.NORMAL).apply {
+                    currentHeaderTitle = this
+                    setSingleLine(true)
+                    ellipsize = TextUtils.TruncateAt.END
+                    includeFontPadding = false
+                })
+                return@apply
+            }
             addView(TextClock(activity).apply {
                 format12Hour = "h:mm"
                 format24Hour = "HH:mm"
@@ -866,7 +900,8 @@ class CalmLauncherRunner(
             orientation = LinearLayout.VERTICAL
             clipChildren = false
             clipToPadding = false
-            setPadding(activity.dp(20), activity.dp(28), activity.dp(20), activity.dp(30))
+            val fullScreen = activePreferences.fullScreenModeEnabled
+            setPadding(activity.dp(20), activity.dp(if (fullScreen) 10 else 28), activity.dp(20), activity.dp(if (fullScreen) 12 else 30))
             elevation = activity.dp(1).toFloat()
             translationZ = 0f
             layoutParams = pageParams()
@@ -878,7 +913,8 @@ class CalmLauncherRunner(
             orientation = LinearLayout.VERTICAL
             clipChildren = false
             clipToPadding = false
-            setPadding(horizontalPadding, activity.dp(28), horizontalPadding, activity.dp(30))
+            val fullScreen = activePreferences.fullScreenModeEnabled
+            setPadding(horizontalPadding, activity.dp(if (fullScreen) 10 else 28), horizontalPadding, activity.dp(if (fullScreen) 12 else 30))
             setBackgroundColor(Color.TRANSPARENT)
             elevation = 0f
             translationZ = 0f
@@ -888,8 +924,9 @@ class CalmLauncherRunner(
 
     private fun pageParams(): LinearLayout.LayoutParams {
         return LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT).apply {
-            topMargin = activity.dp(20)
-            bottomMargin = activity.dp(18)
+            val fullScreen = activePreferences.fullScreenModeEnabled
+            topMargin = activity.dp(if (fullScreen) 6 else 20)
+            bottomMargin = activity.dp(if (fullScreen) 8 else 18)
         }
     }
 
@@ -2348,6 +2385,7 @@ class CalmLauncherRunner(
     }
 
     private companion object {
+        const val FULL_SCREEN_PINCH_THRESHOLD = 1.18f
         const val PAGE_OVERVIEW_PINCH_THRESHOLD = 0.82f
         const val PAGE_OVERVIEW_MAGNET_DELAY_MS = 120L
         const val PAGE_OVERVIEW_MAGNET_THRESHOLD = 0.16f

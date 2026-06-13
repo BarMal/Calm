@@ -565,6 +565,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             cardStackTuning = cardStackTuning(),
             showAdvancedStackControls = showAdvancedStackControls(),
             cardVibrancy = cardVibrancy(),
+            fullScreenModeEnabled = fullScreenModeEnabled(),
             pageSortOrder = pageSortOrder(),
             expandedCardsEnabled = expandedCardsEnabled(),
             pinnedPageEnabled = pinnedPageEnabled(),
@@ -794,6 +795,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             rssFeedUrls(),
             agendaSectionMode(),
             agendaSectionTitleStyle(),
+            fullScreenModeEnabled(),
         ).hashCode()
     }
 
@@ -948,6 +950,20 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         preferences.edit().putInt(PREF_CARD_VIBRANCY, vibrancy.coerceIn(0, 100)).apply()
     }
 
+    fun fullScreenModeEnabled(): Boolean {
+        return preferences.getBoolean(PREF_FULL_SCREEN_MODE, false)
+    }
+
+    fun setFullScreenModeEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean(PREF_FULL_SCREEN_MODE, enabled).apply()
+    }
+
+    fun toggleFullScreenMode(): Boolean {
+        val nextValue = !fullScreenModeEnabled()
+        setFullScreenModeEnabled(nextValue)
+        return nextValue
+    }
+
     fun showAdvancedStackControls(): Boolean {
         return preferences.getBoolean(PREF_CARD_STACK_ADVANCED, false)
     }
@@ -1053,6 +1069,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_CARD_EFFECT_STRENGTH = "card_effect_strength"
         private const val PREF_CARD_TINT_STRENGTH = "card_tint_strength"
         private const val PREF_CARD_VIBRANCY = "card_vibrancy"
+        private const val PREF_FULL_SCREEN_MODE = "full_screen_mode"
         private const val PREF_PAGE_SORT_ORDER = "page_sort_order"
         private const val PREF_EXPANDED_CARDS = "expanded_cards"
         private const val PREF_PINNED_PAGE = "pinned_page"

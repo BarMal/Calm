@@ -1,10 +1,15 @@
 package dev.barna.calm
 
-import android.os.Handler
 import android.util.Log
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class LauncherStateManager(
     private val notificationRepository: NotificationChapterRepository,
@@ -13,8 +18,10 @@ class LauncherStateManager(
     private val settings: LauncherSettings,
     private val renderModelFactory: LauncherRenderModelFactory,
     private val appCardDisplayCache: AppCardDisplayCache,
-    private val mainHandler: Handler,
-    private val executor: ExecutorService,
+    private val scope: CoroutineScope,
+    private val workDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val mainDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
     private val loadAppEntries: () -> List<AppEntry>,
     private val loadCachedAppEntries: () -> List<AppEntry>,
     private val markLoading: () -> Unit,
@@ -22,59 +29,57 @@ class LauncherStateManager(
 ) {
     private val generation = AtomicInteger(0)
 
-    fun refreshAsync() {
+    fun refreshAsync(): Job {
         markLoading()
         val gen = generation.incrementAndGet()
-        try {
-            val notifications = executor.submit<List<AppChapter>> {
-                notificationRepository.buildNotificationChapters()
-            }
-            val apps = executor.submit<List<AppEntry>> { loadAppEntries() }
-            val calendar = executor.submit<Pair<Boolean, List<CalendarEvent>>> {
-                val hasPermission = calendarRepository.hasCalendarPermission()
-                hasPermission to if (hasPermission) calendarRepository.loadUpcomingEvents() else emptyList()
-            }
-            val rss = executor.submit<List<RssFeedItem>> {
-                if (settings.rssPageEnabled()) rssFeedRepository.loadItems(settings.rssFeedUrls()) else emptyList()
-            }
-            executor.execute {
-                try {
-                    val appEntries = apps.get()
-                    val pinnedKeys = settings.pinnedPackages()
-                    val calendarState = calendar.get()
-                    if (gen != generation.get()) return@execute
-                    val state = renderModelFactory.create(
-                        preferences = settings.uiPreferences(),
-                        notificationChapters = notifications.get(),
-                        appEntries = appEntries,
-                        pinnedKeys = pinnedKeys,
-                        pinnedChapterPackages = settings.pinnedChapterPackages(),
-                        classicPages = settings.classicPages(),
-                        classicGridConfig = settings.classicGridConfig(),
-                        dockConfig = settings.dockConfig(),
-                        dockKeys = settings.dockKeys(),
-                        hasCalendarPermission = calendarState.first,
-                        calendarEvents = calendarState.second,
-                        rssFeedUrls = settings.rssFeedUrls(),
-                        rssItems = rss.get(),
-                    )
-                    if (gen != generation.get()) return@execute
-                    appCardDisplayCache.preloadNow(state.appEntries, state.pinnedKeys)
-                    mainHandler.post {
-                        if (gen == generation.get()) {
-                            onStateReady(state)
-                        }
-                    }
-                } catch (interrupted: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                } catch (e: Exception) {
-                    // A later refresh will replace the loading state; avoid crashing the executor thread.
-                    Log.e(TAG, "Refresh gen $gen failed unexpectedly", e)
+        return scope.launch(workDispatcher) {
+            try {
+                val notifications = async(ioDispatcher) {
+                    notificationRepository.buildNotificationChapters()
                 }
+                val apps = async(ioDispatcher) { loadAppEntries() }
+                val calendar = async(ioDispatcher) {
+                    val hasPermission = calendarRepository.hasCalendarPermission()
+                    hasPermission to if (hasPermission) calendarRepository.loadUpcomingEvents() else emptyList()
+                }
+                val rss = async(ioDispatcher) {
+                    if (settings.rssPageEnabled()) rssFeedRepository.loadItems(settings.rssFeedUrls()) else emptyList()
+                }
+
+                val appEntries = apps.await()
+                val pinnedKeys = settings.pinnedPackages()
+                val calendarState = calendar.await()
+                if (gen != generation.get()) return@launch
+
+                val state = renderModelFactory.create(
+                    preferences = settings.uiPreferences(),
+                    notificationChapters = notifications.await(),
+                    appEntries = appEntries,
+                    pinnedKeys = pinnedKeys,
+                    pinnedChapterPackages = settings.pinnedChapterPackages(),
+                    classicPages = settings.classicPages(),
+                    classicGridConfig = settings.classicGridConfig(),
+                    dockConfig = settings.dockConfig(),
+                    dockKeys = settings.dockKeys(),
+                    hasCalendarPermission = calendarState.first,
+                    calendarEvents = calendarState.second,
+                    rssFeedUrls = settings.rssFeedUrls(),
+                    rssItems = rss.await(),
+                )
+                if (gen != generation.get()) return@launch
+
+                appCardDisplayCache.preloadNow(state.appEntries, state.pinnedKeys)
+                withContext(mainDispatcher) {
+                    if (gen == generation.get()) {
+                        onStateReady(state)
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (e: Exception) {
+                // A later refresh will replace the loading state; avoid crashing the coroutine scope.
+                Log.e(TAG, "Refresh gen $gen failed unexpectedly", e)
             }
-        } catch (e: RejectedExecutionException) {
-            // The runner is shutting down; stale work can be ignored.
-            Log.d(TAG, "Refresh gen $gen rejected (executor shut down)", e)
         }
     }
 

@@ -32,6 +32,10 @@ class DockController(
     private val openNotification: (CalmNotificationListenerService.CalmNotification) -> Unit,
     private val openNotificationPage: (AppChapter) -> Unit,
     private val showContextMenu: (View, AppEntry, DockNotificationTarget?, Pair<Int, Int>) -> Unit,
+    private val describeDock: (AppEntry, DockNotificationTarget?) -> String = { app, target ->
+        defaultDockDescription(activity, app, target)
+    },
+    private val tapToOpenText: () -> String = { activity.getString(R.string.dock_card_tap_to_open) },
 ) {
     private val notificationResolver = DockNotificationResolver()
     private var featuredDockIdentityKey: String? = null
@@ -193,7 +197,7 @@ class DockController(
             stack,
             FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER),
         )
-        surface.contentDescription = dockDescription(selectedApp, selectedTarget)
+        surface.contentDescription = describeDock(selectedApp, selectedTarget)
         surface.tooltipText = selectedApp.label
         surface.installDockInteractions(selectedApp, selectedTarget, config)
     }
@@ -234,7 +238,7 @@ class DockController(
                 icon,
             )
             setPadding(activity.dp(12), activity.dp(8), activity.dp(14), activity.dp(8))
-            contentDescription = dockDescription(app, target)
+            contentDescription = describeDock(app, target)
             tooltipText = app.label
             icon?.let { bitmap ->
                 addView(
@@ -255,7 +259,7 @@ class DockController(
                         dockText(
                             selectedNotification?.let { notificationPreview(it) }
                                 ?: notificationDetail(target)
-                                ?: activity.getString(R.string.dock_card_tap_to_open),
+                                ?: tapToOpenText(),
                             12,
                             Typeface.NORMAL,
                             CalmTheme.MUTED_INK,
@@ -302,7 +306,7 @@ class DockController(
             scaleType = ImageView.ScaleType.CENTER_CROP
             background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(18))
             setPadding(activity.dp(6), activity.dp(6), activity.dp(6), activity.dp(6))
-            contentDescription = dockDescription(app, target)
+            contentDescription = describeDock(app, target)
             tooltipText = app.label
             resolveIcon(app)?.let { icon ->
                 setImageDrawable(RoundedBitmapDrawable(icon, activity.dp(14).toFloat()))
@@ -324,7 +328,7 @@ class DockController(
             gravity = Gravity.CENTER_VERTICAL
             background = drawables.glass(CalmTheme.QUIET_GLASS, activity.dp(18))
             setPadding(activity.dp(8), activity.dp(6), activity.dp(10), activity.dp(6))
-            contentDescription = dockDescription(app, target)
+            contentDescription = describeDock(app, target)
             tooltipText = app.label
             resolveIcon(app)?.let { icon ->
                 addView(
@@ -381,7 +385,7 @@ class DockController(
         return notification.bodyText()
             .ifBlank { notification.subText }
             .ifBlank { notification.title }
-            .ifBlank { activity.getString(R.string.dock_card_tap_to_open) }
+            .ifBlank { tapToOpenText() }
     }
 
     private fun performDockAction(
@@ -674,20 +678,24 @@ class DockController(
         )
     }
 
-    private fun dockDescription(app: AppEntry, target: DockNotificationTarget?): String {
-        val count = target?.summary?.count ?: return app.label
-        return activity.resources.getQuantityString(
-            R.plurals.dock_notification_count_description,
-            count,
-            app.label,
-            count,
-        )
-    }
-
     private companion object {
         const val DOCK_STACK_VISIBLE_CARDS = 3
         const val DOCK_STACK_OFFSET_DP = 6
         const val DOCK_STACK_ANIMATION_MS = 160L
+
+        fun defaultDockDescription(
+            context: Context,
+            app: AppEntry,
+            target: DockNotificationTarget?,
+        ): String {
+            val count = target?.summary?.count ?: return app.label
+            return context.resources.getQuantityString(
+                R.plurals.dock_notification_count_description,
+                count,
+                app.label,
+                count,
+            )
+        }
     }
 }
 

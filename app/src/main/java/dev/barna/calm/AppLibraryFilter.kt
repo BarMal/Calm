@@ -71,4 +71,22 @@ class AppLibraryFilter {
                 app.profileLabel.contains(normalizedQuery, ignoreCase = true)
         }
     }
+
+    fun groupByCategory(
+        appEntries: List<AppEntry>,
+        categories: List<AppCategory>,
+        assignments: Map<String, List<String>>,
+        scope: AppLibraryScope,
+        query: String,
+    ): List<AppCategoryGroup> {
+        val baseApps = filter(appEntries, scope, query)
+        return categories
+            .filter { it.enabled }
+            .mapNotNull { category ->
+                val categoryApps = baseApps.filter { app ->
+                    category.id in (assignments[app.identityKey] ?: emptyList())
+                }
+                if (categoryApps.isEmpty()) null else AppCategoryGroup(category, categoryApps)
+            }
+    }
 }

@@ -74,7 +74,15 @@ class CalmLauncherRunner(
     private val carouselController = ChapterCarouselController(activity, notificationCardDisplayCache, ::navigateToChapterPage)
     private val cardRenderAssetCache = CardRenderAssetCache()
     private val cardRenderer = CardRenderer(activity, drawables, cardSpec, cardRenderAssetCache) { activePreferences }
-    private val appLibraryPageModelFactory = AppLibraryPageModelFactory()
+    private val appLibraryPageModelFactory = AppLibraryPageModelFactory(
+        categoryContext = {
+            AppLibraryCategoryContext(
+                categories = settings.categoryList(),
+                assignments = settings.appCategoryAssignments(),
+                groupingEnabled = settings.appGroupingEnabled(),
+            )
+        },
+    )
     private val appLibraryStore = AppLibraryRenderStore()
     private val appSearchState = AppSearchState(appLibraryPageModelFactory)
     private val classicPageCoordinator = ClassicPageCoordinator(

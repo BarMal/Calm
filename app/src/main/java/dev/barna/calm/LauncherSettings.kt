@@ -776,6 +776,60 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             .apply()
     }
 
+    fun categoryList(): List<AppCategory> {
+        return AppCategory.decodeList(preferences.getString(PREF_CATEGORY_LIST, null))
+    }
+
+    fun setCategoryList(categories: List<AppCategory>) {
+        preferences.edit().putString(PREF_CATEGORY_LIST, AppCategory.encodeList(categories)).apply()
+    }
+
+    fun appCategoryAssignments(): Map<String, List<String>> {
+        val raw = preferences.getString(PREF_APP_CATEGORY_ASSIGNMENTS, null) ?: return emptyMap()
+        return raw.lineSequence()
+            .filter { it.isNotBlank() }
+            .mapNotNull { line ->
+                val tab = line.indexOf('\t')
+                if (tab == -1) return@mapNotNull null
+                val key = line.substring(0, tab)
+                val ids = line.substring(tab + 1).split(',').filter { it.isNotBlank() }
+                if (key.isBlank() || ids.isEmpty()) null else key to ids
+            }
+            .toMap()
+    }
+
+    fun setAppCategoryAssignments(assignments: Map<String, List<String>>) {
+        synchronized(mutationLock) {
+            val encoded = assignments.entries
+                .filter { (_, ids) -> ids.isNotEmpty() }
+                .joinToString("\n") { (key, ids) -> "$key\t${ids.distinct().joinToString(",")}" }
+            preferences.edit().putString(PREF_APP_CATEGORY_ASSIGNMENTS, encoded).apply()
+        }
+    }
+
+    fun setAppCategoryIds(identityKey: String, categoryIds: List<String>) {
+        synchronized(mutationLock) {
+            val current = appCategoryAssignments().toMutableMap()
+            if (categoryIds.isEmpty()) current.remove(identityKey) else current[identityKey] = categoryIds
+            setAppCategoryAssignments(current)
+        }
+    }
+
+    fun appGroupingEnabled(): Boolean {
+        return preferences.getBoolean(PREF_APP_GROUPING_ENABLED, false)
+    }
+
+    fun setAppGroupingEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean(PREF_APP_GROUPING_ENABLED, enabled).apply()
+    }
+
+    fun autoCategorise(appEntries: List<AppEntry>, categoriser: AppAutoCategoriser = AppAutoCategoriser()) {
+        val assignments = appEntries
+            .associate { app -> app.identityKey to categoriser.categorise(app.packageName) }
+            .filterValues { it.isNotEmpty() }
+        setAppCategoryAssignments(assignments)
+    }
+
     fun launcherChangeToken(): Int {
         return listOf(
             uiPreferences(),
@@ -796,6 +850,8 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             agendaSectionMode(),
             agendaSectionTitleStyle(),
             fullScreenModeEnabled(),
+            appGroupingEnabled(),
+            categoryList(),
         ).hashCode()
     }
 
@@ -1098,5 +1154,8 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_DOCK_TAP_ACTION = "dock_tap_action"
         private const val PREF_DOCK_LONG_PRESS_ACTION = "dock_long_press_action"
         private const val PREF_DOCK_KEYS = "dock_keys"
+        private const val PREF_CATEGORY_LIST = "category_list"
+        private const val PREF_APP_CATEGORY_ASSIGNMENTS = "app_category_assignments"
+        private const val PREF_APP_GROUPING_ENABLED = "app_grouping_enabled"
     }
 }

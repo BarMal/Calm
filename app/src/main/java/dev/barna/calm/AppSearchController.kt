@@ -201,18 +201,14 @@ class AppSearchController(
     }
 
     private fun animatePage(page: View, keyboardHeight: Int) {
-        val lift = if (keyboardHeight > 0) {
-            (keyboardHeight - activity.dp(48)).coerceAtLeast(0)
-        } else {
-            0
-        }
-        val maxLift = maxOf(0, page.height - activity.dp(240))
-        val target = -lift.coerceAtMost(maxLift).toFloat()
+        // Raise the page's bottom inset for the keyboard instead of translating the whole page up.
+        // The weighted card stack shrinks to stay fully on-screen above the search bar.
         page.animate().cancel()
-        page.animate()
-            .translationY(target)
-            .setDuration(180L)
-            .start()
+        page.translationY = 0f
+        val extra = if (keyboardHeight > 0) (keyboardHeight - activity.dp(34)).coerceAtLeast(0) else 0
+        val targetBottom = activity.dp(PAGE_BASE_BOTTOM_PADDING_DP) + extra
+        if (page.paddingBottom == targetBottom) return
+        page.setPadding(page.paddingLeft, page.paddingTop, page.paddingRight, targetBottom)
     }
 
     private fun resetPage(state: PageState) {
@@ -230,6 +226,12 @@ class AppSearchController(
         state.header.alpha = 1f
         state.header.translationY = 0f
         state.page.translationY = 0f
+        state.page.setPadding(
+            state.page.paddingLeft,
+            state.page.paddingTop,
+            state.page.paddingRight,
+            activity.dp(PAGE_BASE_BOTTOM_PADDING_DP),
+        )
     }
 
     private fun hideKeyboard(view: View) {
@@ -240,5 +242,7 @@ class AppSearchController(
     private companion object {
         const val APP_SEARCH_REFRESH_DELAY_MS = 90L
 
+        // Matches the bottom padding createBarePagePanel applies to app-library pages.
+        const val PAGE_BASE_BOTTOM_PADDING_DP = 30
     }
 }

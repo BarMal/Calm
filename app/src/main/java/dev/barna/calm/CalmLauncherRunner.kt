@@ -76,13 +76,20 @@ class CalmLauncherRunner(
     private val appLibraryPageModelFactory = AppLibraryPageModelFactory()
     private val appLibraryStore = AppLibraryRenderStore()
     private val appSearchState = AppSearchState(appLibraryPageModelFactory)
+    private val classicPageCoordinator = ClassicPageCoordinator(
+        settings = settings,
+        selectPage = ::selectPage,
+        render = ::render,
+        stringResource = { resId, args -> activity.getString(resId, *args) },
+        showToast = { message -> Toast.makeText(activity, message, Toast.LENGTH_SHORT).show() },
+    )
     private val appMutationHandler = LauncherAppMutationHandler(
         activity = activity,
         settings = settings,
         render = ::render,
         selectPage = ::selectPage,
         loadPinnedApps = ::loadPinnedApps,
-        beginClassicItemPlacement = ::beginClassicItemPlacement,
+        beginClassicItemPlacement = classicPageCoordinator::beginItemPlacement,
     )
     private val contextActionFactory = LauncherContextActionFactory(
         notificationCallbacks = NotificationContextActionCallbacks(
@@ -311,7 +318,12 @@ class CalmLauncherRunner(
         requestWidgetConfigure = requestWidgetConfigure,
         render = ::render,
         selectPage = ::selectPage,
-        beginClassicItemPlacement = ::beginClassicItemPlacement,
+        beginClassicItemPlacement = classicPageCoordinator::beginItemPlacement,
+    )
+    @Suppress("unused")
+    private val classicWidgetCallbacks = classicPageCoordinator.setWidgetCallbacks(
+        deleteWidget = classicWidgetHostController::deleteWidget,
+        defaultWidgetSpan = classicWidgetHostController::defaultWidgetSpan,
     )
     private val pageFactory = LauncherPageFactory(
         activity = activity,
@@ -333,23 +345,23 @@ class CalmLauncherRunner(
         createWidgetView = classicWidgetHostController::createWidgetView,
         addAppToClassicPage = appMutationHandler::addAppToClassicPage,
         addWidgetToClassicPage = classicWidgetHostController::requestAddWidget,
-        addStaticItemToClassicPage = ::addStaticItemToClassicPage,
+        addStaticItemToClassicPage = classicPageCoordinator::addStaticItemToClassicPage,
         configureClassicWidget = classicWidgetHostController::requestConfigureWidget,
         canConfigureClassicWidget = classicWidgetHostController::canConfigureWidget,
-        removeClassicGridItem = ::removeClassicGridItem,
-        moveClassicGridItem = ::moveClassicGridItem,
-        moveClassicGridItemWithinPage = ::moveClassicGridItemWithinPage,
-        resizeClassicGridItem = ::resizeClassicGridItem,
-        resetClassicGridItemSize = ::resetClassicGridItemSize,
-        pendingClassicPlacementItemId = { pendingClassicPlacementItemId },
-        finishClassicItemPlacement = ::finishClassicItemPlacement,
-        addClassicPage = ::addClassicPage,
-        moveClassicPage = ::moveClassicPage,
-        isClassicPageEditing = ::isClassicPageEditing,
-        setClassicPageEditing = ::setClassicPageEditing,
-        renameClassicPage = ::renameClassicPage,
-        setDefaultClassicPage = ::setDefaultClassicPage,
-        removeClassicPage = ::removeClassicPage,
+        removeClassicGridItem = classicPageCoordinator::removeClassicGridItem,
+        moveClassicGridItem = classicPageCoordinator::moveClassicGridItem,
+        moveClassicGridItemWithinPage = classicPageCoordinator::moveClassicGridItemWithinPage,
+        resizeClassicGridItem = classicPageCoordinator::resizeClassicGridItem,
+        resetClassicGridItemSize = classicPageCoordinator::resetClassicGridItemSize,
+        pendingClassicPlacementItemId = { classicPageCoordinator.pendingPlacementItemId },
+        finishClassicItemPlacement = classicPageCoordinator::finishItemPlacement,
+        addClassicPage = classicPageCoordinator::addClassicPage,
+        moveClassicPage = classicPageCoordinator::moveClassicPage,
+        isClassicPageEditing = classicPageCoordinator::isClassicPageEditing,
+        setClassicPageEditing = classicPageCoordinator::setClassicPageEditing,
+        renameClassicPage = classicPageCoordinator::renameClassicPage,
+        setDefaultClassicPage = classicPageCoordinator::setDefaultClassicPage,
+        removeClassicPage = classicPageCoordinator::removeClassicPage,
         barePagePanel = ::createBarePagePanel,
         label = ::label,
     )
@@ -406,8 +418,6 @@ class CalmLauncherRunner(
     private var packageChangeReceiverRegistered = false
     private var pagePrewarmGeneration = 0
     private var suppressedPageEntryKey: String? = null
-    private var editingClassicPageId: String? = null
-    private var pendingClassicPlacementItemId: String? = null
 
     fun onCreate() {
         configureWindow()
@@ -497,160 +507,6 @@ class CalmLauncherRunner(
         if (!handledPendingAdd) {
             render()
         }
-    }
-
-    private fun removeClassicGridItem(page: ClassicLauncherPageDefinition, item: ClassicGridItem) {
-        val removed = settings.removeClassicGridItem(page.id, item.id) ?: return
-        if (removed.type == ClassicGridItemType.WIDGET) {
-            classicWidgetHostController.deleteWidget(removed)
-        }
-        toast(R.string.toast_removed_from_page, page.title)
-        render()
-    }
-
-    private fun moveClassicGridItem(
-        sourcePage: ClassicLauncherPageDefinition,
-        item: ClassicGridItem,
-        targetPage: ClassicLauncherPageDefinition,
-    ) {
-        val moved = settings.moveClassicGridItem(sourcePage.id, item.id, targetPage.id)
-        if (!moved) {
-            toast(R.string.toast_page_full, targetPage.title)
-            return
-        }
-        selectPage(targetPage.key)
-        toast(R.string.toast_page_item_moved_to, targetPage.title)
-        render()
-    }
-
-    private fun moveClassicGridItemWithinPage(
-        page: ClassicLauncherPageDefinition,
-        item: ClassicGridItem,
-        x: Int,
-        y: Int,
-    ) {
-        if (item.x == x && item.y == y) {
-            toast(R.string.toast_already_there)
-            return
-        }
-        if (!settings.moveClassicGridItemWithinPage(page.id, item.id, x, y)) {
-            toast(R.string.toast_position_unavailable)
-            return
-        }
-        toast(R.string.toast_moved)
-        render()
-    }
-
-    private fun resizeClassicGridItem(
-        page: ClassicLauncherPageDefinition,
-        item: ClassicGridItem,
-        width: Int,
-        height: Int,
-    ) {
-        if (item.width == width && item.height == height) {
-            toast(R.string.toast_already_that_size)
-            return
-        }
-        val resized = settings.resizeClassicGridItem(page.id, item.id, width, height)
-        if (!resized) {
-            toast(R.string.toast_no_room_for_size)
-            return
-        }
-        toast(R.string.toast_resized)
-        render()
-    }
-
-    private fun resetClassicGridItemSize(page: ClassicLauncherPageDefinition, item: ClassicGridItem) {
-        val gridConfig = settings.classicGridConfig()
-        val defaultSize = when (item.type) {
-            ClassicGridItemType.APP -> 1 to 1
-            ClassicGridItemType.STATIC -> gridConfig.columns to 1
-            ClassicGridItemType.WIDGET -> item.target.toIntOrNull()
-                ?.let { widgetId -> classicWidgetHostController.defaultWidgetSpan(widgetId) }
-                ?: (gridConfig.columns to 2)
-        }
-        resizeClassicGridItem(page, item, defaultSize.first, defaultSize.second)
-    }
-
-    private fun beginClassicItemPlacement(page: ClassicLauncherPageDefinition, itemId: String) {
-        editingClassicPageId = page.id
-        pendingClassicPlacementItemId = itemId
-    }
-
-    private fun finishClassicItemPlacement(itemId: String) {
-        if (pendingClassicPlacementItemId == itemId) {
-            pendingClassicPlacementItemId = null
-        }
-    }
-
-    private fun addClassicPage() {
-        val page = settings.addClassicPage()
-        editingClassicPageId = page.id
-        selectPage(page.key)
-        toast(R.string.toast_classic_page_added, page.title)
-        render()
-    }
-
-    private fun addStaticItemToClassicPage(page: ClassicLauncherPageDefinition, staticItem: ClassicStaticItem) {
-        if (settings.addStaticItemToClassicPage(page.id, staticItem)) {
-            beginClassicItemPlacement(page, ClassicGridItem.static(staticItem, x = 0, y = 0).id)
-            toast(R.string.toast_static_item_added, staticItem.displayLabel, page.title)
-            render()
-        } else {
-            toast(R.string.toast_no_room_for_item, staticItem.displayLabel)
-        }
-    }
-
-    private val ClassicStaticItem.displayLabel: String
-        get() = when (this) {
-            ClassicStaticItem.CLOCK -> activity.getString(R.string.static_item_clock)
-            ClassicStaticItem.SEARCH -> activity.getString(R.string.static_item_search)
-        }
-
-    private fun moveClassicPage(page: ClassicLauncherPageDefinition, targetIndex: Int) {
-        if (!settings.moveClassicPage(page.id, targetIndex)) return
-        selectPage(page.key)
-        toast(R.string.toast_classic_page_moved, page.title)
-        render()
-    }
-
-    private fun isClassicPageEditing(page: ClassicLauncherPageDefinition): Boolean {
-        return editingClassicPageId == page.id
-    }
-
-    private fun setClassicPageEditing(page: ClassicLauncherPageDefinition, editing: Boolean) {
-        editingClassicPageId = if (editing) page.id else null
-        if (!editing) pendingClassicPlacementItemId = null
-        render()
-    }
-
-    private fun renameClassicPage(page: ClassicLauncherPageDefinition, title: String) {
-        if (!settings.renameClassicPage(page.id, title)) {
-            toast(R.string.toast_page_name_empty)
-            return
-        }
-        toast(R.string.toast_page_renamed)
-        render()
-    }
-
-    private fun setDefaultClassicPage(page: ClassicLauncherPageDefinition) {
-        if (!settings.setDefaultClassicPage(page.id)) return
-        settings.setDefaultHomeSlot(PageSlot.CLASSIC_PAGES)
-        toast(R.string.toast_page_set_home, page.title)
-        render()
-    }
-
-    private fun removeClassicPage(page: ClassicLauncherPageDefinition) {
-        val removed = settings.removeClassicPage(page.id) ?: return
-        if (editingClassicPageId == removed.id) {
-            editingClassicPageId = null
-        }
-        pendingClassicPlacementItemId = null
-        removed.items
-            .filter { item -> item.type == ClassicGridItemType.WIDGET }
-            .forEach(classicWidgetHostController::deleteWidget)
-        toast(R.string.toast_page_removed, removed.title)
-        render()
     }
 
     /** Dismisses the expanded/focus card on back so it returns to the current page, not overview. */
@@ -1408,9 +1264,9 @@ class CalmLauncherRunner(
 
     private fun addClassicPageFromOverview() {
         val page = settings.addClassicPage()
-        editingClassicPageId = page.id
+        classicPageCoordinator.beginEditing(page)
         selectPage(page.key)
-        Toast.makeText(activity, "Added ${page.title}", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_classic_page_added, page.title)
         renderAndReopenPageOverview(page.key)
     }
 
@@ -1812,21 +1668,21 @@ class CalmLauncherRunner(
         page.classicPage?.let {
             if (!settings.setDefaultClassicPage(it.id)) return
             settings.setDefaultHomeSlot(PageSlot.CLASSIC_PAGES)
-            Toast.makeText(activity, "${it.title} is now home", Toast.LENGTH_SHORT).show()
+            toast(R.string.toast_page_set_home, it.title)
             renderAndReopenPageOverview(page.key)
             return
         }
         val slot = PageArranger.slotOf(page)
         if (slot == PageSlot.NOTIFICATIONS) return
         settings.setDefaultHomeSlot(slot)
-        Toast.makeText(activity, "${page.title} is now home", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_page_set_home, page.title)
         renderAndReopenPageOverview(page.key)
     }
 
     private fun customisePageFromOverview(page: ChapterPage) {
         hidePageOverview()
         page.classicPage?.let {
-            editingClassicPageId = it.id
+            classicPageCoordinator.beginEditing(it)
             selectPage(it.key)
             render()
             return
@@ -1942,13 +1798,7 @@ class CalmLauncherRunner(
 
     private fun removeClassicPageFromOverview(page: ClassicLauncherPageDefinition, focusPageKey: String?) {
         val removed = settings.removeClassicPage(page.id) ?: return
-        if (editingClassicPageId == removed.id) {
-            editingClassicPageId = null
-        }
-        pendingClassicPlacementItemId = null
-        removed.items
-            .filter { item -> item.type == ClassicGridItemType.WIDGET }
-            .forEach(classicWidgetHostController::deleteWidget)
+        classicPageCoordinator.onClassicPageRemoved(removed)
         toast(R.string.toast_page_removed, removed.title)
         renderAndReopenPageOverview(focusPageKey)
     }

@@ -7,7 +7,7 @@ import java.text.Collator
 class LauncherSettings(private val preferences: SharedPreferences) {
     private val mutationLock = Any()
 
-    constructor(context: Context) : this(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE))
+    constructor(context: Context) : this(LauncherPreferencesFactory.create(context))
 
     fun excludedPackages(): Set<String> {
         return HashSet(preferences.getStringSet(PREF_EXCLUDED_PACKAGES, emptySet()) ?: emptySet())
@@ -996,7 +996,6 @@ class LauncherSettings(private val preferences: SharedPreferences) {
     }
 
     companion object {
-        private const val PREFS_NAME = "calm_preferences"
         private const val PREF_EXCLUDED_PACKAGES = "excluded_notification_packages"
         private const val PREF_NOTIFICATION_FILTERS = "notification_filters"
         private const val PREF_PINNED_PACKAGES = "pinned_packages"

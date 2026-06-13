@@ -857,6 +857,7 @@ class CalmSettingsActivity : ComponentActivity() {
                 PageSlot.CLASSIC_PAGES -> addClassicPreviewRows(this, accent)
                 PageSlot.APPS -> addAppPreviewRows(this, accent)
                 PageSlot.NOTIFICATIONS -> addNotificationPreviewRows(this, accent)
+                PageSlot.CATEGORIES -> addAppPreviewRows(this, accent)
                 PageSlot.PINNED -> addPinnedPreviewRows(this, accent)
                 PageSlot.CONTACTS -> addContactPreviewRows(this, accent)
                 PageSlot.AGENDA -> addAgendaPreviewRows(this, accent)

@@ -827,6 +827,7 @@ class CalmLauncherRunner(
         PageSlot.ALARMS -> CalmTheme.ALARMS_KEY
         PageSlot.RSS -> CalmTheme.RSS_KEY
         PageSlot.APPS -> CalmTheme.APP_LIBRARY_KEY
+        PageSlot.CATEGORIES -> CalmTheme.CATEGORY_FOLDER_KEY
         PageSlot.CLASSIC_PAGES -> settings.homeClassicPage()?.key ?: CalmTheme.OVERVIEW_KEY
         PageSlot.NOTIFICATIONS -> CalmTheme.OVERVIEW_KEY
     }

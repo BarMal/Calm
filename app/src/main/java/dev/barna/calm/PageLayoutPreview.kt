@@ -23,6 +23,7 @@ object PageLayoutPreviewModel {
 
     private fun label(slot: PageSlot): String = when (slot) {
         PageSlot.APPS -> "Apps"
+        PageSlot.CATEGORIES -> "Categories"
         PageSlot.PINNED -> "Pinned"
         PageSlot.CONTACTS -> "People"
         PageSlot.AGENDA -> "Agenda"
@@ -36,6 +37,7 @@ object PageLayoutPreviewModel {
 
     private fun shortLabel(slot: PageSlot): String = when (slot) {
         PageSlot.APPS -> "Apps"
+        PageSlot.CATEGORIES -> "Cat"
         PageSlot.PINNED -> "Pin"
         PageSlot.CONTACTS -> "Ppl"
         PageSlot.AGENDA -> "Cal"

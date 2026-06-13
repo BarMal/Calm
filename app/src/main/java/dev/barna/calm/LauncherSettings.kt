@@ -887,6 +887,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             fullScreenModeEnabled(),
             appGroupingEnabled(),
             categoryList(),
+            appCategoryAssignments(),
         ).hashCode()
     }
 

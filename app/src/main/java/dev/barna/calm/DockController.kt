@@ -95,7 +95,7 @@ class DockController(
                 config = config,
                 selectAppIndex = { index, transition ->
                     val newIndex = normalizedIndex(index, apps.size)
-                    if (transition is DockTransition.Horizontal) {
+                    if (transition is DockTransition.Vertical) {
                         resetFeaturedNotificationIndex(apps[newIndex], chapters, transition.direction)
                     }
                     bind(index, transition)
@@ -136,7 +136,7 @@ class DockController(
             config = config,
             selectAppIndex = { index, transition ->
                 val newIndex = normalizedIndex(index, apps.size)
-                if (transition is DockTransition.Horizontal) {
+                if (transition is DockTransition.Vertical) {
                     resetFeaturedNotificationIndex(apps[newIndex], chapters, transition.direction)
                 }
                 bind(index, transition)
@@ -543,20 +543,20 @@ class DockController(
                     if (max(abs(dx), abs(dy)) >= swipeThreshold) {
                         if (abs(dy) > abs(dx)) {
                             val direction = if (dy < 0) 1 else -1
-                            val cycled = cycleNotification(DockTransition.Vertical(direction))
-                            if (!cycled) {
-                                selectAppIndex(
-                                    DockGesturePolicy.nextAppIndex(currentIndex(), apps.size, direction),
-                                    DockTransition.Vertical(direction),
-                                )
-                            }
+                            selectAppIndex(
+                                DockGesturePolicy.nextAppIndex(currentIndex(), apps.size, direction),
+                                DockTransition.Vertical(direction),
+                            )
                             performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                         } else {
                             val direction = if (dx < 0) 1 else -1
-                            selectAppIndex(
-                                DockGesturePolicy.nextAppIndex(currentIndex(), apps.size, direction),
-                                DockTransition.Horizontal(direction),
-                            )
+                            val cycled = cycleNotification(DockTransition.Horizontal(direction))
+                            if (!cycled) {
+                                selectAppIndex(
+                                    DockGesturePolicy.nextAppIndex(currentIndex(), apps.size, direction),
+                                    DockTransition.Horizontal(direction),
+                                )
+                            }
                             performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                         }
                     } else if (!gestureMoved) {
@@ -592,10 +592,7 @@ class DockController(
         val count = target.chapter.notifications.size
         if (count <= 1) return false
         val current = featuredNotificationIndexes[app.identityKey] ?: 0
-        val next = current + direction
-        // Don't wrap — returning false at the boundary lets the caller navigate to the next app.
-        if (next < 0 || next >= count) return false
-        featuredNotificationIndexes[app.identityKey] = next
+        featuredNotificationIndexes[app.identityKey] = normalizedIndex(current + direction, count)
         return true
     }
 
@@ -615,13 +612,14 @@ class DockController(
         }
         val direction = transition.direction
         when (transition) {
-            is DockTransition.Horizontal -> {
+            is DockTransition.Vertical -> {
+                // App-change: only the top card slides up/down.
                 val topCard = surface.findViewWithTag<View>(DOCK_TOP_CARD_TAG)
                 if (topCard == null) { rebind(); return }
-                val distance = surface.width * 0.42f
+                val distance = activity.dp(48).toFloat()
                 topCard.animate()
                     .alpha(0f)
-                    .translationX(-direction * distance)
+                    .translationY(-direction * distance)
                     .setDuration(DOCK_STACK_ANIMATION_MS)
                     .setListener(object : AnimatorListenerAdapter() {
                         private var cancelled = false
@@ -631,10 +629,10 @@ class DockController(
                             rebind()
                             val next = surface.findViewWithTag<View>(DOCK_TOP_CARD_TAG) ?: return
                             next.alpha = 0f
-                            next.translationX = direction * activity.dp(34).toFloat()
+                            next.translationY = direction * activity.dp(28).toFloat()
                             next.animate()
                                 .alpha(1f)
-                                .translationX(0f)
+                                .translationY(0f)
                                 .setDuration(DOCK_STACK_ANIMATION_MS)
                                 .setListener(null)
                                 .start()
@@ -642,7 +640,8 @@ class DockController(
                     })
                     .start()
             }
-            is DockTransition.Vertical -> {
+            is DockTransition.Horizontal -> {
+                // Notification cycle: only the text content crossfades horizontally.
                 val cardText = surface.findViewWithTag<View>(DOCK_CARD_TEXT_TAG)
                 if (cardText == null) { rebind(); return }
                 val distance = activity.dp(40).toFloat()

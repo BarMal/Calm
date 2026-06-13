@@ -145,6 +145,7 @@ class CardStackController(
             override fun onViewDetachedFromWindow(v: android.view.View) {
                 v.removeOnLayoutChangeListener(viewportLayoutListener)
                 v.removeOnAttachStateChangeListener(this)
+                cleanupDetachedStack(scroller)
             }
         })
         scroller.post {
@@ -223,6 +224,12 @@ class CardStackController(
         val maxStep = context.dp(88)
         val fromBase = (baseStep * (0.72f + (tuning.verticalSpacing / 100f) * 0.72f)).toInt()
         return fromBase.coerceIn(minStep, maxStep)
+    }
+
+    private fun cleanupDetachedStack(scroller: ScrollView) {
+        stackRuntimeStates.remove(scroller)?.magneticSnap?.let(mainHandler::removeCallbacks)
+        activeStackKeys.remove(scroller)
+        suppressedRestoreScrolls.remove(scroller)
     }
 
     private fun appendCardsToStack(

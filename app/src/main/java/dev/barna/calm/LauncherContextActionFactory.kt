@@ -2,15 +2,39 @@ package dev.barna.calm
 
 import android.content.Context
 
-data class LauncherContextActionCallbacks(
+data class NotificationContextActionCallbacks(
     val openNotification: (CalmNotificationListenerService.CalmNotification) -> Unit,
     val openPackage: (AppChapter) -> Unit,
     val dismissNotificationItem: (NotificationCardItem) -> Unit,
     val clearChapter: (AppChapter) -> Unit,
     val performNotificationAction: (NotificationAction) -> Unit,
+) {
+    companion object {
+        val Empty = NotificationContextActionCallbacks(
+            openNotification = {},
+            openPackage = {},
+            dismissNotificationItem = {},
+            clearChapter = {},
+            performNotificationAction = {},
+        )
+    }
+}
+
+data class CalendarContextActionCallbacks(
     val openCalendarEvent: (CalendarEvent) -> Unit,
     val requestCalendarAccess: () -> Unit,
     val openSettings: () -> Unit,
+) {
+    companion object {
+        val Empty = CalendarContextActionCallbacks(
+            openCalendarEvent = {},
+            requestCalendarAccess = {},
+            openSettings = {},
+        )
+    }
+}
+
+data class AppContextActionCallbacks(
     val openAppEntry: (AppEntry) -> Unit,
     val pinApp: (AppEntry) -> Unit,
     val unpinApp: (AppEntry) -> Unit,
@@ -18,12 +42,45 @@ data class LauncherContextActionCallbacks(
     val hideApp: (AppEntry) -> Unit,
     val appShortcuts: (AppEntry) -> List<AppShortcutEntry>,
     val launchShortcut: (AppShortcutEntry) -> Unit,
+) {
+    companion object {
+        val Empty = AppContextActionCallbacks(
+            openAppEntry = {},
+            pinApp = {},
+            unpinApp = {},
+            openAppInfo = {},
+            hideApp = {},
+            appShortcuts = { emptyList() },
+            launchShortcut = {},
+        )
+    }
+}
+
+data class DockContextActionCallbacks(
     val isDockItem: (String) -> Boolean,
     val addDockItem: (String, String) -> Unit,
     val removeDockItem: (String, String) -> Unit,
+) {
+    companion object {
+        val Empty = DockContextActionCallbacks(
+            isDockItem = { false },
+            addDockItem = { _, _ -> },
+            removeDockItem = { _, _ -> },
+        )
+    }
+}
+
+data class ClassicPageContextActionCallbacks(
     val isClassicPageApp: (String) -> Boolean,
     val addAppToClassicPage: (AppEntry) -> Unit,
-)
+) {
+    companion object {
+        val Empty = ClassicPageContextActionCallbacks(
+            isClassicPageApp = { false },
+            addAppToClassicPage = {},
+        )
+    }
+}
 
 data class LauncherContextActionLabels(
     val open: String = "Open",
@@ -66,7 +123,11 @@ data class LauncherContextActionLabels(
 }
 
 class LauncherContextActionFactory(
-    private val callbacks: LauncherContextActionCallbacks,
+    private val notificationCallbacks: NotificationContextActionCallbacks = NotificationContextActionCallbacks.Empty,
+    private val calendarCallbacks: CalendarContextActionCallbacks = CalendarContextActionCallbacks.Empty,
+    private val appCallbacks: AppContextActionCallbacks = AppContextActionCallbacks.Empty,
+    private val dockCallbacks: DockContextActionCallbacks = DockContextActionCallbacks.Empty,
+    private val classicPageCallbacks: ClassicPageContextActionCallbacks = ClassicPageContextActionCallbacks.Empty,
     private val labels: LauncherContextActionLabels = LauncherContextActionLabels(),
 ) {
     fun notificationActions(
@@ -76,16 +137,16 @@ class LauncherContextActionFactory(
         val actions = ArrayList<ContextAction>()
         actions.addAll(
             listOf(
-                ContextAction(labels.open, Runnable { callbacks.openNotification(item.primary) }),
-                ContextAction(labels.openApp, Runnable { callbacks.openPackage(chapter) }),
+                ContextAction(labels.open, Runnable { notificationCallbacks.openNotification(item.primary) }),
+                ContextAction(labels.openApp, Runnable { notificationCallbacks.openPackage(chapter) }),
                 ContextAction(
                     labels.dismiss,
-                    Runnable { callbacks.dismissNotificationItem(item) },
+                    Runnable { notificationCallbacks.dismissNotificationItem(item) },
                     ContextActionCloseBehavior.REMOVE_CARD,
                 ),
                 ContextAction(
                     labels.clear,
-                    Runnable { callbacks.clearChapter(chapter) },
+                    Runnable { notificationCallbacks.clearChapter(chapter) },
                     ContextActionCloseBehavior.REMOVE_CARD,
                 ),
             ),
@@ -94,7 +155,7 @@ class LauncherContextActionFactory(
             actions.add(2, dockAction(chapter.launcherIdentityKey, chapter.label))
         }
         item.allActions().forEach { action ->
-            actions.add(ContextAction(action.label, Runnable { callbacks.performNotificationAction(action) }))
+            actions.add(ContextAction(action.label, Runnable { notificationCallbacks.performNotificationAction(action) }))
         }
         return actions
     }
@@ -104,12 +165,12 @@ class LauncherContextActionFactory(
         hasCalendarPermission: Boolean,
     ): List<ContextAction> {
         return listOf(
-            ContextAction(labels.openCalendar, Runnable { callbacks.openCalendarEvent(event) }),
+            ContextAction(labels.openCalendar, Runnable { calendarCallbacks.openCalendarEvent(event) }),
             ContextAction(
                 if (hasCalendarPermission) labels.calendarAccess else labels.allowCalendar,
-                Runnable { callbacks.requestCalendarAccess() },
+                Runnable { calendarCallbacks.requestCalendarAccess() },
             ),
-            ContextAction(labels.settings, Runnable { callbacks.openSettings() }),
+            ContextAction(labels.settings, Runnable { calendarCallbacks.openSettings() }),
         )
     }
 
@@ -122,31 +183,31 @@ class LauncherContextActionFactory(
         pinned: Boolean,
     ): List<ContextAction> {
         val actions = ArrayList<ContextAction>()
-        actions.add(ContextAction(labels.open, Runnable { callbacks.openAppEntry(app) }))
+        actions.add(ContextAction(labels.open, Runnable { appCallbacks.openAppEntry(app) }))
         actions.add(ContextAction(if (pinned) labels.unpin else labels.pin, Runnable {
             if (pinned) {
-                callbacks.unpinApp(app)
+                appCallbacks.unpinApp(app)
             } else {
-                callbacks.pinApp(app)
+                appCallbacks.pinApp(app)
             }
         }))
         actions.add(dockAction(app.identityKey, app.label))
-        if (!callbacks.isClassicPageApp(app.identityKey)) {
-            actions.add(ContextAction(labels.addToClassicPage, Runnable { callbacks.addAppToClassicPage(app) }))
+        if (!classicPageCallbacks.isClassicPageApp(app.identityKey)) {
+            actions.add(ContextAction(labels.addToClassicPage, Runnable { classicPageCallbacks.addAppToClassicPage(app) }))
         }
-        callbacks.appShortcuts(app).take(MAX_SHORTCUTS).forEach { shortcut ->
-            actions.add(ContextAction(shortcut.label, Runnable { callbacks.launchShortcut(shortcut) }))
+        appCallbacks.appShortcuts(app).take(MAX_SHORTCUTS).forEach { shortcut ->
+            actions.add(ContextAction(shortcut.label, Runnable { appCallbacks.launchShortcut(shortcut) }))
         }
-        actions.add(ContextAction(labels.info, Runnable { callbacks.openAppInfo(app) }))
-        actions.add(ContextAction(labels.hide, Runnable { callbacks.hideApp(app) }, ContextActionCloseBehavior.REMOVE_CARD))
+        actions.add(ContextAction(labels.info, Runnable { appCallbacks.openAppInfo(app) }))
+        actions.add(ContextAction(labels.hide, Runnable { appCallbacks.hideApp(app) }, ContextActionCloseBehavior.REMOVE_CARD))
         return actions
     }
 
     fun dockAction(identityKey: String, label: String): ContextAction {
-        return if (callbacks.isDockItem(identityKey)) {
-            ContextAction(labels.removeFromDock, Runnable { callbacks.removeDockItem(identityKey, label) })
+        return if (dockCallbacks.isDockItem(identityKey)) {
+            ContextAction(labels.removeFromDock, Runnable { dockCallbacks.removeDockItem(identityKey, label) })
         } else {
-            ContextAction(labels.addToDock, Runnable { callbacks.addDockItem(identityKey, label) })
+            ContextAction(labels.addToDock, Runnable { dockCallbacks.addDockItem(identityKey, label) })
         }
     }
 }

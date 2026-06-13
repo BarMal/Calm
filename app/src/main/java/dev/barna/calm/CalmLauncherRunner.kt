@@ -80,15 +80,19 @@ class CalmLauncherRunner(
         beginClassicItemPlacement = ::beginClassicItemPlacement,
     )
     private val contextActionFactory = LauncherContextActionFactory(
-        callbacks = LauncherContextActionCallbacks(
+        notificationCallbacks = NotificationContextActionCallbacks(
             openNotification = { notificationActionController.openNotification(it) },
             openPackage = ::openPackage,
             dismissNotificationItem = { notificationActionController.dismissNotificationItem(it) },
             clearChapter = { notificationActionController.clearChapter(it) },
             performNotificationAction = { notificationActionController.performNotificationAction(it) },
+        ),
+        calendarCallbacks = CalendarContextActionCallbacks(
             openCalendarEvent = ::openCalendarEvent,
             requestCalendarAccess = { calendarRepository.requestCalendarAccess() },
             openSettings = ::openSettingsActivity,
+        ),
+        appCallbacks = AppContextActionCallbacks(
             openAppEntry = ::openAppEntry,
             pinApp = appMutationHandler::pinApp,
             unpinApp = appMutationHandler::unpinApp,
@@ -100,9 +104,13 @@ class CalmLauncherRunner(
                     Toast.makeText(activity, "Shortcut unavailable", Toast.LENGTH_SHORT).show()
                 }
             },
+        ),
+        dockCallbacks = DockContextActionCallbacks(
             isDockItem = appMutationHandler::isDockItem,
             addDockItem = appMutationHandler::addDockItem,
             removeDockItem = appMutationHandler::removeDockItem,
+        ),
+        classicPageCallbacks = ClassicPageContextActionCallbacks(
             isClassicPageApp = appMutationHandler::isClassicPageApp,
             addAppToClassicPage = appMutationHandler::addAppToClassicPage,
         ),

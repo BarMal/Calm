@@ -7,6 +7,7 @@ object CalmTheme {
     const val PERSONAL_APP_LIBRARY_KEY = "dev.barna.calm.APPS.PERSONAL"
     const val WORK_APP_LIBRARY_KEY = "dev.barna.calm.APPS.WORK"
     const val PINNED_KEY = "dev.barna.calm.PINNED"
+    const val CATEGORY_FOLDER_KEY = "dev.barna.calm.CATEGORIES"
     const val CONTACTS_KEY = "dev.barna.calm.CONTACTS"
     const val AGENDA_KEY = "dev.barna.calm.AGENDA"
     const val ALARMS_KEY = "dev.barna.calm.ALARMS"

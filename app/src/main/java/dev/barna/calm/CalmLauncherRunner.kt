@@ -375,6 +375,20 @@ class CalmLauncherRunner(
         removeClassicPage = classicPageCoordinator::removeClassicPage,
         barePagePanel = ::createBarePagePanel,
         label = ::label,
+        categoryGroupsProvider = {
+            val assignments = settings.appCategoryAssignments()
+            if (!settings.appGroupingEnabled() || assignments.isEmpty()) {
+                emptyList()
+            } else {
+                AppLibraryFilter().groupByCategory(
+                    appLibraryStore.state().apps,
+                    settings.categoryList(),
+                    assignments,
+                    AppLibraryScope.ALL,
+                    "",
+                )
+            }
+        },
     )
     private val appLibraryDataManager = LauncherAppLibraryDataManager(
         notificationRepository = notificationRepository,

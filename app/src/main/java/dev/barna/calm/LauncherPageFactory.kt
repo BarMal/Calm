@@ -67,12 +67,14 @@ class LauncherPageFactory(
     private val removeClassicPage: (ClassicLauncherPageDefinition) -> Unit,
     private val barePagePanel: (Int) -> LinearLayout,
     private val label: (String, Int, Int, Int) -> TextView,
+    private val categoryGroupsProvider: () -> List<AppCategoryGroup>,
 ) {
     private var classicMenuAnchor: Pair<Int, Int>? = null
 
     fun createPage(page: ChapterPage, state: LauncherRenderModel): View {
         return when {
             page.appScope != null -> createAppLibraryPage(page, state.appEntries)
+            page.key == CalmTheme.CATEGORY_FOLDER_KEY -> createCategoryFolderPage(state)
             page.key == CalmTheme.PINNED_KEY -> createPinnedPage(state.pinnedApps)
             page.key == CalmTheme.CONTACTS_KEY -> contactsPageController.buildPage()
             page.key == CalmTheme.AGENDA_KEY -> agendaPageBuilder.buildPage(state)
@@ -1112,6 +1114,52 @@ class LauncherPageFactory(
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun createCategoryFolderPage(state: LauncherRenderModel): LinearLayout {
+        val groups = categoryGroupsProvider()
+        return barePagePanel(activity.dp(20)).apply {
+            addView(animatedChrome(label("Categories", 30, CalmTheme.INK, Typeface.NORMAL).apply {
+                setPadding(0, activity.dp(8), 0, activity.dp(24))
+            }))
+            if (groups.isEmpty()) {
+                addView(
+                    LinearLayout(activity).apply {
+                        gravity = Gravity.CENTER
+                        addView(
+                            cardRenderer.stackCard(
+                                "Categories\nNo apps are categorised yet.\nUse Settings → Apps → Auto-categorise.",
+                                CalmTheme.ACCENT,
+                                false,
+                            ),
+                            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, cardRenderer.cardHeight()),
+                        )
+                    },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+                )
+            } else {
+                val cards = groups.map { group -> categoryFolderCard(group, state) }.toMutableList()
+                addView(
+                    appLibraryController.appStack(cards, CardStackStateKey.categoryFolder(groups)),
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+                )
+            }
+        }
+    }
+
+    private fun categoryFolderCard(group: AppCategoryGroup, state: LauncherRenderModel): TextView {
+        val count = group.apps.size
+        val text = "${group.category.title}\n$count ${if (count == 1) "app" else "apps"}"
+        return cardRenderer.stackCard(text, CalmTheme.ACCENT, true).apply {
+            maxLines = 2
+            setOnClickListener {
+                val appStack = appLibraryController.appStack(
+                    group.apps,
+                    stackKey = CardStackStateKey.appEntries("cat:${group.category.id}", group.apps),
+                )
+                focusOverlay.showExpandedCard(this, appStack, emptyList())
+            }
+        }
     }
 
     private fun createPinnedPage(pinnedApps: List<AppEntry>): LinearLayout {

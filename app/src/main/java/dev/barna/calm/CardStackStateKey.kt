@@ -17,4 +17,8 @@ object CardStackStateKey {
     fun notifications(chapter: AppChapter): String {
         return "notifications:${chapter.identityKey}"
     }
+
+    fun categoryFolder(groups: List<AppCategoryGroup>): String {
+        return "category-folder:${groups.joinToString("|") { g -> "${g.category.id}:${g.apps.size}" }}"
+    }
 }

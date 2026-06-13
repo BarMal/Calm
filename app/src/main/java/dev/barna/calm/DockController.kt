@@ -441,7 +441,7 @@ class DockController(
     private fun notificationCountChip(count: Int): TextView {
         return TextView(activity).apply {
             text = count.coerceAtMost(99).toString()
-            setTextColor(Color.WHITE)
+            setTextColor(CalmThemeColor.onNotificationBadge(activity))
             textSize = 11f
             typeface = Typeface.DEFAULT
             setTypeface(typeface, Typeface.BOLD)
@@ -450,7 +450,7 @@ class DockController(
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = activity.dp(999).toFloat()
-                setColor(Color.rgb(196, 57, 72))
+                setColor(CalmThemeColor.notificationBadge(activity))
             }
         }
     }
@@ -655,7 +655,7 @@ class DockController(
             TextView(activity).apply {
                 text = count.coerceAtMost(99).toString()
                 contentDescription = AccessibilityCopy.notificationBadgeDescription(count)
-                setTextColor(Color.WHITE)
+                setTextColor(CalmThemeColor.onNotificationBadge(activity))
                 textSize = 10f
                 typeface = Typeface.DEFAULT
                 setTypeface(typeface, Typeface.BOLD)
@@ -664,7 +664,7 @@ class DockController(
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = activity.dp(999).toFloat()
-                    setColor(Color.rgb(196, 57, 72))
+                    setColor(CalmThemeColor.notificationBadge(activity))
                 }
             },
             FrameLayout.LayoutParams(activity.dp(20), activity.dp(20), Gravity.TOP or Gravity.END).apply {

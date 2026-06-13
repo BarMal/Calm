@@ -1,0 +1,7 @@
+<resources>
+    <attr name="calmNotificationBadgeColor" format="color" />
+    <attr name="calmOnNotificationBadgeColor" format="color" />
+    <attr name="calmPageOverviewScrimColor" format="color" />
+    <attr name="calmPageOverviewBadgeScrimColor" format="color" />
+    <attr name="calmOnPageOverviewScrimColor" format="color" />
+</resources>

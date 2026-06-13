@@ -576,6 +576,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             agendaSectionTitleStyle = agendaSectionTitleStyle(),
             cardAppearance = cardAppearance(),
             pageLayout = pageLayout(),
+            chapterSpineStyle = chapterSpineStyle(),
         )
     }
 
@@ -609,6 +610,21 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             .remove(PREF_PAGE_LAYOUT_DISABLED)
             .putString(PREF_PAGE_LAYOUT_HOME, slot.name)
             .apply()
+    }
+
+    fun chapterSpineStyle(): ChapterSpineStyle {
+        return ChapterSpineStyle(
+            titleMode = enumPreference(PREF_CHAPTER_SPINE_TITLE_MODE, ChapterSpineTitleMode.COMBINED),
+            position = enumPreference(PREF_CHAPTER_SPINE_POSITION, ChapterSpinePosition.TOP),
+        )
+    }
+
+    fun setChapterSpineTitleMode(mode: ChapterSpineTitleMode) {
+        preferences.edit().putString(PREF_CHAPTER_SPINE_TITLE_MODE, mode.name).apply()
+    }
+
+    fun setChapterSpinePosition(position: ChapterSpinePosition) {
+        preferences.edit().putString(PREF_CHAPTER_SPINE_POSITION, position.name).apply()
     }
 
     fun cardAppearance(): CardAppearance {
@@ -1031,6 +1047,8 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_PAGE_LAYOUT_ORDER = "page_layout_order"
         private const val PREF_PAGE_LAYOUT_DISABLED = "page_layout_disabled"
         private const val PREF_PAGE_LAYOUT_HOME = "page_layout_home"
+        private const val PREF_CHAPTER_SPINE_TITLE_MODE = "chapter_spine_title_mode"
+        private const val PREF_CHAPTER_SPINE_POSITION = "chapter_spine_position"
         private const val PREF_CARD_EFFECT = "card_effect"
         private const val PREF_CARD_EFFECT_STRENGTH = "card_effect_strength"
         private const val PREF_CARD_TINT_STRENGTH = "card_tint_strength"

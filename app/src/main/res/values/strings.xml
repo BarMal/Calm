@@ -67,6 +67,17 @@
     <string name="settings_dock_padding_value">%1$ddp padding</string>
     <string name="settings_dock_size_icon_with_name">2x1 icon + name</string>
     <string name="settings_dock_size_icon_only">1x1 icon</string>
+    <string name="settings_section_page_titles">Page titles</string>
+    <string name="settings_spine_title_mode_title">Spine and title</string>
+    <string name="settings_spine_position_title">Title position</string>
+    <string name="settings_spine_mode_split">Split</string>
+    <string name="settings_spine_mode_combined">Combined</string>
+    <string name="settings_spine_mode_title_only">Title only</string>
+    <string name="settings_spine_mode_spine_only">Spine only</string>
+    <string name="settings_spine_mode_hidden">Hidden</string>
+    <string name="settings_spine_position_top">Top</string>
+    <string name="settings_spine_position_bottom">Bottom</string>
+    <string name="settings_spine_position_hidden">Hidden</string>
     <string name="dialog_dock_apps_title">Dock apps (up to %1$d)</string>
     <string name="dialog_hidden_apps_title">Hidden apps</string>
     <string name="dock_card_tap_to_open">Tap to open</string>

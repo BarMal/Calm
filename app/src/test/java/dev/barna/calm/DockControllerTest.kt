@@ -81,7 +81,7 @@ class DockControllerTest {
     }
 
     @Test
-    fun cardDockVerticalSwipeCyclesCurrentAppsNotifications() {
+    fun cardDockHorizontalSwipeCyclesCurrentAppsNotifications() {
         val dock = controller.buildDock(
             apps = apps(),
             config = DockConfig(enabled = true, style = DockStyle.CARD),
@@ -91,8 +91,8 @@ class DockControllerTest {
         assertTrue(dock.containsText("Newest body"))
 
         dock.dispatchTouchEvent(MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, 60f, 80f, 0))
-        dock.dispatchTouchEvent(MotionEvent.obtain(0L, 16L, MotionEvent.ACTION_MOVE, 60f, 20f, 0))
-        dock.dispatchTouchEvent(MotionEvent.obtain(0L, 32L, MotionEvent.ACTION_UP, 60f, 20f, 0))
+        dock.dispatchTouchEvent(MotionEvent.obtain(0L, 16L, MotionEvent.ACTION_MOVE, 0f, 80f, 0))
+        dock.dispatchTouchEvent(MotionEvent.obtain(0L, 32L, MotionEvent.ACTION_UP, 0f, 80f, 0))
 
         assertTrue(dock.containsText("Older body"))
     }

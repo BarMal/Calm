@@ -1,6 +1,7 @@
 package dev.barna.calm
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -63,16 +64,76 @@ class AppLibraryPageModelTest {
         assertEquals(true, model.loading)
     }
 
+    @Test
+    fun categoryGroupingIsNullWhenContextAbsent() {
+        val page = ChapterPage.appLibrary(CalmTheme.APP_LIBRARY_KEY)
+        val model = factory.create(page, listOf(app("com.mail", "Mail")), "")
+        assertNull(model.categoryGroups)
+    }
+
+    @Test
+    fun categoryGroupingIsNullWhenGroupingDisabled() {
+        val context = AppLibraryCategoryContext(
+            categories = listOf(AppCategory("communications", "Communications")),
+            assignments = mapOf("com.mail" to listOf("communications")),
+            groupingEnabled = false,
+        )
+        val groupingFactory = AppLibraryPageModelFactory(categoryContext = { context })
+        val mail = app("com.mail", "Mail", identityKey = "com.mail")
+        val page = ChapterPage.appLibrary(CalmTheme.APP_LIBRARY_KEY)
+
+        val model = groupingFactory.create(page, listOf(mail), "")
+
+        assertNull(model.categoryGroups)
+    }
+
+    @Test
+    fun categoryGroupingPopulatesGroupsWhenEnabled() {
+        val comms = AppCategory("communications", "Communications")
+        val context = AppLibraryCategoryContext(
+            categories = listOf(comms),
+            assignments = mapOf("com.mail" to listOf("communications")),
+            groupingEnabled = true,
+        )
+        val groupingFactory = AppLibraryPageModelFactory(categoryContext = { context })
+        val mail = app("com.mail", "Mail", identityKey = "com.mail")
+        val page = ChapterPage.appLibrary(CalmTheme.APP_LIBRARY_KEY)
+
+        val model = groupingFactory.create(page, listOf(mail), "")
+
+        assertNotNull(model.categoryGroups)
+        assertEquals(1, model.categoryGroups!!.size)
+        assertEquals(comms, model.categoryGroups!![0].category)
+        assertEquals(listOf(mail), model.categoryGroups!![0].apps)
+    }
+
+    @Test
+    fun categoryGroupingIsNullWhenAssignmentsEmpty() {
+        val context = AppLibraryCategoryContext(
+            categories = listOf(AppCategory("communications", "Communications")),
+            assignments = emptyMap(),
+            groupingEnabled = true,
+        )
+        val groupingFactory = AppLibraryPageModelFactory(categoryContext = { context })
+        val page = ChapterPage.appLibrary(CalmTheme.APP_LIBRARY_KEY)
+
+        val model = groupingFactory.create(page, listOf(app("com.mail", "Mail")), "")
+
+        assertNull(model.categoryGroups)
+    }
+
     private fun app(
         packageName: String,
         label: String,
         isWorkProfile: Boolean = false,
+        identityKey: String = packageName,
     ): AppEntry {
         return AppEntry(
             packageName = packageName,
             label = label,
             hueColor = 0xff123456.toInt(),
             isWorkProfile = isWorkProfile,
+            identityKey = identityKey,
         )
     }
 }

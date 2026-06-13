@@ -37,7 +37,10 @@ class LauncherAppLibraryController(
             (card.parent as? android.view.ViewGroup)?.removeView(card)
         }
         stackHost.removeAllViews()
-        if (model.apps.isEmpty()) {
+        val groups = model.categoryGroups
+        if (!groups.isNullOrEmpty()) {
+            refreshCategoryGroupStack(stackHost, model, groups, cardCache)
+        } else if (model.apps.isEmpty()) {
             stackHost.addView(appSearchEmptyStack(model.emptyMessage, appLibraryStackKey(model)), matchParentParams())
         } else {
             val plan = appStackRenderPlanner.plan(model.apps, activePreferences().cardStackTuning)
@@ -45,6 +48,32 @@ class LauncherAppLibraryController(
             val stack = appStack(cards, appLibraryStackKey(model))
             stackHost.addView(stack, matchParentParams())
             appendDeferredAppCards(stackHost, stack, cards, plan.deferredApps, cardCache, model)
+        }
+    }
+
+    private fun refreshCategoryGroupStack(
+        stackHost: FrameLayout,
+        model: AppLibraryPageModel,
+        groups: List<AppCategoryGroup>,
+        cardCache: MutableMap<String, TextView>?,
+    ) {
+        val allCards = mutableListOf<TextView>()
+        groups.forEach { group ->
+            allCards.add(categoryHeaderCard(group))
+            group.apps.forEach { app -> allCards.add(appCardFromCache(app, cardCache)) }
+        }
+        val stackKey = CardStackStateKey.appLibrary(model.key, model.scope, model.query) + ":grouped"
+        val stack = appStack(allCards, stackKey)
+        stackHost.addView(stack, matchParentParams())
+    }
+
+    private fun categoryHeaderCard(group: AppCategoryGroup): TextView {
+        val count = group.apps.size
+        val label = "${group.category.title}\n$count ${if (count == 1) "app" else "apps"}"
+        return cardRenderer.stackCard(label, CalmTheme.ACCENT, false).apply {
+            maxLines = 2
+            isEnabled = false
+            alpha = 0.72f
         }
     }
 

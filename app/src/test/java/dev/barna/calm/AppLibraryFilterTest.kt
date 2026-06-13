@@ -49,11 +49,67 @@ class AppLibraryFilterTest {
         assertEquals("Loading work apps...", filter.loadingMessage(AppLibraryScope.WORK))
     }
 
+    @Test
+    fun groupByCategoryGroupsAppsIntoEnabledCategories() {
+        val mail = app("com.mail", "Mail", identityKey = "mail")
+        val chat = app("com.chat", "Chat", identityKey = "chat")
+        val camera = app("com.camera", "Camera", identityKey = "camera")
+        val comms = AppCategory("communications", "Communications")
+        val media = AppCategory("media", "Media")
+        val assignments = mapOf("mail" to listOf("communications"), "chat" to listOf("communications"), "camera" to listOf("media"))
+
+        val groups = filter.groupByCategory(listOf(mail, chat, camera), listOf(comms, media), assignments, AppLibraryScope.ALL, "")
+
+        assertEquals(2, groups.size)
+        assertEquals(comms, groups[0].category)
+        assertEquals(listOf(mail, chat), groups[0].apps)
+        assertEquals(media, groups[1].category)
+        assertEquals(listOf(camera), groups[1].apps)
+    }
+
+    @Test
+    fun groupByCategorySkipsEmptyCategories() {
+        val mail = app("com.mail", "Mail", identityKey = "mail")
+        val comms = AppCategory("communications", "Communications")
+        val media = AppCategory("media", "Media")
+        val assignments = mapOf("mail" to listOf("communications"))
+
+        val groups = filter.groupByCategory(listOf(mail), listOf(comms, media), assignments, AppLibraryScope.ALL, "")
+
+        assertEquals(1, groups.size)
+        assertEquals(comms, groups[0].category)
+    }
+
+    @Test
+    fun groupByCategorySkipsDisabledCategories() {
+        val mail = app("com.mail", "Mail", identityKey = "mail")
+        val comms = AppCategory("communications", "Communications", enabled = false)
+        val assignments = mapOf("mail" to listOf("communications"))
+
+        val groups = filter.groupByCategory(listOf(mail), listOf(comms), assignments, AppLibraryScope.ALL, "")
+
+        assertTrue(groups.isEmpty())
+    }
+
+    @Test
+    fun groupByCategoryAppliesSearchQuery() {
+        val mail = app("com.mail", "Mail", identityKey = "mail")
+        val chat = app("com.chat", "Chat", identityKey = "chat")
+        val comms = AppCategory("communications", "Communications")
+        val assignments = mapOf("mail" to listOf("communications"), "chat" to listOf("communications"))
+
+        val groups = filter.groupByCategory(listOf(mail, chat), listOf(comms), assignments, AppLibraryScope.ALL, "mail")
+
+        assertEquals(1, groups.size)
+        assertEquals(listOf(mail), groups[0].apps)
+    }
+
     private fun app(
         packageName: String,
         label: String,
         profileLabel: String = "",
         isWorkProfile: Boolean = false,
+        identityKey: String = packageName,
     ): AppEntry {
         return AppEntry(
             packageName = packageName,
@@ -61,6 +117,7 @@ class AppLibraryFilterTest {
             hueColor = 0xff123456.toInt(),
             profileLabel = profileLabel,
             isWorkProfile = isWorkProfile,
+            identityKey = identityKey,
         )
     }
 }

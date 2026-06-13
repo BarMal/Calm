@@ -151,7 +151,7 @@ class ChapterPageBuilder(
         notificationRepository.getAppShortcuts(chapter).take(MAX_EMPTY_CHAPTER_SHORTCUTS).forEach { shortcut ->
             cards.add(chapterAffordanceCard(shortcut.label, chapter, tintCards) {
                 if (!notificationRepository.launchShortcut(shortcut)) {
-                    Toast.makeText(activity, "Shortcut unavailable", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(activity, activity.getString(R.string.toast_shortcut_unavailable), Toast.LENGTH_SHORT).show()
                 }
             })
         }
@@ -222,7 +222,7 @@ class ChapterPageBuilder(
     private fun expandedNotificationActions(item: NotificationCardItem, chapter: AppChapter): List<ContextAction> {
         // Keep the long-press hide-options reachable now that long-press opens the expanded card.
         return contextActionFactory.notificationActions(item, chapter) +
-            ContextAction("Hide", Runnable { notificationActionController.showNotificationHideOptions(item, chapter) })
+            ContextAction(activity.getString(R.string.action_hide), Runnable { notificationActionController.showNotificationHideOptions(item, chapter) })
     }
 
     private fun expandedNotificationContent(item: NotificationCardItem): View {
@@ -287,7 +287,9 @@ class ChapterPageBuilder(
 
     private fun groupingIconButton(chapter: AppChapter): ImageButton {
         val grouped = settings.groupNotifications(chapter.identityKey)
-        val description = if (grouped) "Notifications grouped by conversation" else "Notifications split"
+        val description = activity.getString(
+            if (grouped) R.string.notification_grouped_description else R.string.notification_split_description,
+        )
         return ImageButton(activity).apply {
             setImageResource(if (grouped) R.drawable.ic_grouped_notifications else R.drawable.ic_split_notifications)
             setColorFilter(CalmTheme.INK)
@@ -308,14 +310,14 @@ class ChapterPageBuilder(
             gravity = Gravity.CENTER
             clipToPadding = false
             clipChildren = false
-            addView(mediaControlButton(R.drawable.ic_media_previous, "Previous", controls.previous), LinearLayout.LayoutParams(0, activity.dp(46), 1f).apply {
+            addView(mediaControlButton(R.drawable.ic_media_previous, activity.getString(R.string.media_previous), controls.previous), LinearLayout.LayoutParams(0, activity.dp(46), 1f).apply {
                 rightMargin = activity.dp(8)
             })
             addView(mediaControlButton(playPauseIcon(controls), controls.playPauseLabel, controls.playPause), LinearLayout.LayoutParams(0, activity.dp(46), 1.35f).apply {
                 leftMargin = activity.dp(4)
                 rightMargin = activity.dp(4)
             })
-            addView(mediaControlButton(R.drawable.ic_media_next, "Next", controls.next), LinearLayout.LayoutParams(0, activity.dp(46), 1f).apply {
+            addView(mediaControlButton(R.drawable.ic_media_next, activity.getString(R.string.media_next), controls.next), LinearLayout.LayoutParams(0, activity.dp(46), 1f).apply {
                 leftMargin = activity.dp(8)
             })
         }
@@ -345,7 +347,7 @@ class ChapterPageBuilder(
 
     private fun notificationSummary(chapter: AppChapter): String {
         val count = chapter.notifications.size
-        return if (count == 1) "1 active note" else "$count active notes"
+        return activity.resources.getQuantityString(R.plurals.notification_active_notes, count, count)
     }
 
     private fun formatNotificationTime(postTime: Long): String {

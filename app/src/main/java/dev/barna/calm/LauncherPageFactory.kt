@@ -215,50 +215,50 @@ class LauncherPageFactory(
             .filterNot { staticItem -> state.classicPages.any { page -> page.containsStaticItem(staticItem) } }
             .forEach { staticItem ->
                 actions += ContextAction(
-                    "Add ${staticItem.label}",
+                    activity.getString(R.string.action_add_item, staticItem.label),
                     Runnable { addStaticItemToClassicPage(classicPage, staticItem) },
                     ContextActionCloseBehavior.REMOVE_CARD,
                 )
             }
         actions += listOf(
             ContextAction(
-                "New page",
+                activity.getString(R.string.action_new_page),
                 Runnable { addClassicPage() },
                 ContextActionCloseBehavior.REMOVE_CARD,
             ),
             ContextAction(
-                if (isClassicPageEditing(classicPage)) "Done editing" else "Edit layout",
+                activity.getString(if (isClassicPageEditing(classicPage)) R.string.action_done_editing else R.string.action_edit_layout),
                 Runnable { setClassicPageEditing(classicPage, !isClassicPageEditing(classicPage)) },
                 ContextActionCloseBehavior.REMOVE_CARD,
             ),
         )
         if (pageIndex > 0) {
             actions += ContextAction(
-                "Move left",
+                activity.getString(R.string.action_move_left),
                 Runnable { moveClassicPage(classicPage, pageIndex - 1) },
                 ContextActionCloseBehavior.REMOVE_CARD,
             )
         }
         if (pageIndex != -1 && pageIndex < state.classicPages.lastIndex) {
             actions += ContextAction(
-                "Move right",
+                activity.getString(R.string.action_move_right),
                 Runnable { moveClassicPage(classicPage, pageIndex + 1) },
                 ContextActionCloseBehavior.REMOVE_CARD,
             )
         }
         actions += listOf(
             ContextAction(
-                "Rename",
+                activity.getString(R.string.action_rename),
                 Runnable { showRenameClassicPageDialog(classicPage) },
                 ContextActionCloseBehavior.REMOVE_CARD,
             ),
             ContextAction(
-                "Set home",
+                activity.getString(R.string.action_set_home),
                 Runnable { setDefaultClassicPage(classicPage) },
                 ContextActionCloseBehavior.REMOVE_CARD,
             ),
             ContextAction(
-                "Remove",
+                activity.getString(R.string.action_remove),
                 Runnable { confirmRemoveClassicPage(classicPage) },
                 ContextActionCloseBehavior.REMOVE_CARD,
             ),
@@ -680,9 +680,11 @@ class LauncherPageFactory(
 
     private fun classicGridItemTitle(item: ClassicGridItem, state: LauncherRenderModel): String {
         return when (item.type) {
-            ClassicGridItemType.APP -> state.appEntries.firstOrNull { app -> app.identityKey == item.target }?.label ?: "App"
-            ClassicGridItemType.WIDGET -> "Widget"
-            ClassicGridItemType.STATIC -> runCatching { ClassicStaticItem.valueOf(item.target) }.getOrNull()?.label ?: "Static item"
+            ClassicGridItemType.APP -> state.appEntries.firstOrNull { app -> app.identityKey == item.target }?.label
+                ?: activity.getString(R.string.classic_item_app)
+            ClassicGridItemType.WIDGET -> activity.getString(R.string.classic_item_widget)
+            ClassicGridItemType.STATIC -> runCatching { ClassicStaticItem.valueOf(item.target) }.getOrNull()?.label
+                ?: activity.getString(R.string.classic_item_static)
         }
     }
 
@@ -926,7 +928,7 @@ class LauncherPageFactory(
         if (item.type == ClassicGridItemType.WIDGET && canConfigureClassicWidget(item)) {
             actions.add(
                 ContextAction(
-                    "Configure",
+                    activity.getString(R.string.action_configure),
                     Runnable { configureClassicWidget(item) },
                     ContextActionCloseBehavior.REMOVE_CARD,
                 ),
@@ -934,7 +936,7 @@ class LauncherPageFactory(
         }
         actions.add(
             ContextAction(
-                "Default size",
+                activity.getString(R.string.action_default_size),
                 Runnable { resetClassicGridItemSize(classicPage, item) },
                 ContextActionCloseBehavior.REMOVE_CARD,
             ),
@@ -942,7 +944,7 @@ class LauncherPageFactory(
         if (moveTargets.isNotEmpty()) {
             actions.add(
                 ContextAction(
-                    "Move",
+                    activity.getString(R.string.action_move),
                     Runnable { showClassicMoveDialog(classicPage, item, moveTargets) },
                     ContextActionCloseBehavior.REMOVE_CARD,
                 ),
@@ -950,7 +952,7 @@ class LauncherPageFactory(
         }
         actions.add(
             ContextAction(
-                "Remove",
+                activity.getString(R.string.action_remove),
                 Runnable {
                     removeClassicItemFrameImmediately(source)
                     removeClassicGridItem(classicPage, item)
@@ -1194,8 +1196,8 @@ class LauncherPageFactory(
 
     private val ClassicStaticItem.label: String
         get() = when (this) {
-            ClassicStaticItem.CLOCK -> "Clock"
-            ClassicStaticItem.SEARCH -> "Search"
+            ClassicStaticItem.CLOCK -> activity.getString(R.string.static_item_clock)
+            ClassicStaticItem.SEARCH -> activity.getString(R.string.static_item_search)
         }
 
     private companion object {

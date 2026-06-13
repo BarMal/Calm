@@ -152,7 +152,7 @@ class CalmSettingsActivity : ComponentActivity() {
         content.addView(settingsGroupRow(
             SettingsPage.APPS,
             "Apps and icons",
-            "Pin apps, manage hidden apps, choose dock apps, and use app shortcuts.",
+            "Pin apps, manage hidden apps, choose dock apps, group by category, and use app shortcuts.",
         ))
         content.addView(settingsGroupRow(
             SettingsPage.DOCK,
@@ -431,6 +431,22 @@ class CalmSettingsActivity : ComponentActivity() {
             hiddenAppsSummary(),
         ) {
             showHiddenAppsDialog()
+        })
+
+        content.addView(section("Categories"))
+        content.addView(switchRow(
+            title = "Group apps by category",
+            summary = "Organise the app library into sections by category.",
+            checked = settings.appGroupingEnabled(),
+        ) { settings.setAppGroupingEnabled(!settings.appGroupingEnabled()); requestRender() })
+        content.addView(actionRow("Auto-categorise apps", categoriesSummary()) {
+            val apps = cachedAppEntries ?: run {
+                Toast.makeText(this, "App list is still loading.", Toast.LENGTH_SHORT).show()
+                return@actionRow
+            }
+            settings.autoCategorise(apps)
+            Toast.makeText(this, "Apps categorised.", Toast.LENGTH_SHORT).show()
+            requestRender()
         })
     }
 
@@ -1518,6 +1534,12 @@ class CalmSettingsActivity : ComponentActivity() {
                 requestRender()
             }
             .show()
+    }
+
+    private fun categoriesSummary(): String {
+        val assignments = settings.appCategoryAssignments()
+        if (assignments.isEmpty()) return "Automatically assign apps to categories."
+        return "${assignments.size} ${if (assignments.size == 1) "app" else "apps"} categorised."
     }
 
     private fun dockAppsSummary(): String {

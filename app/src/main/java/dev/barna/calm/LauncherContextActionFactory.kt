@@ -42,6 +42,7 @@ data class AppContextActionCallbacks(
     val hideApp: (AppEntry) -> Unit,
     val appShortcuts: (AppEntry) -> List<AppShortcutEntry>,
     val launchShortcut: (AppShortcutEntry) -> Unit,
+    val assignCategory: (AppEntry) -> Unit = {},
 ) {
     companion object {
         val Empty = AppContextActionCallbacks(
@@ -98,6 +99,7 @@ data class LauncherContextActionLabels(
     val hide: String = "Hide",
     val removeFromDock: String = "Remove from dock",
     val addToDock: String = "Add to dock",
+    val setCategory: String = "Set category",
 ) {
     companion object {
         fun from(context: Context): LauncherContextActionLabels {
@@ -129,6 +131,7 @@ class LauncherContextActionFactory(
     private val dockCallbacks: DockContextActionCallbacks = DockContextActionCallbacks.Empty,
     private val classicPageCallbacks: ClassicPageContextActionCallbacks = ClassicPageContextActionCallbacks.Empty,
     private val labels: LauncherContextActionLabels = LauncherContextActionLabels(),
+    private val categoryCount: () -> Int = { 0 },
 ) {
     fun notificationActions(
         item: NotificationCardItem,
@@ -197,6 +200,9 @@ class LauncherContextActionFactory(
         }
         appCallbacks.appShortcuts(app).take(MAX_SHORTCUTS).forEach { shortcut ->
             actions.add(ContextAction(shortcut.label, Runnable { appCallbacks.launchShortcut(shortcut) }))
+        }
+        if (categoryCount() > 0) {
+            actions.add(ContextAction(labels.setCategory, Runnable { appCallbacks.assignCategory(app) }))
         }
         actions.add(ContextAction(labels.info, Runnable { appCallbacks.openAppInfo(app) }))
         actions.add(ContextAction(labels.hide, Runnable { appCallbacks.hideApp(app) }, ContextActionCloseBehavior.REMOVE_CARD))

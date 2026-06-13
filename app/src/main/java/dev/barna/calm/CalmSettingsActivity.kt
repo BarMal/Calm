@@ -203,6 +203,11 @@ class CalmSettingsActivity : ComponentActivity() {
             summary = "Long-press a card to expand it with its actions. Tap still opens the app.",
             checked = settings.expandedCardsEnabled(),
         ) { settings.toggleExpandedCards(); requestRender() })
+        content.addView(switchRow(
+            title = getString(R.string.settings_full_screen_mode_title),
+            summary = getString(R.string.settings_full_screen_mode_summary),
+            checked = settings.fullScreenModeEnabled(),
+        ) { settings.toggleFullScreenMode(); requestRender() })
         val appearance = settings.cardAppearance()
         content.addView(actionRow("Card effect", cardEffectLabel(appearance.effect)) { showCardEffectDialog() })
         content.addView(sliderRow(
@@ -687,6 +692,7 @@ class CalmSettingsActivity : ComponentActivity() {
             ChapterSpineTitleMode.COMBINED -> getString(R.string.settings_spine_mode_combined)
             ChapterSpineTitleMode.TITLE_ONLY -> getString(R.string.settings_spine_mode_title_only)
             ChapterSpineTitleMode.SPINE_ONLY -> getString(R.string.settings_spine_mode_spine_only)
+            ChapterSpineTitleMode.ICONS_ONLY -> getString(R.string.settings_spine_mode_icons_only)
             ChapterSpineTitleMode.HIDDEN -> getString(R.string.settings_spine_mode_hidden)
         }
     }

@@ -13,6 +13,7 @@ data class LauncherUiPreferences(
     val cardStackTuning: CardStackTuning,
     val showAdvancedStackControls: Boolean,
     val cardVibrancy: Int,
+    val fullScreenModeEnabled: Boolean = false,
     val pageSortOrder: PageSortOrder = PageSortOrder.DEFAULT,
     val expandedCardsEnabled: Boolean = true,
     val pinnedPageEnabled: Boolean = false,

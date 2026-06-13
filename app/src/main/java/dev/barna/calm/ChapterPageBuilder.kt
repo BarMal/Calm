@@ -35,16 +35,20 @@ class ChapterPageBuilder(
     private val toggleNotificationGrouping: (AppChapter) -> Unit,
 ) {
     fun buildPage(chapter: AppChapter): LinearLayout {
-        val tintCards = activePreferences().useTintedNotificationCards
+        val preferences = activePreferences()
+        val tintCards = preferences.useTintedNotificationCards
+        val fullScreen = preferences.fullScreenModeEnabled
         val page = if (tintCards) {
             createBarePagePanel(activity.dp(20))
         } else {
             createPagePanel(notificationRepository.resolveChapterBackground(chapter), chapter.hueColor)
         }
-        page.addView(chapterHeader(chapter))
+        if (!fullScreen) {
+            page.addView(chapterHeader(chapter))
+        }
         page.addView(
             notificationArea(chapter, tintCards),
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 2.25f),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, if (fullScreen) 1f else 2.25f),
         )
         return page
     }

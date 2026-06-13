@@ -73,9 +73,9 @@ class LauncherPageFactory(
 
     fun createPage(page: ChapterPage, state: LauncherRenderModel): View {
         return when {
-            page.appScope != null -> createAppLibraryPage(page, state.appEntries)
+            page.appScope != null -> createAppLibraryPage(page, state.appEntries, state.preferences.fullScreenModeEnabled)
             page.key == CalmTheme.CATEGORY_FOLDER_KEY -> createCategoryFolderPage(state)
-            page.key == CalmTheme.PINNED_KEY -> createPinnedPage(state.pinnedApps)
+            page.key == CalmTheme.PINNED_KEY -> createPinnedPage(state.pinnedApps, state.preferences.fullScreenModeEnabled)
             page.key == CalmTheme.CONTACTS_KEY -> contactsPageController.buildPage()
             page.key == CalmTheme.AGENDA_KEY -> agendaPageBuilder.buildPage(state)
             page.key == CalmTheme.ALARMS_KEY -> alarmsPageBuilder.buildPage()
@@ -132,6 +132,8 @@ class LauncherPageFactory(
         state: LauncherRenderModel,
         editing: Boolean,
     ): View {
+        val fullScreen = state.preferences.fullScreenModeEnabled
+        if (fullScreen && !editing) return View(activity)
         return animatedChrome(
             LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
@@ -145,15 +147,17 @@ class LauncherPageFactory(
                         orientation = LinearLayout.HORIZONTAL
                         gravity = Gravity.CENTER_VERTICAL
                         val header = this
-                        addView(
-                            label(classicPage.title, 30, CalmTheme.INK, Typeface.NORMAL).apply {
-                                setOnLongClickListener {
-                                    showClassicPageActions(header, classicPage, state)
-                                    true
-                                }
-                            },
-                            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-                        )
+                        if (!fullScreen) {
+                            addView(
+                                label(classicPage.title, 30, CalmTheme.INK, Typeface.NORMAL).apply {
+                                    setOnLongClickListener {
+                                        showClassicPageActions(header, classicPage, state)
+                                        true
+                                    }
+                                },
+                                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+                            )
+                        }
                         if (editing) {
                             addView(
                                 classicHeaderButton("Done", minWidthDp = 74) {
@@ -1118,10 +1122,13 @@ class LauncherPageFactory(
 
     private fun createCategoryFolderPage(state: LauncherRenderModel): LinearLayout {
         val groups = categoryGroupsProvider()
+        val fullScreen = state.preferences.fullScreenModeEnabled
         return barePagePanel(activity.dp(20)).apply {
-            addView(animatedChrome(label("Categories", 30, CalmTheme.INK, Typeface.NORMAL).apply {
-                setPadding(0, activity.dp(8), 0, activity.dp(24))
-            }))
+            if (!fullScreen) {
+                addView(animatedChrome(label("Categories", 30, CalmTheme.INK, Typeface.NORMAL).apply {
+                    setPadding(0, activity.dp(8), 0, activity.dp(24))
+                }))
+            }
             if (groups.isEmpty()) {
                 addView(
                     LinearLayout(activity).apply {
@@ -1162,11 +1169,13 @@ class LauncherPageFactory(
         }
     }
 
-    private fun createPinnedPage(pinnedApps: List<AppEntry>): LinearLayout {
+    private fun createPinnedPage(pinnedApps: List<AppEntry>, fullScreen: Boolean = false): LinearLayout {
         return barePagePanel(activity.dp(20)).apply {
-            addView(animatedChrome(label("Pinned", 30, CalmTheme.INK, Typeface.NORMAL).apply {
-                setPadding(0, activity.dp(8), 0, activity.dp(24))
-            }))
+            if (!fullScreen) {
+                addView(animatedChrome(label("Pinned", 30, CalmTheme.INK, Typeface.NORMAL).apply {
+                    setPadding(0, activity.dp(8), 0, activity.dp(24))
+                }))
+            }
             if (pinnedApps.isEmpty()) {
                 addView(
                     LinearLayout(activity).apply {
@@ -1191,7 +1200,7 @@ class LauncherPageFactory(
         }
     }
 
-    private fun createAppLibraryPage(pageModel: ChapterPage, appEntries: List<AppEntry>): LinearLayout {
+    private fun createAppLibraryPage(pageModel: ChapterPage, appEntries: List<AppEntry>, fullScreen: Boolean = false): LinearLayout {
         val scope = pageModel.appScope ?: AppLibraryScope.ALL
         val model = appLibraryPageModelFactory.create(
             page = pageModel,
@@ -1205,13 +1214,15 @@ class LauncherPageFactory(
             orientation = LinearLayout.VERTICAL
             clipToPadding = false
             clipChildren = false
-            addView(label(model.title, 30, CalmTheme.INK, Typeface.NORMAL).apply {
-                setPadding(0, activity.dp(8), 0, 0)
-            })
-            model.subtitle?.let { subtitle ->
-                addView(label(subtitle, 15, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
-                    setPadding(0, activity.dp(6), 0, activity.dp(18))
+            if (!fullScreen) {
+                addView(label(model.title, 30, CalmTheme.INK, Typeface.NORMAL).apply {
+                    setPadding(0, activity.dp(8), 0, 0)
                 })
+                model.subtitle?.let { subtitle ->
+                    addView(label(subtitle, 15, CalmTheme.MUTED_INK, Typeface.NORMAL).apply {
+                        setPadding(0, activity.dp(6), 0, activity.dp(18))
+                    })
+                }
             }
         }
         page.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))

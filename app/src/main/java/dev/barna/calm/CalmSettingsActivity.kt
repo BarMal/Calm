@@ -199,11 +199,6 @@ class CalmSettingsActivity : ComponentActivity() {
             checked = settings.useCardIconBackgrounds(),
         ) { settings.toggleCardIconBackgrounds(); requestRender() })
         content.addView(switchRow(
-            title = "Expanded cards on long-press",
-            summary = "Long-press a card to expand it with its actions. Tap still opens the app.",
-            checked = settings.expandedCardsEnabled(),
-        ) { settings.toggleExpandedCards(); requestRender() })
-        content.addView(switchRow(
             title = getString(R.string.settings_full_screen_mode_title),
             summary = getString(R.string.settings_full_screen_mode_summary),
             checked = settings.fullScreenModeEnabled(),
@@ -269,6 +264,21 @@ class CalmSettingsActivity : ComponentActivity() {
             max = 4,
             valueText = { "Very light / ${it + 1} of 5" },
         ) { settings.setCardHapticStrength(it + 1) })
+        content.addView(section("Behaviour"))
+        content.addView(choiceRow(
+            title = "Tap notification card",
+            options = listOf(
+                "Open notification" to NotificationCardTapAction.OPEN_NOTIFICATION,
+                "Expand card" to NotificationCardTapAction.EXPANDED_CARD,
+                "Open app" to NotificationCardTapAction.OPEN_APP,
+            ),
+            selected = settings.notificationCardTapAction(),
+        ) { settings.setNotificationCardTapAction(it); requestRender() })
+        content.addView(switchRow(
+            title = "Long-press to expand cards",
+            summary = "Long-press a notification card to expand it with its actions.",
+            checked = settings.expandedCardsEnabled(),
+        ) { settings.toggleExpandedCards(); requestRender() })
     }
 
     private fun cardAppearancePreview(): View {
@@ -888,24 +898,22 @@ class CalmSettingsActivity : ComponentActivity() {
     }
 
     private fun addAppPreviewRows(parent: LinearLayout, color: Int) {
-        repeat(4) {
+        repeat(4) { i ->
             parent.addView(View(this).apply {
                 background = roundedBlock(color, 10)
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(13)).apply {
-                leftMargin = dp(10)
-                rightMargin = dp(10)
-                bottomMargin = dp(7)
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+                if (i < 3) bottomMargin = dp(4)
             })
         }
     }
 
     private fun addNotificationPreviewRows(parent: LinearLayout, color: Int) {
-        listOf(72, 56, 86).forEach { width ->
+        listOf(72, 56, 86).forEachIndexed { i, width ->
             parent.addView(View(this).apply {
                 background = roundedBlock(color, 12)
-            }, LinearLayout.LayoutParams(dp(width), dp(22)).apply {
+            }, LinearLayout.LayoutParams(dp(width), 0, 1f).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                bottomMargin = dp(8)
+                if (i < 2) bottomMargin = dp(4)
             })
         }
     }

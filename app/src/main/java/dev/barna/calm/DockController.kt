@@ -625,11 +625,8 @@ class DockController(
 
     private fun resetFeaturedNotificationIndex(app: AppEntry, chapters: List<AppChapter>, direction: Int) {
         val target = targetFor(app, chapters) ?: return
-        val count = target.chapter.notifications.size
-        if (count <= 1) return
-        // When arriving at an app via horizontal swipe, start at the near edge:
-        // swiping right → show first (newest) notification; swiping left → show last.
-        featuredNotificationIndexes[app.identityKey] = if (direction > 0) 0 else count - 1
+        if (target.chapter.notifications.size <= 1) return
+        featuredNotificationIndexes[app.identityKey] = 0
     }
 
     private fun animateDockStack(surface: FrameLayout, transition: DockTransition, rebind: () -> Unit) {

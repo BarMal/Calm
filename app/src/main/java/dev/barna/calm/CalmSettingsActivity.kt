@@ -1260,20 +1260,20 @@ class CalmSettingsActivity : ComponentActivity() {
         val layout = settings.pageLayout()
         val actions = mutableListOf<ContextAction>()
         if (canUseAsDefaultHome(slot)) {
-            actions.add(ContextAction("Set as home", Runnable {
+            actions.add(ContextAction(getString(R.string.action_set_as_home), Runnable {
                 settings.setDefaultHomeSlot(slot)
                 rebuild()
             }))
         }
         val index = layout.order.indexOf(slot)
         if (index > 0) {
-            actions.add(ContextAction("Move left", Runnable {
+            actions.add(ContextAction(getString(R.string.action_move_left), Runnable {
                 settings.setPageLayoutOrder(movedSlot(settings.pageLayout().order, index, index - 1))
                 rebuild()
             }))
         }
         if (index in 0 until layout.order.lastIndex) {
-            actions.add(ContextAction("Move right", Runnable {
+            actions.add(ContextAction(getString(R.string.action_move_right), Runnable {
                 settings.setPageLayoutOrder(movedSlot(settings.pageLayout().order, index, index + 1))
                 rebuild()
             }))

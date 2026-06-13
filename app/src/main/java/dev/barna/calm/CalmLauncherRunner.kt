@@ -101,7 +101,7 @@ class CalmLauncherRunner(
             appShortcuts = { app -> notificationRepository.getAppShortcuts(app) },
             launchShortcut = { shortcut ->
                 if (!notificationRepository.launchShortcut(shortcut)) {
-                    Toast.makeText(activity, "Shortcut unavailable", Toast.LENGTH_SHORT).show()
+                    toast(R.string.toast_shortcut_unavailable)
                 }
             },
         ),
@@ -499,7 +499,7 @@ class CalmLauncherRunner(
         if (removed.type == ClassicGridItemType.WIDGET) {
             classicWidgetHostController.deleteWidget(removed)
         }
-        Toast.makeText(activity, "Removed from ${page.title}", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_removed_from_page, page.title)
         render()
     }
 
@@ -510,11 +510,11 @@ class CalmLauncherRunner(
     ) {
         val moved = settings.moveClassicGridItem(sourcePage.id, item.id, targetPage.id)
         if (!moved) {
-            Toast.makeText(activity, "${targetPage.title} is full", Toast.LENGTH_SHORT).show()
+            toast(R.string.toast_page_full, targetPage.title)
             return
         }
         selectPage(targetPage.key)
-        Toast.makeText(activity, "Moved to ${targetPage.title}", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_page_item_moved_to, targetPage.title)
         render()
     }
 
@@ -525,14 +525,14 @@ class CalmLauncherRunner(
         y: Int,
     ) {
         if (item.x == x && item.y == y) {
-            Toast.makeText(activity, "Already there", Toast.LENGTH_SHORT).show()
+            toast(R.string.toast_already_there)
             return
         }
         if (!settings.moveClassicGridItemWithinPage(page.id, item.id, x, y)) {
-            Toast.makeText(activity, "Position unavailable", Toast.LENGTH_SHORT).show()
+            toast(R.string.toast_position_unavailable)
             return
         }
-        Toast.makeText(activity, "Moved", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_moved)
         render()
     }
 
@@ -543,15 +543,15 @@ class CalmLauncherRunner(
         height: Int,
     ) {
         if (item.width == width && item.height == height) {
-            Toast.makeText(activity, "Already that size", Toast.LENGTH_SHORT).show()
+            toast(R.string.toast_already_that_size)
             return
         }
         val resized = settings.resizeClassicGridItem(page.id, item.id, width, height)
         if (!resized) {
-            Toast.makeText(activity, "No room for that size", Toast.LENGTH_SHORT).show()
+            toast(R.string.toast_no_room_for_size)
             return
         }
-        Toast.makeText(activity, "Resized", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_resized)
         render()
     }
 
@@ -582,30 +582,30 @@ class CalmLauncherRunner(
         val page = settings.addClassicPage()
         editingClassicPageId = page.id
         selectPage(page.key)
-        Toast.makeText(activity, "Added ${page.title}", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_classic_page_added, page.title)
         render()
     }
 
     private fun addStaticItemToClassicPage(page: ClassicLauncherPageDefinition, staticItem: ClassicStaticItem) {
         if (settings.addStaticItemToClassicPage(page.id, staticItem)) {
             beginClassicItemPlacement(page, ClassicGridItem.static(staticItem, x = 0, y = 0).id)
-            Toast.makeText(activity, "Added ${staticItem.displayLabel} to ${page.title}", Toast.LENGTH_SHORT).show()
+            toast(R.string.toast_static_item_added, staticItem.displayLabel, page.title)
             render()
         } else {
-            Toast.makeText(activity, "No room for ${staticItem.displayLabel}", Toast.LENGTH_SHORT).show()
+            toast(R.string.toast_no_room_for_item, staticItem.displayLabel)
         }
     }
 
     private val ClassicStaticItem.displayLabel: String
         get() = when (this) {
-            ClassicStaticItem.CLOCK -> "Clock"
-            ClassicStaticItem.SEARCH -> "Search"
+            ClassicStaticItem.CLOCK -> activity.getString(R.string.static_item_clock)
+            ClassicStaticItem.SEARCH -> activity.getString(R.string.static_item_search)
         }
 
     private fun moveClassicPage(page: ClassicLauncherPageDefinition, targetIndex: Int) {
         if (!settings.moveClassicPage(page.id, targetIndex)) return
         selectPage(page.key)
-        Toast.makeText(activity, "Moved ${page.title}", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_classic_page_moved, page.title)
         render()
     }
 
@@ -621,17 +621,17 @@ class CalmLauncherRunner(
 
     private fun renameClassicPage(page: ClassicLauncherPageDefinition, title: String) {
         if (!settings.renameClassicPage(page.id, title)) {
-            Toast.makeText(activity, "Page name can't be empty", Toast.LENGTH_SHORT).show()
+            toast(R.string.toast_page_name_empty)
             return
         }
-        Toast.makeText(activity, "Renamed page", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_page_renamed)
         render()
     }
 
     private fun setDefaultClassicPage(page: ClassicLauncherPageDefinition) {
         if (!settings.setDefaultClassicPage(page.id)) return
         settings.setDefaultHomeSlot(PageSlot.CLASSIC_PAGES)
-        Toast.makeText(activity, "${page.title} is now home", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_page_set_home, page.title)
         render()
     }
 
@@ -644,7 +644,7 @@ class CalmLauncherRunner(
         removed.items
             .filter { item -> item.type == ClassicGridItemType.WIDGET }
             .forEach(classicWidgetHostController::deleteWidget)
-        Toast.makeText(activity, "Removed ${removed.title}", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_page_removed, removed.title)
         render()
     }
 
@@ -665,6 +665,10 @@ class CalmLauncherRunner(
 
     private fun render() {
         requestRender()
+    }
+
+    private fun toast(resId: Int, vararg args: Any) {
+        Toast.makeText(activity, activity.getString(resId, *args), Toast.LENGTH_SHORT).show()
     }
 
     private fun render(state: LauncherRenderModel, animate: Boolean) {
@@ -1103,7 +1107,7 @@ class CalmLauncherRunner(
                 },
             )
         }
-        row.addView(pageOverviewAddCard("New page", "Choose page type", cardWidth, cardHeight) { source ->
+        row.addView(pageOverviewAddCard(activity.getString(R.string.page_new_title), activity.getString(R.string.page_new_subtitle), cardWidth, cardHeight) { source ->
             showPageOverviewAddMenu(source, state, pages)
         }, LinearLayout.LayoutParams(cardWidth, cardHeight).apply { rightMargin = activity.dp(14) })
         val scroller = HorizontalScrollView(activity).apply {
@@ -1161,7 +1165,7 @@ class CalmLauncherRunner(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(activity.dp(4), 0, 0, activity.dp(18))
-            addView(label("Pages", 28, CalmTheme.INK, Typeface.NORMAL), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(label(activity.getString(R.string.page_overview_title), 28, CalmTheme.INK, Typeface.NORMAL), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
     }
 
@@ -1265,7 +1269,7 @@ class CalmLauncherRunner(
             orientation = LinearLayout.VERTICAL
             clipChildren = false
             clipToPadding = false
-            contentDescription = "Notifications bundle. Tap to choose a notification page."
+            contentDescription = activity.getString(R.string.page_notifications_bundle_description)
             setPadding(activity.dp(12), activity.dp(12), activity.dp(12), activity.dp(12))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
@@ -1280,7 +1284,7 @@ class CalmLauncherRunner(
                 },
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
             )
-            addView(label("Notifications", 15, if (selected) colors.onPrimaryContainer else colors.onSurface, Typeface.BOLD).apply {
+            addView(label(activity.getString(R.string.page_notifications_title), 15, if (selected) colors.onPrimaryContainer else colors.onSurface, Typeface.BOLD).apply {
                 gravity = Gravity.CENTER
                 maxLines = 1
                 setPadding(activity.dp(4), activity.dp(12), activity.dp(4), 0)
@@ -1295,7 +1299,7 @@ class CalmLauncherRunner(
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(activity.dp(18), activity.dp(54), activity.dp(18), activity.dp(18))
-            addView(label("Live notifications", 20, if (selected) colors.primary else colors.onSurface, Typeface.BOLD).apply {
+            addView(label(activity.getString(R.string.page_live_notifications_title), 20, if (selected) colors.primary else colors.onSurface, Typeface.BOLD).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
                 setPadding(0, 0, 0, activity.dp(18))
             })
@@ -1383,16 +1387,16 @@ class CalmLauncherRunner(
 
     private fun showPageOverviewAddMenu(source: View, state: LauncherRenderModel, pages: List<ChapterPage>) {
         val actions = listOf(
-            ContextAction("Classic page", Runnable { addClassicPageFromOverview() }),
-            ContextAction("People page", Runnable { addPeoplePageFromOverview(pages) }),
-            ContextAction("Agenda page", Runnable { addAgendaPageFromOverview(pages) }),
-            ContextAction("Alarms page", Runnable { addAlarmsPageFromOverview(pages) }),
-            ContextAction("RSS page", Runnable { addRssPageFromOverview(pages) }),
-            ContextAction("Apps page", Runnable { addExistingOrLivePageFromOverview(PageSlot.APPS, pages, "Apps page") }),
-            ContextAction("Pinned page", Runnable { addPinnedPageFromOverview(state, pages) }),
-            ContextAction("Overview page", Runnable { addExistingOrLivePageFromOverview(PageSlot.OVERVIEW, pages, "Overview page") }),
-            ContextAction("Work overview", Runnable { addWorkOverviewFromOverview(state, pages) }),
-            ContextAction("Notification pages", Runnable { addNotificationPagesFromOverview(state, pages) }),
+            ContextAction(activity.getString(R.string.page_classic), Runnable { addClassicPageFromOverview() }),
+            ContextAction(activity.getString(R.string.page_people), Runnable { addPeoplePageFromOverview(pages) }),
+            ContextAction(activity.getString(R.string.page_agenda), Runnable { addAgendaPageFromOverview(pages) }),
+            ContextAction(activity.getString(R.string.page_alarms), Runnable { addAlarmsPageFromOverview(pages) }),
+            ContextAction(activity.getString(R.string.page_rss), Runnable { addRssPageFromOverview(pages) }),
+            ContextAction(activity.getString(R.string.page_apps), Runnable { addExistingOrLivePageFromOverview(PageSlot.APPS, pages, activity.getString(R.string.page_apps)) }),
+            ContextAction(activity.getString(R.string.page_pinned), Runnable { addPinnedPageFromOverview(state, pages) }),
+            ContextAction(activity.getString(R.string.page_overview), Runnable { addExistingOrLivePageFromOverview(PageSlot.OVERVIEW, pages, activity.getString(R.string.page_overview)) }),
+            ContextAction(activity.getString(R.string.page_work_overview), Runnable { addWorkOverviewFromOverview(state, pages) }),
+            ContextAction(activity.getString(R.string.page_notification_pages), Runnable { addNotificationPagesFromOverview(state, pages) }),
         )
         GoogleInteractionStyle.popupMenu(activity, source, source.screenCenter(), actions)
     }
@@ -1407,83 +1411,83 @@ class CalmLauncherRunner(
 
     private fun addPeoplePageFromOverview(pages: List<ChapterPage>) {
         if (settings.contactsPageEnabled()) {
-            addExistingOrLivePageFromOverview(PageSlot.CONTACTS, pages, "People page")
+            addExistingOrLivePageFromOverview(PageSlot.CONTACTS, pages, activity.getString(R.string.page_people))
             return
         }
         settings.toggleContactsPage()
-        Toast.makeText(activity, "Added People page", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_people_page_added)
         renderAndReopenPageOverview()
     }
 
     private fun addAgendaPageFromOverview(pages: List<ChapterPage>) {
         if (settings.agendaPageEnabled()) {
-            addExistingOrLivePageFromOverview(PageSlot.AGENDA, pages, "Agenda page")
+            addExistingOrLivePageFromOverview(PageSlot.AGENDA, pages, activity.getString(R.string.page_agenda))
             return
         }
         settings.toggleAgendaPage()
-        Toast.makeText(activity, "Added Agenda page", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_agenda_page_added)
         renderAndReopenPageOverview(CalmTheme.AGENDA_KEY)
     }
 
     private fun addAlarmsPageFromOverview(pages: List<ChapterPage>) {
         if (settings.alarmsPageEnabled()) {
-            addExistingOrLivePageFromOverview(PageSlot.ALARMS, pages, "Alarms page")
+            addExistingOrLivePageFromOverview(PageSlot.ALARMS, pages, activity.getString(R.string.page_alarms))
             return
         }
         settings.toggleAlarmsPage()
-        Toast.makeText(activity, "Added Alarms page", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_alarms_page_added)
         renderAndReopenPageOverview(CalmTheme.ALARMS_KEY)
     }
 
     private fun addRssPageFromOverview(pages: List<ChapterPage>) {
         if (settings.rssPageEnabled()) {
-            addExistingOrLivePageFromOverview(PageSlot.RSS, pages, "RSS page")
+            addExistingOrLivePageFromOverview(PageSlot.RSS, pages, activity.getString(R.string.page_rss))
             return
         }
         settings.setRssPageEnabled(true)
-        Toast.makeText(activity, "Added RSS page", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_rss_page_added)
         renderAndReopenPageOverview(CalmTheme.RSS_KEY)
     }
 
     private fun addPinnedPageFromOverview(state: LauncherRenderModel, pages: List<ChapterPage>) {
         if (pages.any { page -> PageArranger.slotOf(page) == PageSlot.PINNED }) {
-            addExistingOrLivePageFromOverview(PageSlot.PINNED, pages, "Pinned page")
+            addExistingOrLivePageFromOverview(PageSlot.PINNED, pages, activity.getString(R.string.page_pinned))
             return
         }
         settings.setPinnedPageEnabled(true)
-        Toast.makeText(activity, "Added Pinned page", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_pinned_page_added)
         renderAndReopenPageOverview(CalmTheme.PINNED_KEY)
     }
 
     private fun addWorkOverviewFromOverview(state: LauncherRenderModel, pages: List<ChapterPage>) {
         if (state.notificationChapters.none { it.isWorkProfile }) {
-            Toast.makeText(activity, "Work overview appears when work notifications arrive", Toast.LENGTH_SHORT).show()
+            toast(R.string.toast_work_overview_waiting)
             return
         }
         if (!settings.splitAppsByProfile()) {
             settings.toggleSplitAppsByProfile()
-            Toast.makeText(activity, "Added Work overview", Toast.LENGTH_SHORT).show()
+            toast(R.string.toast_work_overview_added)
             renderAndReopenPageOverview()
             return
         }
-        addExistingOrLivePageFromOverview(PageSlot.WORK_OVERVIEW, pages, "Work overview")
+        addExistingOrLivePageFromOverview(PageSlot.WORK_OVERVIEW, pages, activity.getString(R.string.page_work_overview))
     }
 
     private fun addNotificationPagesFromOverview(state: LauncherRenderModel, pages: List<ChapterPage>) {
         if (state.notificationChapters.isEmpty()) {
-            Toast.makeText(activity, "Notification pages appear when notifications arrive", Toast.LENGTH_SHORT).show()
+            toast(R.string.toast_notification_pages_waiting)
             return
         }
-        addExistingOrLivePageFromOverview(PageSlot.NOTIFICATIONS, pages, "Notification pages")
+        addExistingOrLivePageFromOverview(PageSlot.NOTIFICATIONS, pages, activity.getString(R.string.page_notification_pages))
     }
 
     private fun addExistingOrLivePageFromOverview(slot: PageSlot, pages: List<ChapterPage>, label: String) {
         val index = pages.indexOfFirst { page -> PageArranger.slotOf(page) == slot }
         if (index == -1) {
-            Toast.makeText(activity, "$label is not available yet", Toast.LENGTH_SHORT).show()
+            toast(R.string.toast_page_not_available_yet, label)
             return
         }
-        Toast.makeText(activity, "$label is already added", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_page_already_added, label)
         selectPage(pages[index].key)
         renderAndReopenPageOverview(pages[index].key)
     }
@@ -1778,15 +1782,21 @@ class CalmLauncherRunner(
     ) {
         val actions = mutableListOf<ContextAction>()
         if (canUseAsDefaultHome(page)) {
-            actions += ContextAction("Set as home", Runnable {
+            actions += ContextAction(activity.getString(R.string.action_set_as_home), Runnable {
                 setPageAsDefaultHome(page)
             })
         }
-        actions += ContextAction("Customise", Runnable {
+        actions += ContextAction(activity.getString(R.string.action_customise), Runnable {
             customisePageFromOverview(page)
         })
         deletePageAction(source, page, index, entryIndex, pages)?.let { actions += it }
-        GoogleInteractionStyle.popupMenu(activity, source, source.screenCenter(), actions, destructiveLabels = setOf("Delete", "Remove"))
+        GoogleInteractionStyle.popupMenu(
+            activity,
+            source,
+            source.screenCenter(),
+            actions,
+            destructiveLabels = setOf(activity.getString(R.string.action_delete), activity.getString(R.string.action_remove)),
+        )
     }
 
     private fun canUseAsDefaultHome(page: ChapterPage): Boolean {
@@ -1823,14 +1833,14 @@ class CalmLauncherRunner(
     private fun deletePageAction(source: View, page: ChapterPage, index: Int, entryIndex: Int, pages: List<ChapterPage>): ContextAction? {
         val nextFocusKey = pages.getOrNull(index + 1)?.key ?: pages.getOrNull(index - 1)?.key
         page.classicPage?.let { classicPage ->
-            return ContextAction("Delete", Runnable {
+            return ContextAction(activity.getString(R.string.action_delete), Runnable {
                 animatePageOverviewRemoval(source, entryIndex, index, pages) {
                     removeClassicPageFromOverview(classicPage, nextFocusKey)
                 }
             }, ContextActionCloseBehavior.REMOVE_CARD)
         }
         page.chapter?.let { chapter ->
-            return ContextAction("Remove", Runnable {
+            return ContextAction(activity.getString(R.string.action_remove), Runnable {
                 animatePageOverviewRemoval(source, entryIndex, index, pages) {
                     hideNotificationPageFromOverview(chapter, nextFocusKey)
                 }
@@ -1838,46 +1848,46 @@ class CalmLauncherRunner(
         }
         val slot = PageArranger.slotOf(page)
         if (slot == PageSlot.AGENDA) {
-            return ContextAction("Remove", Runnable {
+            return ContextAction(activity.getString(R.string.action_remove), Runnable {
                 animatePageOverviewRemoval(source, entryIndex, index, pages) {
                     if (settings.agendaPageEnabled()) settings.toggleAgendaPage()
-                    Toast.makeText(activity, "Removed Agenda page", Toast.LENGTH_SHORT).show()
+                    toast(R.string.toast_page_removed, activity.getString(R.string.page_agenda))
                     renderAndReopenPageOverview(nextFocusKey)
                 }
             }, ContextActionCloseBehavior.REMOVE_CARD)
         }
         if (slot == PageSlot.ALARMS) {
-            return ContextAction("Remove", Runnable {
+            return ContextAction(activity.getString(R.string.action_remove), Runnable {
                 animatePageOverviewRemoval(source, entryIndex, index, pages) {
                     if (settings.alarmsPageEnabled()) settings.toggleAlarmsPage()
-                    Toast.makeText(activity, "Removed Alarms page", Toast.LENGTH_SHORT).show()
+                    toast(R.string.toast_page_removed, activity.getString(R.string.page_alarms))
                     renderAndReopenPageOverview(nextFocusKey)
                 }
             }, ContextActionCloseBehavior.REMOVE_CARD)
         }
         if (slot == PageSlot.RSS) {
-            return ContextAction("Remove", Runnable {
+            return ContextAction(activity.getString(R.string.action_remove), Runnable {
                 animatePageOverviewRemoval(source, entryIndex, index, pages) {
                     settings.setRssPageEnabled(false)
-                    Toast.makeText(activity, "Removed RSS page", Toast.LENGTH_SHORT).show()
+                    toast(R.string.toast_page_removed, activity.getString(R.string.page_rss))
                     renderAndReopenPageOverview(nextFocusKey)
                 }
             }, ContextActionCloseBehavior.REMOVE_CARD)
         }
         if (slot == PageSlot.PINNED && settings.pinnedPageEnabled()) {
-            return ContextAction("Remove", Runnable {
+            return ContextAction(activity.getString(R.string.action_remove), Runnable {
                 animatePageOverviewRemoval(source, entryIndex, index, pages) {
                     settings.setPinnedPageEnabled(false)
-                    Toast.makeText(activity, "Removed Pinned page", Toast.LENGTH_SHORT).show()
+                    toast(R.string.toast_page_removed, activity.getString(R.string.page_pinned))
                     renderAndReopenPageOverview(nextFocusKey)
                 }
             }, ContextActionCloseBehavior.REMOVE_CARD)
         }
         if (slot != PageSlot.CONTACTS) return null
-        return ContextAction("Remove", Runnable {
+        return ContextAction(activity.getString(R.string.action_remove), Runnable {
             animatePageOverviewRemoval(source, entryIndex, index, pages) {
                 if (settings.contactsPageEnabled()) settings.toggleContactsPage()
-                Toast.makeText(activity, "Removed People page", Toast.LENGTH_SHORT).show()
+                toast(R.string.toast_page_removed, activity.getString(R.string.page_people))
                 renderAndReopenPageOverview(nextFocusKey)
             }
         }, ContextActionCloseBehavior.REMOVE_CARD)
@@ -1934,13 +1944,13 @@ class CalmLauncherRunner(
         removed.items
             .filter { item -> item.type == ClassicGridItemType.WIDGET }
             .forEach(classicWidgetHostController::deleteWidget)
-        Toast.makeText(activity, "Removed ${removed.title}", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_page_removed, removed.title)
         renderAndReopenPageOverview(focusPageKey)
     }
 
     private fun hideNotificationPageFromOverview(chapter: AppChapter, focusPageKey: String?) {
         settings.exclude(chapter)
-        Toast.makeText(activity, "Removed ${chapter.label}", Toast.LENGTH_SHORT).show()
+        toast(R.string.toast_page_removed, chapter.label)
         renderAndReopenPageOverview(focusPageKey)
     }
 
@@ -2146,7 +2156,17 @@ class CalmLauncherRunner(
             when {
                 page.classicPage != null -> addClassicOverviewPreview(this, page.classicPage, state.classicGridConfig)
                 page.appScope != null -> addAppsOverviewPreview(this, page, state)
-                page.key == CalmTheme.PINNED_KEY -> addAppRows(this, state.pinnedApps.take(5).map { it.label }.ifEmpty { listOf("No pinned apps", "Long-press apps", "Choose Pin") }, CalmTheme.ACCENT)
+                page.key == CalmTheme.PINNED_KEY -> addAppRows(
+                    this,
+                    state.pinnedApps.take(5).map { it.label }.ifEmpty {
+                        listOf(
+                            activity.getString(R.string.empty_pinned_apps_row_1),
+                            activity.getString(R.string.empty_pinned_apps_row_2),
+                            activity.getString(R.string.empty_pinned_apps_row_3),
+                        )
+                    },
+                    CalmTheme.ACCENT,
+                )
                 page.key == CalmTheme.CONTACTS_KEY -> addGenericRows(this, listOf("Favourite people", "Recent contact", "Quick action"), CalmTheme.ACCENT)
                 page.key == CalmTheme.AGENDA_KEY -> addAgendaOverviewPreview(this, state)
                 page.key == CalmTheme.ALARMS_KEY -> addGenericRows(this, listOf("Next alarm", "Clock app", "Wake up"), CalmTheme.ACCENT)

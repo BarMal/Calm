@@ -5,12 +5,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AccelerateInterpolator
 import android.view.animation.DecelerateInterpolator
-import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 
 class LauncherEntryAnimator(private val activity: MainActivity) {
     fun animateCurrentPage(pager: ViewPager2, direction: Int = 0) {
-        val recycler = pager.getChildAt(0) as? RecyclerView ?: return
+        val recycler = pager.recyclerViewOrNull() ?: return
         for (index in 0 until recycler.childCount) {
             val child = recycler.getChildAt(index)
             if (recycler.getChildAdapterPosition(child) == pager.currentItem) {
@@ -35,7 +34,7 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
     }
 
     fun animatePageExit(pager: ViewPager2, pageIndex: Int) {
-        val recycler = pager.getChildAt(0) as? RecyclerView ?: return
+        val recycler = pager.recyclerViewOrNull() ?: return
         for (index in 0 until recycler.childCount) {
             val child = recycler.getChildAt(index)
             if (recycler.getChildAdapterPosition(child) == pageIndex) {
@@ -83,7 +82,7 @@ class LauncherEntryAnimator(private val activity: MainActivity) {
     }
 
     fun animateCurrentPageRemoval(pager: ViewPager2, afterRemoval: () -> Unit) {
-        val recycler = pager.getChildAt(0) as? RecyclerView
+        val recycler = pager.recyclerViewOrNull()
         if (recycler == null) {
             afterRemoval()
             return

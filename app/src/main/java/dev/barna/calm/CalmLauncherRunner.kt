@@ -34,7 +34,6 @@ import android.widget.LinearLayout
 import android.widget.TextClock
 import android.widget.TextView
 import android.widget.Toast
-import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.CompositePageTransformer
 import androidx.viewpager2.widget.ViewPager2
 import java.util.Date
@@ -751,7 +750,7 @@ class CalmLauncherRunner(
                 }
             })
         }
-        (pager.getChildAt(0) as? RecyclerView)?.apply {
+        pager.recyclerViewOrNull()?.apply {
             clipToPadding = false
             clipChildren = false
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -906,7 +905,7 @@ class CalmLauncherRunner(
         if (offset >= positions.size) return
         mainHandler.postDelayed({
             if (generation != pagePrewarmGeneration) return@postDelayed
-            val recycler = pager.getChildAt(0) as? RecyclerView
+            val recycler = pager.recyclerViewOrNull()
             if (
                 !pager.isAttachedToWindow ||
                 pager.scrollState != ViewPager2.SCROLL_STATE_IDLE ||
@@ -1594,7 +1593,7 @@ class CalmLauncherRunner(
         cardWidth: Int,
         dragX: Float,
     ): Int {
-        return (entryIndex + (dragX / (cardWidth * 0.72f)).roundToInt()).coerceIn(0, entries.lastIndex)
+        return PageOverviewSafety.targetEntryIndex(entryIndex, entries.lastIndex, cardWidth, dragX)
     }
 
     private fun pageOverviewScrollerFor(card: View): HorizontalScrollView? {
@@ -1941,8 +1940,7 @@ class CalmLauncherRunner(
         val layout = settings.pageLayout()
         val from = layout.order.indexOf(sourceSlot)
         val to = layout.order.indexOf(targetSlot)
-        if (from == -1 || to == -1 || from == to) return false
-        val next = layout.order.toMutableList().apply { add(to, removeAt(from)) }
+        val next = PageOverviewSafety.reorderedSlots(layout.order, from, to) ?: return false
         settings.setPageLayoutOrder(next)
         Toast.makeText(activity, "Moved ${page.title}", Toast.LENGTH_SHORT).show()
         renderAndReopenPageOverview(page.key)
@@ -2006,6 +2004,7 @@ class CalmLauncherRunner(
         targetWidth: Int,
         targetHeight: Int,
     ): Bitmap? {
+        if (index < 0 || targetWidth <= 0 || targetHeight <= 0) return null
         val view = adapter?.pageView(index) ?: return null
         val sourceWidth = currentPager?.width?.takeIf { it > 0 } ?: activity.resources.displayMetrics.widthPixels
         val sourceHeight = currentPager?.height?.takeIf { it > 0 }

@@ -6,6 +6,7 @@ package dev.barna.calm
  */
 enum class PageSlot {
     APPS,
+    CATEGORIES,
     PINNED,
     CONTACTS,
     AGENDA,
@@ -35,6 +36,7 @@ data class LauncherPageLayout(
     companion object {
         val DEFAULT_ORDER: List<PageSlot> = listOf(
             PageSlot.APPS,
+            PageSlot.CATEGORIES,
             PageSlot.PINNED,
             PageSlot.CONTACTS,
             PageSlot.AGENDA,
@@ -53,6 +55,7 @@ data class LauncherPageLayout(
 object PageArranger {
     fun slotOf(page: ChapterPage): PageSlot = when {
         page.appScope != null -> PageSlot.APPS
+        page.key == CalmTheme.CATEGORY_FOLDER_KEY -> PageSlot.CATEGORIES
         page.key == CalmTheme.PINNED_KEY -> PageSlot.PINNED
         page.key == CalmTheme.CONTACTS_KEY -> PageSlot.CONTACTS
         page.key == CalmTheme.AGENDA_KEY -> PageSlot.AGENDA

@@ -45,6 +45,12 @@ class PageArrangerTest {
     }
 
     @Test
+    fun categoryFolderPageUsesCategoriesSlot() {
+        val categoryFolder = ChapterPage.categoryFolder(CalmTheme.CATEGORY_FOLDER_KEY, "II")
+        assertEquals(PageSlot.CATEGORIES, PageArranger.slotOf(categoryFolder))
+    }
+
+    @Test
     fun legacyDisabledSlotIsStillArranged() {
         val layout = LauncherPageLayout(
             order = LauncherPageLayout.DEFAULT_ORDER,

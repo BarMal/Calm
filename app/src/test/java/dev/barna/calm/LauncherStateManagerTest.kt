@@ -1,9 +1,18 @@
 package dev.barna.calm
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -12,23 +21,16 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
-import java.util.concurrent.AbstractExecutorService
-import java.util.concurrent.Callable
-import java.util.concurrent.Future
-import java.util.concurrent.FutureTask
-import java.util.concurrent.RejectedExecutionException
-import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [26])
+@OptIn(ExperimentalCoroutinesApi::class)
 class LauncherStateManagerTest {
 
     private lateinit var context: Context
     private lateinit var settings: LauncherSettings
-    private lateinit var mainHandler: Handler
     private lateinit var activityController: ActivityController<MainActivity>
     private lateinit var notificationRepository: NotificationChapterRepository
     private lateinit var calendarRepository: CalendarRepository
@@ -40,7 +42,6 @@ class LauncherStateManagerTest {
         val prefs = context.getSharedPreferences("test_state_manager", Context.MODE_PRIVATE)
         prefs.edit().clear().commit()
         settings = LauncherSettings(prefs)
-        mainHandler = Handler(Looper.getMainLooper())
 
         activityController = Robolectric.buildActivity(MainActivity::class.java)
         val activity = activityController.get()
@@ -50,7 +51,10 @@ class LauncherStateManagerTest {
     }
 
     private fun manager(
-        executor: AbstractExecutorService = SynchronousExecutorService(),
+        scope: CoroutineScope,
+        workDispatcher: CoroutineDispatcher,
+        ioDispatcher: CoroutineDispatcher = workDispatcher,
+        mainDispatcher: CoroutineDispatcher = workDispatcher,
         markLoading: () -> Unit = {},
         onStateReady: (LauncherRenderModel) -> Unit = {},
         factory: LauncherRenderModelFactory = LauncherRenderModelFactory(),
@@ -61,83 +65,88 @@ class LauncherStateManagerTest {
         settings = settings,
         renderModelFactory = factory,
         appCardDisplayCache = AppCardDisplayCache(notificationRepository, AppCardModelFactory()),
-        mainHandler = mainHandler,
-        executor = executor,
+        scope = scope,
+        workDispatcher = workDispatcher,
+        ioDispatcher = ioDispatcher,
+        mainDispatcher = mainDispatcher,
         loadAppEntries = { emptyList() },
         loadCachedAppEntries = { emptyList() },
         markLoading = markLoading,
         onStateReady = onStateReady,
     )
 
-    // ---- happy path ----
-
     @Test
-    fun refreshAsyncDeliversModelOnSuccess() {
+    fun refreshAsyncDeliversModelOnSuccess() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
         var received: LauncherRenderModel? = null
-        manager(onStateReady = { received = it }).refreshAsync()
-        shadowOf(Looper.getMainLooper()).idle()
+        manager(scope = this, workDispatcher = dispatcher, onStateReady = { received = it }).refreshAsync()
+
+        advanceUntilIdle()
 
         assertNotNull(received)
     }
 
     @Test
-    fun markLoadingCalledBeforeOnStateReady() {
+    fun markLoadingCalledBeforeOnStateReady() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
         val events = mutableListOf<String>()
         manager(
+            scope = this,
+            workDispatcher = dispatcher,
             markLoading = { events.add("loading") },
             onStateReady = { events.add("ready") },
         ).refreshAsync()
-        shadowOf(Looper.getMainLooper()).idle()
+
+        advanceUntilIdle()
 
         assertEquals(listOf("loading", "ready"), events)
     }
 
-    // ---- generation / cancellation ----
-
     @Test
-    fun secondRefreshSupersedesFirstGenerationResult() {
-        // DeferringExecutorService: submit() completes futures immediately (so .get() works),
-        // execute() queues the final assembly task. This lets us interleave two refreshAsync()
-        // calls before running the assembly tasks, simulating a real concurrent scenario.
-        val deferred = DeferringExecutorService()
+    fun secondRefreshSupersedesFirstGenerationResult() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
         var readyCount = 0
 
-        val m = manager(executor = deferred, onStateReady = { readyCount++ })
-        m.refreshAsync() // gen=1: assembly queued
-        m.refreshAsync() // gen=2: generation incremented; gen=1 assembly will see gen mismatch
+        val m = manager(scope = this, workDispatcher = dispatcher, onStateReady = { readyCount++ })
+        m.refreshAsync()
+        m.refreshAsync()
 
-        deferred.runAll() // run both assembly tasks
-        shadowOf(Looper.getMainLooper()).idle()
+        advanceUntilIdle()
 
         assertEquals("only the second generation should deliver", 1, readyCount)
     }
 
     @Test
-    fun staleGenerationDoesNotDeliverAfterNewerRefreshStarts() {
-        val deferred = DeferringExecutorService()
+    fun staleGenerationDoesNotDeliverAfterNewerRefreshStarts() = runTest {
+        val workDispatcher = UnconfinedTestDispatcher(testScheduler)
+        val mainDispatcher = QueuedCoroutineDispatcher()
         var received: LauncherRenderModel? = null
+        var readyCount = 0
 
-        val m = manager(executor = deferred, onStateReady = { received = it })
-        m.refreshAsync() // gen=1 assembly queued
-
-        // Run gen=1 assembly — builds model and posts to mainHandler.
-        deferred.runAll()
-
-        // Before the mainHandler fires, start gen=2 — increments generation.
+        val m = manager(
+            scope = this,
+            workDispatcher = workDispatcher,
+            mainDispatcher = mainDispatcher,
+            onStateReady = {
+                readyCount++
+                received = it
+            },
+        )
         m.refreshAsync()
-        deferred.runAll()
+        assertEquals(1, mainDispatcher.queuedCount)
 
-        // Drain the main looper — gen=1's posted callback sees generation != 1 and skips;
-        // gen=2's callback fires normally.
-        shadowOf(Looper.getMainLooper()).idle()
+        m.refreshAsync()
+        assertEquals(2, mainDispatcher.queuedCount)
+
+        mainDispatcher.runAll()
 
         assertNotNull("gen=2 must still deliver", received)
+        assertEquals("gen=1 posted callback must be skipped", 1, readyCount)
     }
 
-    // ---- error handling ----
-
     @Test
-    fun exceptionInFactoryDoesNotCrashExecutorThread() {
+    fun exceptionInFactoryDoesNotCrashCoroutineScope() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
         val throwingFactory = object : LauncherRenderModelFactory() {
             override fun create(
                 preferences: LauncherUiPreferences,
@@ -155,15 +164,15 @@ class LauncherStateManagerTest {
                 rssItems: List<RssFeedItem>,
             ) = throw RuntimeException("deliberate failure")
         }
-        val m = manager(factory = throwingFactory)
+        val m = manager(scope = this, workDispatcher = dispatcher, factory = throwingFactory)
 
-        m.refreshAsync() // must not propagate exception
-        shadowOf(Looper.getMainLooper()).idle()
-        // No assertion needed — absence of exception is the pass condition.
+        m.refreshAsync()
+        advanceUntilIdle()
     }
 
     @Test
-    fun onStateReadyNotCalledWhenFactoryThrows() {
+    fun onStateReadyNotCalledWhenFactoryThrows() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
         var received: LauncherRenderModel? = null
         val throwingFactory = object : LauncherRenderModelFactory() {
             override fun create(
@@ -182,87 +191,50 @@ class LauncherStateManagerTest {
                 rssItems: List<RssFeedItem>,
             ) = throw RuntimeException("deliberate failure")
         }
-        val m = manager(factory = throwingFactory, onStateReady = { received = it })
+        val m = manager(
+            scope = this,
+            workDispatcher = dispatcher,
+            factory = throwingFactory,
+            onStateReady = { received = it },
+        )
 
         m.refreshAsync()
-        shadowOf(Looper.getMainLooper()).idle()
+        advanceUntilIdle()
 
         assertNull("factory failure must not deliver a model", received)
     }
 
     @Test
-    fun rejectedExecutionOnShutdownDoesNotCrash() {
-        val m = manager(executor = ShutdownExecutorService())
-        m.refreshAsync() // must not throw
+    fun cancelledScopeDoesNotDeliverState() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val parentJob = SupervisorJob()
+        val cancelledScope = TestScope(parentJob + dispatcher)
+        var received: LauncherRenderModel? = null
+        val m = manager(
+            scope = cancelledScope,
+            workDispatcher = dispatcher,
+            onStateReady = { received = it },
+        )
+
+        parentJob.cancel()
+        m.refreshAsync()
+        advanceUntilIdle()
+
+        assertNull("cancelled scope must not deliver a model", received)
     }
 }
 
-// ---------------------------------------------------------------------------
-// Test executor implementations
-// ---------------------------------------------------------------------------
+private class QueuedCoroutineDispatcher : CoroutineDispatcher() {
+    private val queue = ArrayDeque<Runnable>()
+    val queuedCount: Int get() = queue.size
 
-/** Runs every submitted task immediately on the calling thread. */
-private class SynchronousExecutorService : AbstractExecutorService() {
-    private var shutdown = false
-
-    override fun execute(command: Runnable) {
-        if (shutdown) throw RejectedExecutionException("shut down")
-        command.run()
-    }
-
-    override fun <T : Any?> submit(task: Callable<T>): Future<T> {
-        val f = FutureTask(task)
-        execute(f)
-        return f
-    }
-
-    override fun shutdown() { shutdown = true }
-    override fun shutdownNow(): List<Runnable> = emptyList<Runnable>().also { shutdown = true }
-    override fun isShutdown() = shutdown
-    override fun isTerminated() = shutdown
-    override fun awaitTermination(timeout: Long, unit: TimeUnit) = true
-}
-
-/**
- * Runs submit() tasks immediately (so Future.get() resolves), but queues execute() tasks
- * to be run only when [runAll] is called. This lets tests interleave multiple refreshAsync()
- * calls before the final model-assembly step runs.
- */
-private class DeferringExecutorService : AbstractExecutorService() {
-    private val queue = mutableListOf<Runnable>()
-    private var shutdown = false
-
-    override fun execute(command: Runnable) {
-        if (shutdown) throw RejectedExecutionException()
-        queue.add(command)
-    }
-
-    override fun <T : Any?> submit(task: Callable<T>): Future<T> {
-        val f = FutureTask(task)
-        f.run() // resolve immediately so .get() works inside the execute lambda
-        return f
+    override fun dispatch(context: CoroutineContext, block: Runnable) {
+        queue.addLast(block)
     }
 
     fun runAll() {
-        val snapshot = queue.toList()
-        queue.clear()
-        snapshot.forEach { it.run() }
+        while (queue.isNotEmpty()) {
+            queue.removeFirst().run()
+        }
     }
-
-    override fun shutdown() { shutdown = true }
-    override fun shutdownNow(): List<Runnable> = emptyList<Runnable>().also { shutdown = true }
-    override fun isShutdown() = shutdown
-    override fun isTerminated() = shutdown
-    override fun awaitTermination(timeout: Long, unit: TimeUnit) = true
-}
-
-/** Always throws RejectedExecutionException to simulate a shut-down executor. */
-private class ShutdownExecutorService : AbstractExecutorService() {
-    override fun execute(command: Runnable) = throw RejectedExecutionException("shut down")
-    override fun <T : Any?> submit(task: Callable<T>): Future<T> = throw RejectedExecutionException()
-    override fun shutdown() = Unit
-    override fun shutdownNow(): List<Runnable> = emptyList()
-    override fun isShutdown() = true
-    override fun isTerminated() = true
-    override fun awaitTermination(timeout: Long, unit: TimeUnit) = true
 }

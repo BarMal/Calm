@@ -38,6 +38,10 @@ import androidx.viewpager2.widget.CompositePageTransformer
 import androidx.viewpager2.widget.ViewPager2
 import java.util.Date
 import java.util.concurrent.Executors
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -50,6 +54,7 @@ class CalmLauncherRunner(
     requestWidgetConfigure: (Intent) -> Unit,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val runnerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val settings = LauncherSettings(activity)
     private val notificationRepository = NotificationChapterRepository(activity, settings)
     private val calendarRepository = CalendarRepository(activity, requestCalendarPermission)
@@ -365,8 +370,7 @@ class CalmLauncherRunner(
         settings = settings,
         renderModelFactory = renderModelFactory,
         appCardDisplayCache = appCardDisplayCache,
-        mainHandler = mainHandler,
-        executor = stateExecutor,
+        scope = runnerScope,
         loadAppEntries = appLibraryDataManager::loadAppEntries,
         loadCachedAppEntries = appLibraryDataManager::loadCachedAppEntries,
         markLoading = launcherStateViewModel::markLoading,
@@ -467,6 +471,7 @@ class CalmLauncherRunner(
     fun onDestroy() {
         try {
             mainHandler.removeCallbacksAndMessages(null)
+            runnerScope.cancel()
             classicWidgetHostController.shutdown()
             notificationRepository.shutdown()
             stateExecutor.shutdown()

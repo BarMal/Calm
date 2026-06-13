@@ -632,6 +632,7 @@ class CalmLauncherRunner(
         if (!animate) {
             suppressedPageEntryKey = pages.getOrNull(initialPage)?.key
         }
+        val spineStyle = state.preferences.chapterSpineStyle
         var previousPageIndex = initialPage
         var currentNavigationDirection = 0
         val animTrigger = PageScrollAnimationTrigger()
@@ -699,7 +700,7 @@ class CalmLauncherRunner(
                     }
                     ViewPager2.SCROLL_STATE_IDLE -> {
                         val currentPage = pages[pager.currentItem]
-                        carouselController.update(pages, pager.currentItem)
+                        carouselController.update(pages, pager.currentItem, spineStyle)
                         appSearchController.resetInactiveExcept(currentPage.key)
                         val direction = currentNavigationDirection
                         animTrigger.onIdle(currentPage.key, suppressedPageEntryKey)
@@ -719,11 +720,19 @@ class CalmLauncherRunner(
             }
         })
 
-        root.addView(carouselController.create(pages, initialPage))
+        if (!spineStyle.visible) {
+            carouselController.clear()
+        }
+        if (spineStyle.visible && spineStyle.position == ChapterSpinePosition.TOP) {
+            root.addView(carouselController.create(pages, initialPage, spineStyle))
+        }
         root.addView(
             pager,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
         )
+        if (spineStyle.visible && spineStyle.position == ChapterSpinePosition.BOTTOM) {
+            root.addView(carouselController.create(pages, initialPage, spineStyle))
+        }
         if (state.dockConfig.enabled && state.dockApps.isNotEmpty()) {
             root.addView(
                 dockController.buildDock(state.dockApps, state.dockConfig, state.notificationChapters),
@@ -734,7 +743,7 @@ class CalmLauncherRunner(
                 },
             )
         }
-        carouselController.update(pages, initialPage)
+        carouselController.update(pages, initialPage, spineStyle)
         activity.setContentView(screen)
         if (animate) {
             pager.post { entryAnimator.animateCurrentPage(pager) }
@@ -895,8 +904,9 @@ class CalmLauncherRunner(
         }
         pager.setCurrentItem(index, smooth)
         if (!smooth) {
-            currentUiState?.pages?.let { pages ->
-                carouselController.update(pages, index)
+            currentUiState?.let { state ->
+                val pages = state.pages
+                carouselController.update(pages, index, state.preferences.chapterSpineStyle)
                 appSearchController.resetInactiveExcept(pages[index].key)
             }
         }

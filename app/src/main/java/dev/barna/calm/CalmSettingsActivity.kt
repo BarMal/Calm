@@ -235,6 +235,24 @@ class CalmSettingsActivity : ComponentActivity() {
             max = 24,
             valueText = { if (it == 0) "No background blur" else "${it}px background blur" },
         ) { settings.setFocusBlurRadius(it) })
+        val spineStyle = settings.chapterSpineStyle()
+        content.addView(section(getString(R.string.settings_section_page_titles)))
+        content.addView(choiceRow(
+            title = getString(R.string.settings_spine_title_mode_title),
+            options = ChapterSpineTitleMode.entries.map { mode -> chapterSpineTitleModeLabel(mode) to mode },
+            selected = spineStyle.titleMode,
+        ) {
+            settings.setChapterSpineTitleMode(it)
+            requestRender()
+        })
+        content.addView(choiceRow(
+            title = getString(R.string.settings_spine_position_title),
+            options = ChapterSpinePosition.entries.map { position -> chapterSpinePositionLabel(position) to position },
+            selected = spineStyle.position,
+        ) {
+            settings.setChapterSpinePosition(it)
+            requestRender()
+        })
         content.addView(switchRow(
             title = "Card haptics",
             summary = "Very light feedback when card stacks settle.",
@@ -660,6 +678,24 @@ class CalmSettingsActivity : ComponentActivity() {
             CardEffect.NONE -> "Solid"
             CardEffect.FROSTED -> "Frosted"
             CardEffect.GLASS -> "Glass"
+        }
+    }
+
+    private fun chapterSpineTitleModeLabel(mode: ChapterSpineTitleMode): String {
+        return when (mode) {
+            ChapterSpineTitleMode.SPLIT -> getString(R.string.settings_spine_mode_split)
+            ChapterSpineTitleMode.COMBINED -> getString(R.string.settings_spine_mode_combined)
+            ChapterSpineTitleMode.TITLE_ONLY -> getString(R.string.settings_spine_mode_title_only)
+            ChapterSpineTitleMode.SPINE_ONLY -> getString(R.string.settings_spine_mode_spine_only)
+            ChapterSpineTitleMode.HIDDEN -> getString(R.string.settings_spine_mode_hidden)
+        }
+    }
+
+    private fun chapterSpinePositionLabel(position: ChapterSpinePosition): String {
+        return when (position) {
+            ChapterSpinePosition.TOP -> getString(R.string.settings_spine_position_top)
+            ChapterSpinePosition.BOTTOM -> getString(R.string.settings_spine_position_bottom)
+            ChapterSpinePosition.HIDDEN -> getString(R.string.settings_spine_position_hidden)
         }
     }
 

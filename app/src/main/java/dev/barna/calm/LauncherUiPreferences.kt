@@ -24,4 +24,5 @@ data class LauncherUiPreferences(
     val agendaSectionTitleStyle: SectionTitleCardStyle = SectionTitleCardStyle(),
     val cardAppearance: CardAppearance = CardAppearance.DEFAULT,
     val pageLayout: LauncherPageLayout = LauncherPageLayout.DEFAULT,
+    val chapterSpineStyle: ChapterSpineStyle = ChapterSpineStyle.DEFAULT,
 )

@@ -21,7 +21,15 @@ class ChapterCarouselController(
     private var paddedCarouselWidth = -1
     private var lastScrollTarget = Int.MIN_VALUE
 
-    fun create(pages: List<ChapterPage>, selectedPosition: Int): View {
+    fun clear() {
+        carousel = null
+        carouselRow = null
+        selectedPosition = -1
+        paddedCarouselWidth = -1
+        lastScrollTarget = Int.MIN_VALUE
+    }
+
+    fun create(pages: List<ChapterPage>, selectedPosition: Int, style: ChapterSpineStyle): View {
         paddedCarouselWidth = -1
         lastScrollTarget = Int.MIN_VALUE
         val spine = LinearLayout(activity).apply {
@@ -47,7 +55,7 @@ class ChapterCarouselController(
         )
         spine.addView(carousel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         spine.addView(spineLine())
-        renderItems(pages, selectedPosition)
+        renderItems(pages, selectedPosition, style)
         carousel?.post {
             updateCenterPadding()
             centerItem(selectedPosition, smooth = false)
@@ -55,10 +63,10 @@ class ChapterCarouselController(
         return spine
     }
 
-    fun update(pages: List<ChapterPage>, position: Int) {
+    fun update(pages: List<ChapterPage>, position: Int, style: ChapterSpineStyle) {
         val c = carousel ?: return
         if (carouselRow == null || pages.isEmpty()) return
-        updateSelection(pages, position)
+        updateSelection(pages, position, style)
         c.post {
             updateCenterPadding()
             centerItem(position)
@@ -83,14 +91,14 @@ class ChapterCarouselController(
         scrollCarouselTo(c, target, smooth = false)
     }
 
-    private fun renderItems(pages: List<ChapterPage>, selectedPosition: Int) {
+    private fun renderItems(pages: List<ChapterPage>, selectedPosition: Int, style: ChapterSpineStyle) {
         val row = carouselRow ?: return
         row.removeAllViews()
         this.selectedPosition = selectedPosition
         lastScrollTarget = Int.MIN_VALUE
         pages.forEachIndexed { index, page ->
             val selected = index == selectedPosition
-            val item = carouselItem(page, index, selected)
+            val item = carouselItem(page, index, selected, style)
             row.addView(item, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 leftMargin = activity.dp(1)
                 rightMargin = activity.dp(1)
@@ -102,39 +110,40 @@ class ChapterCarouselController(
         }
     }
 
-    private fun updateSelection(pages: List<ChapterPage>, selectedPosition: Int) {
+    private fun updateSelection(pages: List<ChapterPage>, selectedPosition: Int, style: ChapterSpineStyle) {
         val row = carouselRow ?: return
         if (this.selectedPosition == selectedPosition) return
         val previousPosition = this.selectedPosition
         this.selectedPosition = selectedPosition
         if (previousPosition in 0 until row.childCount) {
-            configureItem(row.getChildAt(previousPosition) as TextView, pages[previousPosition], previousPosition, false)
+            configureItem(row.getChildAt(previousPosition) as TextView, pages[previousPosition], previousPosition, false, style)
         }
         if (selectedPosition in 0 until row.childCount) {
-            configureItem(row.getChildAt(selectedPosition) as TextView, pages[selectedPosition], selectedPosition, true)
+            configureItem(row.getChildAt(selectedPosition) as TextView, pages[selectedPosition], selectedPosition, true, style)
         }
     }
 
-    private fun carouselItem(page: ChapterPage, index: Int, selected: Boolean): TextView {
+    private fun carouselItem(page: ChapterPage, index: Int, selected: Boolean, style: ChapterSpineStyle): TextView {
         return TextView(activity).apply {
             textSize = (if (selected) 18 else 14).toFloat()
             setTextColor(if (selected) CalmTheme.INK else CalmTheme.MUTED_INK)
             typeface = Typeface.DEFAULT
             setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
             includeFontPadding = true
-            configureItem(this, page, index, selected)
+            configureItem(this, page, index, selected, style)
         }
     }
 
-    private fun configureItem(item: TextView, page: ChapterPage, index: Int, selected: Boolean) {
+    private fun configureItem(item: TextView, page: ChapterPage, index: Int, selected: Boolean, style: ChapterSpineStyle) {
         item.apply {
-            text = "${page.marker}  ${page.title}"
+            text = ChapterSpineFormatter.displayText(page, style).orEmpty()
             textSize = (if (selected) 18 else 14).toFloat()
             setTextColor(if (selected) CalmTheme.INK else CalmTheme.MUTED_INK)
             typeface = Typeface.DEFAULT
             setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
             gravity = android.view.Gravity.CENTER
-            setSingleLine(true)
+            setSingleLine(style.titleMode != ChapterSpineTitleMode.SPLIT)
+            maxLines = if (style.titleMode == ChapterSpineTitleMode.SPLIT) 2 else 1
             ellipsize = TextUtils.TruncateAt.END
             setPadding(activity.dp(if (selected) 12 else 8), activity.dp(8), activity.dp(if (selected) 12 else 8), activity.dp(8))
             alpha = if (selected) 1f else 0.5f

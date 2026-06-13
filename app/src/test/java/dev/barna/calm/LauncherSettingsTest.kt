@@ -107,6 +107,7 @@ class LauncherSettingsTest {
         assertEquals(PageSortOrder.APP_NAME_ASC, prefs.pageSortOrder)
         assertEquals(CardStackSectionMode.TITLE_CARDS, prefs.agendaSectionMode)
         assertEquals(SectionTitleCardStyle(), prefs.agendaSectionTitleStyle)
+        assertEquals(ChapterSpineStyle.DEFAULT, prefs.chapterSpineStyle)
     }
 
     // ---- round-trip correctness ----
@@ -145,6 +146,18 @@ class LauncherSettingsTest {
     fun pageSortOrderRoundTrips() {
         settings.setPageSortOrder(PageSortOrder.NOTIFICATION_AGE_NEWEST)
         assertEquals(PageSortOrder.NOTIFICATION_AGE_NEWEST, settings.pageSortOrder())
+    }
+
+    @Test
+    fun chapterSpineStyleRoundTrips() {
+        settings.setChapterSpineTitleMode(ChapterSpineTitleMode.SPLIT)
+        settings.setChapterSpinePosition(ChapterSpinePosition.BOTTOM)
+
+        assertEquals(
+            ChapterSpineStyle(ChapterSpineTitleMode.SPLIT, ChapterSpinePosition.BOTTOM),
+            settings.chapterSpineStyle(),
+        )
+        assertEquals(settings.chapterSpineStyle(), settings.uiPreferences().chapterSpineStyle)
     }
 
     @Test
@@ -992,6 +1005,15 @@ class LauncherSettingsTest {
     fun changeTokenAltersAfterAgendaSectionStyleMutation() {
         val before = settings.launcherChangeToken()
         settings.setAgendaSectionTitleStyle(SectionTitleCardStyle(italic = true))
+        val after = settings.launcherChangeToken()
+        assertNotEquals(before, after)
+    }
+
+    @Test
+    fun changeTokenAltersAfterChapterSpineMutation() {
+        val before = settings.launcherChangeToken()
+        settings.setChapterSpineTitleMode(ChapterSpineTitleMode.TITLE_ONLY)
+        settings.setChapterSpinePosition(ChapterSpinePosition.BOTTOM)
         val after = settings.launcherChangeToken()
         assertNotEquals(before, after)
     }

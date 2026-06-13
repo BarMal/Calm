@@ -7,5 +7,10 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="calmNotificationBadgeColor">@color/calm_notification_badge</item>
+        <item name="calmOnNotificationBadgeColor">@color/calm_on_notification_badge</item>
+        <item name="calmPageOverviewScrimColor">@color/calm_page_overview_scrim</item>
+        <item name="calmPageOverviewBadgeScrimColor">@color/calm_page_overview_badge_scrim</item>
+        <item name="calmOnPageOverviewScrimColor">@color/calm_on_page_overview_scrim</item>
     </style>
 </resources>

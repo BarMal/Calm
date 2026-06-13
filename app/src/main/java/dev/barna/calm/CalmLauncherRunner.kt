@@ -1024,7 +1024,7 @@ class CalmLauncherRunner(
         val overlay = FrameLayout(activity).apply {
             alpha = 0f
             isClickable = true
-            setBackgroundColor(Color.argb(92, 0, 0, 0))
+            setBackgroundColor(CalmThemeColor.pageOverviewScrim(activity))
             setOnClickListener { hidePageOverview() }
         }
         val content = LinearLayout(activity).apply {
@@ -1315,7 +1315,7 @@ class CalmLauncherRunner(
             setPadding(activity.dp(10), activity.dp(8), activity.dp(10), activity.dp(8))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                setColor(withAlpha(Color.BLACK, 114))
+                setColor(CalmThemeColor.pageOverviewBadgeScrim(activity))
                 cornerRadii = floatArrayOf(
                     activity.dp(18).toFloat(), activity.dp(18).toFloat(),
                     activity.dp(18).toFloat(), activity.dp(18).toFloat(),
@@ -1323,10 +1323,10 @@ class CalmLauncherRunner(
                     0f, 0f,
                 )
             }
-            addView(label(if (selected) "Current" else "Live", 12, Color.WHITE, Typeface.BOLD), LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            addView(label(if (selected) "Current" else "Live", 12, CalmThemeColor.onPageOverviewScrim(activity), Typeface.BOLD), LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 rightMargin = activity.dp(8)
             })
-            addView(label("${entry.pages.size} pages, $notificationCount notifications", 12, Color.WHITE, Typeface.NORMAL).apply { maxLines = 1 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(label("${entry.pages.size} pages, $notificationCount notifications", 12, CalmThemeColor.onPageOverviewScrim(activity), Typeface.NORMAL).apply { maxLines = 1 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
     }
 
@@ -2081,7 +2081,7 @@ class CalmLauncherRunner(
             setPadding(activity.dp(10), activity.dp(8), activity.dp(10), activity.dp(8))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                setColor(withAlpha(Color.BLACK, 114))
+                setColor(CalmThemeColor.pageOverviewBadgeScrim(activity))
                 cornerRadii = floatArrayOf(
                     activity.dp(18).toFloat(), activity.dp(18).toFloat(),
                     activity.dp(18).toFloat(), activity.dp(18).toFloat(),
@@ -2089,10 +2089,10 @@ class CalmLauncherRunner(
                     0f, 0f,
                 )
             }
-            addView(label(if (home) "Home" else page.marker, 12, Color.WHITE, Typeface.BOLD), LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            addView(label(if (home) "Home" else page.marker, 12, CalmThemeColor.onPageOverviewScrim(activity), Typeface.BOLD), LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 rightMargin = activity.dp(8)
             })
-            addView(label(detail, 12, Color.WHITE, Typeface.NORMAL).apply { maxLines = 1 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(label(detail, 12, CalmThemeColor.onPageOverviewScrim(activity), Typeface.NORMAL).apply { maxLines = 1 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
     }
 

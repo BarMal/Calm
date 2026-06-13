@@ -1,0 +1,7 @@
+<resources>
+    <color name="calm_notification_badge">#C43948</color>
+    <color name="calm_on_notification_badge">#FFFFFFFF</color>
+    <color name="calm_page_overview_scrim">#5C000000</color>
+    <color name="calm_page_overview_badge_scrim">#72000000</color>
+    <color name="calm_on_page_overview_scrim">#FFFFFFFF</color>
+</resources>

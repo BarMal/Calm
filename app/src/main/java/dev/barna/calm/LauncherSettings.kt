@@ -578,6 +578,8 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             cardAppearance = cardAppearance(),
             pageLayout = pageLayout(),
             chapterSpineStyle = chapterSpineStyle(),
+            appGroupingEnabled = appGroupingEnabled(),
+            hasAnyCategoryAssignments = appCategoryAssignments().isNotEmpty(),
         )
     }
 

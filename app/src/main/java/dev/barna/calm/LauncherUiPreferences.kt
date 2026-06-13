@@ -26,4 +26,6 @@ data class LauncherUiPreferences(
     val cardAppearance: CardAppearance = CardAppearance.DEFAULT,
     val pageLayout: LauncherPageLayout = LauncherPageLayout.DEFAULT,
     val chapterSpineStyle: ChapterSpineStyle = ChapterSpineStyle.DEFAULT,
+    val appGroupingEnabled: Boolean = false,
+    val hasAnyCategoryAssignments: Boolean = false,
 )

@@ -54,6 +54,10 @@ class ChapterPagePlanner {
             chapterNumber++
         }
 
+        if (preferences.appGroupingEnabled && preferences.hasAnyCategoryAssignments) {
+            pages.add(ChapterPage.categoryFolder(CalmTheme.CATEGORY_FOLDER_KEY, roman(chapterNumber)))
+            chapterNumber++
+        }
         if (pinnedApps.isNotEmpty() || preferences.pinnedPageEnabled) {
             pages.add(ChapterPage.pinned(CalmTheme.PINNED_KEY, roman(chapterNumber)))
             chapterNumber++

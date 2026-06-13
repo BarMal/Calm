@@ -72,5 +72,10 @@ class ChapterPage private constructor(
         fun classic(page: ClassicLauncherPageDefinition, marker: String): ChapterPage {
             return ChapterPage(page.key, marker, page.title, null, null, page)
         }
+
+        @JvmStatic
+        fun categoryFolder(key: String, marker: String): ChapterPage {
+            return ChapterPage(key, marker, "Categories", null, null, null)
+        }
     }
 }

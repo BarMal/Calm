@@ -134,6 +134,43 @@ class ChapterPagePlannerTest {
         assertEquals(listOf("Apps", "Overview", "Classic"), pages.map { it.title })
     }
 
+    @Test
+    fun categoryFolderPageAppearsAfterAppsWhenGroupingEnabledAndAssignmentsExist() {
+        val pages = planner.buildPages(
+            preferences = preferences(appGroupingEnabled = true, hasAnyCategoryAssignments = true),
+            notificationChapters = emptyList(),
+            appEntries = listOf(app("browser", "Browser")),
+            pinnedApps = emptyList(),
+        )
+
+        assertEquals(listOf("Apps", "Categories", "Overview"), pages.map { it.title })
+        assertEquals(CalmTheme.CATEGORY_FOLDER_KEY, pages[1].key)
+    }
+
+    @Test
+    fun categoryFolderPageAbsentWhenGroupingDisabled() {
+        val pages = planner.buildPages(
+            preferences = preferences(appGroupingEnabled = false, hasAnyCategoryAssignments = true),
+            notificationChapters = emptyList(),
+            appEntries = listOf(app("browser", "Browser")),
+            pinnedApps = emptyList(),
+        )
+
+        assertEquals(listOf("Apps", "Overview"), pages.map { it.title })
+    }
+
+    @Test
+    fun categoryFolderPageAbsentWhenNoAssignments() {
+        val pages = planner.buildPages(
+            preferences = preferences(appGroupingEnabled = true, hasAnyCategoryAssignments = false),
+            notificationChapters = emptyList(),
+            appEntries = listOf(app("browser", "Browser")),
+            pinnedApps = emptyList(),
+        )
+
+        assertEquals(listOf("Apps", "Overview"), pages.map { it.title })
+    }
+
     private fun preferences(
         splitAppsByProfile: Boolean = false,
         placeWorkNotificationChaptersBeforeApps: Boolean = false,
@@ -141,6 +178,8 @@ class ChapterPagePlannerTest {
         pinnedPageEnabled: Boolean = false,
         agendaPageEnabled: Boolean = false,
         alarmsPageEnabled: Boolean = false,
+        appGroupingEnabled: Boolean = false,
+        hasAnyCategoryAssignments: Boolean = false,
     ): LauncherUiPreferences {
         return LauncherUiPreferences(
             useTintedNotificationCards = true,
@@ -159,6 +198,8 @@ class ChapterPagePlannerTest {
             pinnedPageEnabled = pinnedPageEnabled,
             agendaPageEnabled = agendaPageEnabled,
             alarmsPageEnabled = alarmsPageEnabled,
+            appGroupingEnabled = appGroupingEnabled,
+            hasAnyCategoryAssignments = hasAnyCategoryAssignments,
         )
     }
 

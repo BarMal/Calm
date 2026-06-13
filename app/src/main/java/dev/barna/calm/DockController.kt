@@ -229,6 +229,9 @@ class DockController(
     private fun featuredDockCard(app: AppEntry, target: DockNotificationTarget?, front: Boolean): View {
         val selectedNotification = selectedNotification(app, target)
         val icon = resolveIcon(app)
+        val contactPhoto = selectedNotification?.backgroundImage
+        val count = target?.summary?.count?.takeIf { it > 1 }
+        val titleText = selectedNotification?.title?.ifBlank { null } ?: app.label
         return LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -243,9 +246,25 @@ class DockController(
             tooltipText = app.label
             icon?.let { bitmap ->
                 addView(
-                    ImageView(activity).apply {
-                        scaleType = ImageView.ScaleType.CENTER_CROP
-                        setImageDrawable(RoundedBitmapDrawable(bitmap, activity.dp(14).toFloat()))
+                    FrameLayout(activity).apply {
+                        clipChildren = false
+                        clipToPadding = false
+                        addView(
+                            ImageView(activity).apply {
+                                scaleType = ImageView.ScaleType.CENTER_CROP
+                                setImageDrawable(RoundedBitmapDrawable(bitmap, activity.dp(14).toFloat()))
+                            },
+                            FrameLayout.LayoutParams(activity.dp(50), activity.dp(50)),
+                        )
+                        count?.let {
+                            addView(
+                                notificationCountChip(it),
+                                FrameLayout.LayoutParams(activity.dp(18), activity.dp(18), Gravity.TOP or Gravity.END).apply {
+                                    topMargin = -activity.dp(3)
+                                    marginEnd = -activity.dp(3)
+                                },
+                            )
+                        }
                     },
                     LinearLayout.LayoutParams(activity.dp(50), activity.dp(50)).apply {
                         marginEnd = activity.dp(12)
@@ -256,7 +275,7 @@ class DockController(
                 LinearLayout(activity).apply {
                     if (front) tag = DOCK_CARD_TEXT_TAG
                     orientation = LinearLayout.VERTICAL
-                    addView(dockText(app.label, if (front) 15 else 13, Typeface.BOLD, CalmTheme.INK, 1))
+                    addView(dockText(titleText, if (front) 15 else 13, Typeface.BOLD, CalmTheme.INK, 1))
                     addView(
                         dockText(
                             selectedNotification?.let { notificationPreview(it) }
@@ -273,8 +292,16 @@ class DockController(
                 },
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
             )
-            target?.summary?.count?.takeIf { it > 1 }?.let { count ->
-                addView(notificationCountChip(count), LinearLayout.LayoutParams(activity.dp(28), activity.dp(24)))
+            contactPhoto?.let { photo ->
+                addView(
+                    ImageView(activity).apply {
+                        scaleType = ImageView.ScaleType.CENTER_CROP
+                        setImageDrawable(RoundedBitmapDrawable(photo, activity.dp(22).toFloat()))
+                    },
+                    LinearLayout.LayoutParams(activity.dp(44), activity.dp(44)).apply {
+                        marginStart = activity.dp(8)
+                    },
+                )
             }
         }
     }

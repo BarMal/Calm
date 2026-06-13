@@ -207,6 +207,7 @@ class FocusOverlayController(
         focusedExpanded = false
 
         val cleanup = Runnable {
+            releaseOverlayDrawables(overlay)
             (overlay.parent as? ViewGroup)?.removeView(overlay)
             resetBackdrop(animate, restoreSourceCard = !removeFocusedCard)
             focusedSourceCard = null
@@ -371,6 +372,20 @@ class FocusOverlayController(
                 relativeDrawables[2],
                 relativeDrawables[3],
             )
+        }
+    }
+
+    private fun releaseOverlayDrawables(view: View) {
+        view.animate().cancel()
+        view.background = null
+        if (view is TextView) {
+            view.setCompoundDrawables(null, null, null, null)
+            view.setCompoundDrawablesRelative(null, null, null, null)
+        }
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                releaseOverlayDrawables(view.getChildAt(index))
+            }
         }
     }
 

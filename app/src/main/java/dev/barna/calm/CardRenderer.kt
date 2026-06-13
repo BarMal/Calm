@@ -14,7 +14,7 @@ class CardRenderer(
     private val cardRenderAssetCache: CardRenderAssetCache,
     private val activePreferences: () -> LauncherUiPreferences,
 ) {
-    private val sideIconCache = HashMap<Int, Bitmap?>()
+    private val sideIconCache = BoundedMemoryCache<Int, Bitmap>(MAX_SIDE_ICON_CACHE_ENTRIES)
 
     fun cardHeight(): Int = activity.dp(cardSpec.heightDp)
     fun cardStep(): Int = activity.dp(cardSpec.stepDp)
@@ -109,5 +109,6 @@ class CardRenderer(
         // Alpha at which app-card icon backgrounds are drawn. Precomputed render data must use the
         // same value so it matches what stackCard would otherwise compute on the main thread.
         const val DEFAULT_ICON_BACKGROUND_ALPHA = 64
+        private const val MAX_SIDE_ICON_CACHE_ENTRIES = 64
     }
 }

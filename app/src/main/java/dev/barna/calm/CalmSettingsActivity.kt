@@ -449,6 +449,14 @@ class CalmSettingsActivity : ComponentActivity() {
             summary = "Organise the app library into sections by category.",
             checked = settings.appGroupingEnabled(),
         ) { settings.setAppGroupingEnabled(!settings.appGroupingEnabled()); requestRender() })
+        content.addView(choiceRow(
+            title = "Category display",
+            options = listOf(
+                "Card stack" to CategoryDisplayMode.CARD_STACK,
+                "Dynamic pages" to CategoryDisplayMode.DYNAMIC_PAGES,
+            ),
+            selected = settings.categoryDisplayMode(),
+        ) { settings.setCategoryDisplayMode(it); requestRender() })
         content.addView(actionRow("Manage categories", categoryListSummary()) { showCategoriesDialog() })
         content.addView(actionRow("Auto-categorise apps", categoriesSummary()) {
             val apps = cachedAppEntries ?: run {

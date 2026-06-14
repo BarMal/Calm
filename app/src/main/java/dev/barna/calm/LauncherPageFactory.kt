@@ -75,6 +75,7 @@ class LauncherPageFactory(
         return when {
             page.appScope != null -> createAppLibraryPage(page, state.appEntries, state.preferences.fullScreenModeEnabled)
             page.key == CalmTheme.CATEGORY_FOLDER_KEY -> createCategoryFolderPage(state)
+            page.key.startsWith(CalmTheme.CATEGORY_PAGE_KEY_PREFIX) -> createIndividualCategoryPage(page, state)
             page.key == CalmTheme.PINNED_KEY -> createPinnedPage(state.pinnedApps, state.preferences.fullScreenModeEnabled)
             page.key == CalmTheme.CONTACTS_KEY -> contactsPageController.buildPage()
             page.key == CalmTheme.AGENDA_KEY -> agendaPageBuilder.buildPage(state)
@@ -1148,6 +1149,43 @@ class LauncherPageFactory(
                 val cards = groups.map { group -> categoryFolderCard(group, state) }.toMutableList()
                 addView(
                     appLibraryController.appStack(cards, CardStackStateKey.categoryFolder(groups)),
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+                )
+            }
+        }
+    }
+
+    private fun createIndividualCategoryPage(page: ChapterPage, state: LauncherRenderModel): LinearLayout {
+        val categoryId = page.key.removePrefix(CalmTheme.CATEGORY_PAGE_KEY_PREFIX)
+        val group = categoryGroupsProvider().firstOrNull { it.category.id == categoryId }
+        val fullScreen = state.preferences.fullScreenModeEnabled
+        return barePagePanel(activity.dp(20)).apply {
+            if (!fullScreen) {
+                addView(animatedChrome(label(page.title, 30, CalmTheme.INK, Typeface.NORMAL).apply {
+                    setPadding(0, activity.dp(8), 0, activity.dp(24))
+                }))
+            }
+            if (group == null || group.apps.isEmpty()) {
+                addView(
+                    LinearLayout(activity).apply {
+                        gravity = Gravity.CENTER
+                        addView(
+                            cardRenderer.stackCard(
+                                "${page.title}\nNo apps are categorised here yet.",
+                                CalmTheme.ACCENT,
+                                false,
+                            ),
+                            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, cardRenderer.cardHeight()),
+                        )
+                    },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+                )
+            } else {
+                addView(
+                    appLibraryController.appStack(
+                        group.apps,
+                        stackKey = CardStackStateKey.appEntries("cat:$categoryId", group.apps),
+                    ),
                     LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
                 )
             }

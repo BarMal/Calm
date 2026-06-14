@@ -581,6 +581,12 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             appGroupingEnabled = appGroupingEnabled(),
             hasAnyCategoryAssignments = appCategoryAssignments().isNotEmpty(),
             notificationCardTapAction = notificationCardTapAction(),
+            categoryDisplayMode = categoryDisplayMode(),
+            enabledCategoriesForDynamicPages = run {
+                val assignments = appCategoryAssignments()
+                val categoryIdsWithAssignments = assignments.values.flatten().toSet()
+                categoryList().filter { cat -> cat.enabled && cat.id in categoryIdsWithAssignments }
+            },
         )
     }
 
@@ -628,6 +634,13 @@ class LauncherSettings(private val preferences: SharedPreferences) {
 
     fun setNotificationCardTapAction(action: NotificationCardTapAction) {
         preferences.edit().putString(PREF_NOTIF_CARD_TAP_ACTION, action.name).apply()
+    }
+
+    fun categoryDisplayMode(): CategoryDisplayMode =
+        enumPreference(PREF_CATEGORY_DISPLAY_MODE, CategoryDisplayMode.CARD_STACK)
+
+    fun setCategoryDisplayMode(mode: CategoryDisplayMode) {
+        preferences.edit().putString(PREF_CATEGORY_DISPLAY_MODE, mode.name).apply()
     }
 
     fun setChapterSpineTitleMode(mode: ChapterSpineTitleMode) {
@@ -1199,6 +1212,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_DOCK_LONG_PRESS_ACTION = "dock_long_press_action"
         private const val PREF_DOCK_KEYS = "dock_keys"
         private const val PREF_NOTIF_CARD_TAP_ACTION = "notif_card_tap_action"
+        private const val PREF_CATEGORY_DISPLAY_MODE = "category_display_mode"
         private const val PREF_CATEGORY_LIST = "category_list"
         private const val PREF_APP_CATEGORY_ASSIGNMENTS = "app_category_assignments"
         private const val PREF_APP_GROUPING_ENABLED = "app_grouping_enabled"

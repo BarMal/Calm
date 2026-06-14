@@ -28,4 +28,5 @@ data class LauncherUiPreferences(
     val chapterSpineStyle: ChapterSpineStyle = ChapterSpineStyle.DEFAULT,
     val appGroupingEnabled: Boolean = false,
     val hasAnyCategoryAssignments: Boolean = false,
+    val notificationCardTapAction: NotificationCardTapAction = NotificationCardTapAction.OPEN_NOTIFICATION,
 )

@@ -580,6 +580,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
             chapterSpineStyle = chapterSpineStyle(),
             appGroupingEnabled = appGroupingEnabled(),
             hasAnyCategoryAssignments = appCategoryAssignments().isNotEmpty(),
+            notificationCardTapAction = notificationCardTapAction(),
         )
     }
 
@@ -617,9 +618,16 @@ class LauncherSettings(private val preferences: SharedPreferences) {
 
     fun chapterSpineStyle(): ChapterSpineStyle {
         return ChapterSpineStyle(
-            titleMode = enumPreference(PREF_CHAPTER_SPINE_TITLE_MODE, ChapterSpineTitleMode.COMBINED),
+            titleMode = enumPreference(PREF_CHAPTER_SPINE_TITLE_MODE, ChapterSpineTitleMode.TITLE_ONLY),
             position = enumPreference(PREF_CHAPTER_SPINE_POSITION, ChapterSpinePosition.TOP),
         )
+    }
+
+    fun notificationCardTapAction(): NotificationCardTapAction =
+        enumPreference(PREF_NOTIF_CARD_TAP_ACTION, NotificationCardTapAction.OPEN_NOTIFICATION)
+
+    fun setNotificationCardTapAction(action: NotificationCardTapAction) {
+        preferences.edit().putString(PREF_NOTIF_CARD_TAP_ACTION, action.name).apply()
     }
 
     fun setChapterSpineTitleMode(mode: ChapterSpineTitleMode) {
@@ -1190,6 +1198,7 @@ class LauncherSettings(private val preferences: SharedPreferences) {
         private const val PREF_DOCK_TAP_ACTION = "dock_tap_action"
         private const val PREF_DOCK_LONG_PRESS_ACTION = "dock_long_press_action"
         private const val PREF_DOCK_KEYS = "dock_keys"
+        private const val PREF_NOTIF_CARD_TAP_ACTION = "notif_card_tap_action"
         private const val PREF_CATEGORY_LIST = "category_list"
         private const val PREF_APP_CATEGORY_ASSIGNMENTS = "app_category_assignments"
         private const val PREF_APP_GROUPING_ENABLED = "app_grouping_enabled"

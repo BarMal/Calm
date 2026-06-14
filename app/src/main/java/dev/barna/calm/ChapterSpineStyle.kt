@@ -22,7 +22,7 @@ data class ChapterSpineStyle(
     val visible: Boolean get() = titleMode != ChapterSpineTitleMode.HIDDEN && position != ChapterSpinePosition.HIDDEN
 
     companion object {
-        val DEFAULT = ChapterSpineStyle()
+        val DEFAULT = ChapterSpineStyle(titleMode = ChapterSpineTitleMode.TITLE_ONLY)
     }
 }
 

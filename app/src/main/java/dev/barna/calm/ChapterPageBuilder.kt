@@ -210,7 +210,11 @@ class ChapterPageBuilder(
         ).apply {
             maxLines = 4
             setOnClickListener {
-                notificationActionController.openNotification(item.primary)
+                when (activePreferences().notificationCardTapAction) {
+                    NotificationCardTapAction.OPEN_NOTIFICATION -> notificationActionController.openNotification(item.primary)
+                    NotificationCardTapAction.EXPANDED_CARD -> focusOverlay.showExpandedCard(this, expandedNotificationContent(item), expandedNotificationActions(item, chapter))
+                    NotificationCardTapAction.OPEN_APP -> openPackage(chapter)
+                }
             }
             setOnLongClickListener {
                 if (activePreferences().expandedCardsEnabled) {

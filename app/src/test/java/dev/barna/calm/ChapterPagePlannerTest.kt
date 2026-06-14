@@ -171,6 +171,82 @@ class ChapterPagePlannerTest {
         assertEquals(listOf("Apps", "Overview"), pages.map { it.title })
     }
 
+    @Test
+    fun dynamicPagesModeAddsOnePagePerEnabledCategoryWithAssignments() {
+        val cats = listOf(
+            AppCategory("communications", "Communications"),
+            AppCategory("media", "Media"),
+        )
+        val pages = planner.buildPages(
+            preferences = preferences(
+                appGroupingEnabled = true,
+                hasAnyCategoryAssignments = true,
+                categoryDisplayMode = CategoryDisplayMode.DYNAMIC_PAGES,
+                enabledCategoriesForDynamicPages = cats,
+            ),
+            notificationChapters = emptyList(),
+            appEntries = listOf(app("browser", "Browser")),
+            pinnedApps = emptyList(),
+        )
+
+        assertEquals(listOf("Apps", "Communications", "Media", "Overview"), pages.map { it.title })
+        assertEquals(CalmTheme.CATEGORY_PAGE_KEY_PREFIX + "communications", pages[1].key)
+        assertEquals(CalmTheme.CATEGORY_PAGE_KEY_PREFIX + "media", pages[2].key)
+    }
+
+    @Test
+    fun dynamicPagesModeSlotIsCategories() {
+        val cats = listOf(AppCategory("media", "Media"))
+        val pages = planner.buildPages(
+            preferences = preferences(
+                appGroupingEnabled = true,
+                hasAnyCategoryAssignments = true,
+                categoryDisplayMode = CategoryDisplayMode.DYNAMIC_PAGES,
+                enabledCategoriesForDynamicPages = cats,
+            ),
+            notificationChapters = emptyList(),
+            appEntries = listOf(app("browser", "Browser")),
+            pinnedApps = emptyList(),
+        )
+
+        val categoryPage = pages.first { it.key.startsWith(CalmTheme.CATEGORY_PAGE_KEY_PREFIX) }
+        assertEquals(PageSlot.CATEGORIES, PageArranger.slotOf(categoryPage))
+    }
+
+    @Test
+    fun dynamicPagesModeWithNoCategoriesAddsNoPages() {
+        val pages = planner.buildPages(
+            preferences = preferences(
+                appGroupingEnabled = true,
+                hasAnyCategoryAssignments = true,
+                categoryDisplayMode = CategoryDisplayMode.DYNAMIC_PAGES,
+                enabledCategoriesForDynamicPages = emptyList(),
+            ),
+            notificationChapters = emptyList(),
+            appEntries = listOf(app("browser", "Browser")),
+            pinnedApps = emptyList(),
+        )
+
+        assertEquals(listOf("Apps", "Overview"), pages.map { it.title })
+    }
+
+    @Test
+    fun cardStackModeStillAddsSingleFolderPage() {
+        val pages = planner.buildPages(
+            preferences = preferences(
+                appGroupingEnabled = true,
+                hasAnyCategoryAssignments = true,
+                categoryDisplayMode = CategoryDisplayMode.CARD_STACK,
+            ),
+            notificationChapters = emptyList(),
+            appEntries = listOf(app("browser", "Browser")),
+            pinnedApps = emptyList(),
+        )
+
+        assertEquals(listOf("Apps", "Categories", "Overview"), pages.map { it.title })
+        assertEquals(CalmTheme.CATEGORY_FOLDER_KEY, pages[1].key)
+    }
+
     private fun preferences(
         splitAppsByProfile: Boolean = false,
         placeWorkNotificationChaptersBeforeApps: Boolean = false,
@@ -180,6 +256,8 @@ class ChapterPagePlannerTest {
         alarmsPageEnabled: Boolean = false,
         appGroupingEnabled: Boolean = false,
         hasAnyCategoryAssignments: Boolean = false,
+        categoryDisplayMode: CategoryDisplayMode = CategoryDisplayMode.CARD_STACK,
+        enabledCategoriesForDynamicPages: List<AppCategory> = emptyList(),
     ): LauncherUiPreferences {
         return LauncherUiPreferences(
             useTintedNotificationCards = true,
@@ -200,6 +278,8 @@ class ChapterPagePlannerTest {
             alarmsPageEnabled = alarmsPageEnabled,
             appGroupingEnabled = appGroupingEnabled,
             hasAnyCategoryAssignments = hasAnyCategoryAssignments,
+            categoryDisplayMode = categoryDisplayMode,
+            enabledCategoriesForDynamicPages = enabledCategoriesForDynamicPages,
         )
     }
 

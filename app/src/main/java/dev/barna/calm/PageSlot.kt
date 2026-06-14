@@ -56,6 +56,7 @@ object PageArranger {
     fun slotOf(page: ChapterPage): PageSlot = when {
         page.appScope != null -> PageSlot.APPS
         page.key == CalmTheme.CATEGORY_FOLDER_KEY -> PageSlot.CATEGORIES
+        page.key.startsWith(CalmTheme.CATEGORY_PAGE_KEY_PREFIX) -> PageSlot.CATEGORIES
         page.key == CalmTheme.PINNED_KEY -> PageSlot.PINNED
         page.key == CalmTheme.CONTACTS_KEY -> PageSlot.CONTACTS
         page.key == CalmTheme.AGENDA_KEY -> PageSlot.AGENDA

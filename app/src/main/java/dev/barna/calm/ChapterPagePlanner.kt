@@ -55,8 +55,22 @@ class ChapterPagePlanner {
         }
 
         if (preferences.appGroupingEnabled && preferences.hasAnyCategoryAssignments) {
-            pages.add(ChapterPage.categoryFolder(CalmTheme.CATEGORY_FOLDER_KEY, roman(chapterNumber)))
-            chapterNumber++
+            when (preferences.categoryDisplayMode) {
+                CategoryDisplayMode.CARD_STACK -> {
+                    pages.add(ChapterPage.categoryFolder(CalmTheme.CATEGORY_FOLDER_KEY, roman(chapterNumber)))
+                    chapterNumber++
+                }
+                CategoryDisplayMode.DYNAMIC_PAGES -> {
+                    preferences.enabledCategoriesForDynamicPages.forEach { category ->
+                        pages.add(ChapterPage.categoryPage(
+                            key = CalmTheme.CATEGORY_PAGE_KEY_PREFIX + category.id,
+                            marker = roman(chapterNumber),
+                            title = category.title,
+                        ))
+                        chapterNumber++
+                    }
+                }
+            }
         }
         if (pinnedApps.isNotEmpty() || preferences.pinnedPageEnabled) {
             pages.add(ChapterPage.pinned(CalmTheme.PINNED_KEY, roman(chapterNumber)))

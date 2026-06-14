@@ -29,4 +29,6 @@ data class LauncherUiPreferences(
     val appGroupingEnabled: Boolean = false,
     val hasAnyCategoryAssignments: Boolean = false,
     val notificationCardTapAction: NotificationCardTapAction = NotificationCardTapAction.OPEN_NOTIFICATION,
+    val categoryDisplayMode: CategoryDisplayMode = CategoryDisplayMode.CARD_STACK,
+    val enabledCategoriesForDynamicPages: List<AppCategory> = emptyList(),
 )

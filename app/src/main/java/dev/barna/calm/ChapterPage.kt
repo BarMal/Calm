@@ -77,5 +77,10 @@ class ChapterPage private constructor(
         fun categoryFolder(key: String, marker: String): ChapterPage {
             return ChapterPage(key, marker, "Categories", null, null, null)
         }
+
+        @JvmStatic
+        fun categoryPage(key: String, marker: String, title: String): ChapterPage {
+            return ChapterPage(key, marker, title, null, null, null)
+        }
     }
 }
